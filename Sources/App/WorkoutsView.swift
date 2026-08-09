@@ -147,6 +147,9 @@ struct ActiveWorkoutView: View {
     private func finish() {
         session.endedAt = .now
         save()
+        // Fire and forget: a failure here leaves healthKitUUID nil, so the
+        // session stays in the pending queue and Settings can retry it.
+        Task { await HealthKitManager.shared.syncPending(context: context) }
         dismiss()
     }
 
@@ -159,6 +162,19 @@ struct ActiveWorkoutView: View {
 struct SetRow: View {
     @Bindable var set: SetEntry
     let onChange: () -> Void
+
+    @AppStorage("weightUnit") private var unitRaw = WeightUnit.kilograms.rawValue
+
+    private var unit: WeightUnit { WeightUnit(rawValue: unitRaw) ?? .kilograms }
+
+    /// Converts on the way in and out so the stored value stays metric no
+    /// matter what the user is looking at.
+    private var displayWeight: Binding<Double> {
+        Binding(
+            get: { unit.fromKilograms(set.weightKg) },
+            set: { set.weightKg = unit.toKilograms($0) }
+        )
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -175,10 +191,10 @@ struct SetRow: View {
                 .keyboardType(.numberPad)
                 .frame(width: 55)
             Text("×").foregroundStyle(.secondary)
-            TextField("kg", value: $set.weightKg, format: .number)
+            TextField(unit.abbreviation, value: displayWeight, format: .number)
                 .keyboardType(.decimalPad)
                 .frame(width: 70)
-            Text("kg").font(.caption).foregroundStyle(.secondary)
+            Text(unit.abbreviation).font(.caption).foregroundStyle(.secondary)
 
             Spacer()
 

@@ -17,7 +17,7 @@ struct RootView: View {
             Text("Food")
                 .tabItem { Label("Food", systemImage: "fork.knife") }
 
-            Text("Settings")
+            SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
     }

@@ -1,5 +1,5 @@
 SCHEME      := Lift
-BUNDLE_ID   := com.yourteam.lift
+BUNDLE_ID   := com.dugcanlift.lift
 SIM         := iPhone 17 Pro
 DERIVED     := .build/DerivedData
 APP         := $(DERIVED)/Build/Products/Debug-iphonesimulator/Lift.app

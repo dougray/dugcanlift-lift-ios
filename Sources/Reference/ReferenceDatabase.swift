@@ -10,7 +10,6 @@ struct FoodRecord: Codable, FetchableRecord, Identifiable, Hashable, Sendable {
     var servingGrams: Double?
     var servingLabel: String?
 
-    // Per 100 g. Scale before writing into a FoodEntry.
     var caloriesPer100g: Double
     var proteinPer100g: Double
     var carbsPer100g: Double
@@ -18,6 +17,7 @@ struct FoodRecord: Codable, FetchableRecord, Identifiable, Hashable, Sendable {
     var fiberPer100g: Double?
     var sugarPer100g: Double?
     var sodiumPer100g: Double?
+    var source: String
 
     static let databaseTableName = "foods"
 
@@ -42,11 +42,10 @@ struct ExerciseRecord: Codable, FetchableRecord, Identifiable, Hashable, Sendabl
     var primaryMuscle: String?
     var equipment: String?
     var instructions: String?
+    var source: String
 
     static let databaseTableName = "exercises"
 }
-
-// MARK: - Database
 
 enum ReferenceDatabaseError: Error {
     case bundleResourceMissing(String)
@@ -54,44 +53,62 @@ enum ReferenceDatabaseError: Error {
 
 /// Read-only access to the reference data shipped inside the app bundle.
 ///
-/// Deliberately NOT SwiftData. This data is static, large, never edited by the
-/// user, and needs full-text search — all things SQLite with an FTS5 index does
-/// far better. Keeping it separate also means shipping an updated food database
-/// is just replacing a file, with no schema migration of user data.
+/// TWO separate databases, deliberately never joined:
+///
+///   food.db       USDA (public domain) + Open Food Facts (ODbL)
+///   exercises.db  free-exercise-db (public domain) + wger (CC-BY-SA 3.0)
+///
+/// ODbL and CC-BY-SA 3.0 are both share-alike and mutually incompatible.
+/// Keeping them in separate files makes this a Collective Database rather than
+/// a Derivative one, so each obligation stays scoped to its own file.
+/// Never write a query spanning both.
+///
+/// Deliberately NOT SwiftData: this data is static, large, never user-edited,
+/// and needs full-text search. Shipping an update is a file replacement with
+/// no migration of user data.
 actor ReferenceDatabase {
 
     static let shared = ReferenceDatabase()
 
-    private var queue: DatabaseQueue?
+    private var foodQueue: DatabaseQueue?
+    private var exerciseQueue: DatabaseQueue?
 
-    private func connection() throws -> DatabaseQueue {
-        if let queue { return queue }
-
-        guard let url = Bundle.main.url(forResource: "reference", withExtension: "db") else {
-            throw ReferenceDatabaseError.bundleResourceMissing("reference.db")
+    private func open(_ resource: String) throws -> DatabaseQueue {
+        guard let url = Bundle.main.url(forResource: resource, withExtension: "db") else {
+            throw ReferenceDatabaseError.bundleResourceMissing("\(resource).db")
         }
-
         var configuration = Configuration()
         configuration.readonly = true
-        // The bundle is code-signed and immutable, so no WAL and no writes.
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA query_only = ON")
         }
+        return try DatabaseQueue(path: url.path, configuration: configuration)
+    }
 
-        let queue = try DatabaseQueue(path: url.path, configuration: configuration)
-        self.queue = queue
+    private func foods() throws -> DatabaseQueue {
+        if let foodQueue { return foodQueue }
+        let queue = try open("food")
+        foodQueue = queue
         return queue
     }
 
-    // MARK: Food search
+    private func exercises() throws -> DatabaseQueue {
+        if let exerciseQueue { return exerciseQueue }
+        let queue = try open("exercises")
+        exerciseQueue = queue
+        return queue
+    }
 
-    /// Prefix-matched full-text search. Ranking puts exact-ish matches first,
-    /// which matters a lot when someone types "chick" mid-meal.
-    func searchFoods(_ text: String, limit: Int = 30) async throws -> [FoodRecord] {
+    // MARK: Food
+
+    /// Prefix-matched full-text search, ranked by bm25 then name length so
+    /// short exact-ish matches win. Matters when someone types "chick"
+    /// mid-meal and wants plain chicken breast, not "Chickpea Snack Bar".
+    func searchFoods(_ text: String, limit: Int = 30) throws -> [FoodRecord] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return [] }
 
-        return try await connection().read { db in
+        return try foods().read { db in
             guard let pattern = FTS5Pattern(matchingAllPrefixesIn: trimmed) else { return [] }
             return try FoodRecord.fetchAll(db, sql: """
                 SELECT foods.*
@@ -104,27 +121,26 @@ actor ReferenceDatabase {
         }
     }
 
-    /// Barcode lookup for Open Food Facts entries.
-    func food(barcode: String) async throws -> FoodRecord? {
-        try await connection().read { db in
-            try FoodRecord.fetchOne(db, sql: "SELECT * FROM foods WHERE barcode = ? LIMIT 1",
-                                    arguments: [barcode])
+    func food(barcode: String) throws -> FoodRecord? {
+        try foods().read { db in
+            try FoodRecord.fetchOne(db,
+                sql: "SELECT * FROM foods WHERE barcode = ? LIMIT 1", arguments: [barcode])
         }
     }
 
-    func food(id: String) async throws -> FoodRecord? {
-        try await connection().read { db in
+    func food(id: String) throws -> FoodRecord? {
+        try foods().read { db in
             try FoodRecord.fetchOne(db, sql: "SELECT * FROM foods WHERE id = ?", arguments: [id])
         }
     }
 
-    // MARK: Exercise search
+    // MARK: Exercises
 
-    func searchExercises(_ text: String, limit: Int = 30) async throws -> [ExerciseRecord] {
+    func searchExercises(_ text: String, limit: Int = 30) throws -> [ExerciseRecord] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return try await allExercises(limit: limit) }
+        guard !trimmed.isEmpty else { return try allExercises(limit: limit) }
 
-        return try await connection().read { db in
+        return try exercises().read { db in
             guard let pattern = FTS5Pattern(matchingAllPrefixesIn: trimmed) else { return [] }
             return try ExerciseRecord.fetchAll(db, sql: """
                 SELECT exercises.*
@@ -137,17 +153,17 @@ actor ReferenceDatabase {
         }
     }
 
-    func allExercises(limit: Int = 500) async throws -> [ExerciseRecord] {
-        try await connection().read { db in
-            try ExerciseRecord.fetchAll(db, sql: "SELECT * FROM exercises ORDER BY name LIMIT ?",
-                                        arguments: [limit])
+    func allExercises(limit: Int = 1000) throws -> [ExerciseRecord] {
+        try exercises().read { db in
+            try ExerciseRecord.fetchAll(db,
+                sql: "SELECT * FROM exercises ORDER BY name LIMIT ?", arguments: [limit])
         }
     }
 
-    func exercise(id: String) async throws -> ExerciseRecord? {
-        try await connection().read { db in
-            try ExerciseRecord.fetchOne(db, sql: "SELECT * FROM exercises WHERE id = ?",
-                                        arguments: [id])
+    func exercise(id: String) throws -> ExerciseRecord? {
+        try exercises().read { db in
+            try ExerciseRecord.fetchOne(db,
+                sql: "SELECT * FROM exercises WHERE id = ?", arguments: [id])
         }
     }
 }

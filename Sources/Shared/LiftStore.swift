@@ -13,7 +13,7 @@ import SwiftData
 /// widget extension target.
 enum LiftStore {
 
-    static let appGroupID = "group.com.yourteam.lift"
+    static let appGroupID = "group.com.dugcanlift.lift"
 
     static let schema = Schema([
         WorkoutSession.self,
@@ -53,7 +53,6 @@ enum LiftStore {
     }
 
     /// Read-only context for the widget extension. Widgets should never write.
-    @MainActor
     static func widgetContext() -> ModelContext {
         let context = ModelContext(shared)
         context.autosaveEnabled = false

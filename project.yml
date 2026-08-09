@@ -4,13 +4,13 @@
 # The .xcodeproj is a build artifact — it is gitignored. This file is the
 # source of truth for targets, entitlements, capabilities and Info.plist keys.
 #
-# Replace com.yourteam throughout, and set DEVELOPMENT_TEAM to your 10-char
+# Replace com.dugcanlift throughout, and set DEVELOPMENT_TEAM to your 10-char
 # Team ID from developer.apple.com → Membership.
 
 name: Lift
 
 options:
-  bundleIdPrefix: com.yourteam
+  bundleIdPrefix: com.dugcanlift
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -53,13 +53,13 @@ targets:
         embed: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yourteam.lift
+        PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
     entitlements:
       path: Config/Lift.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.com.yourteam.lift
+          - group.com.dugcanlift.lift
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
     info:
@@ -84,7 +84,7 @@ targets:
         UIBackgroundModes:
           - processing
         BGTaskSchedulerPermittedIdentifiers:
-          - com.yourteam.lift.healthsync
+          - com.dugcanlift.lift.healthsync
 
   # ------------------------------------------------------------- widgets
   LiftWidgets:
@@ -95,14 +95,14 @@ targets:
       - path: Sources/Shared      # same models, second compilation
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yourteam.lift.widgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.widgets
     entitlements:
       path: Config/LiftWidgets.entitlements
       properties:
         # Identical group to the app — this is what grants the widget
         # process access to the SwiftData store.
         com.apple.security.application-groups:
-          - group.com.yourteam.lift
+          - group.com.dugcanlift.lift
     info:
       path: Config/LiftWidgets-Info.plist
       properties:
@@ -120,7 +120,7 @@ targets:
       - target: Lift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yourteam.lift.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.tests
 
 schemes:
   Lift:

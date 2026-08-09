@@ -29,7 +29,7 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
 
 The SwiftData store lives in the App Group container
-(`group.com.yourteam.lift`) so the widget extension can read it. Do not move it
+(`group.com.dugcanlift.lift`) so the widget extension can read it. Do not move it
 to the app's private container.
 
 ## Conventions that matter

@@ -315,7 +315,11 @@ def main() -> None:
     print(f"  Open Food Facts: {off_count:,}")
     finalise(food, "foods")
     food.close()
-    print(f"  -> {food_path} ({food_path.stat().st_size / 1e6:.0f} MB)\n")
+    if usda_count + off_count == 0:
+        food_path.unlink()
+        print("  no food data — food.db not written\n")
+    else:
+        print(f"  -> {food_path} ({food_path.stat().st_size / 1e6:.0f} MB)\n")
 
     print("Building exercises.db  (free-exercise-db public domain + wger CC-BY-SA 3.0)")
     ex_path = args.out / "exercises.db"

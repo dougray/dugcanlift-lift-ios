@@ -5,10 +5,10 @@ import HealthKit
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
 
-    @AppStorage("weightUnit") private var unitRaw = WeightUnit.kilograms.rawValue
+    @AppStorage("weightUnit") private var unitRaw = WeightUnit.pounds.rawValue
 
-    @Query(filter: #Predicate<WorkoutSession> { $0.endedAt != nil && $0.healthKitUUID == nil })
-    private var unsynced: [WorkoutSession]
+    @Query(filter: #Predicate<WorkoutDay> { $0.healthKitUUID == nil })
+    private var unsynced: [WorkoutDay]
 
     @State private var health = HealthKitManager.shared
     @State private var isRequesting = false

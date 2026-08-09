@@ -44,14 +44,14 @@ struct TodayProvider: TimelineProvider {
         let key = DayKey.today
 
         let food = (try? context.fetch(LiftQueries.foodEntries(on: key))) ?? []
-        let workouts = (try? context.fetch(LiftQueries.workouts(on: key))) ?? []
+        let days = (try? context.fetch(WorkoutQueries.day(key))) ?? []
         let totals = food.totalNutrition
 
         return TodayEntry(
             date: .now,
             calories: totals.calories,
             proteinG: totals.proteinG,
-            workoutCount: workouts.count
+            workoutCount: days.first.map { $0.totalSetCount > 0 ? 1 : 0 } ?? 0
         )
     }
 }
@@ -89,7 +89,7 @@ struct TodayWidgetView: View {
             HStack(spacing: 10) {
                 stat("\(Int(entry.proteinG))g", "protein")
                 if entry.workoutCount > 0 {
-                    stat("\(entry.workoutCount)", entry.workoutCount == 1 ? "workout" : "workouts")
+                    stat("\(entry.workoutCount)", "workout")
                 }
             }
         }

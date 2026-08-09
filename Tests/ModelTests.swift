@@ -39,20 +39,20 @@ final class NutritionFactsTests: XCTestCase {
 final class WorkoutMathTests: XCTestCase {
 
     func testWarmupSetsAreExcludedFromVolume() {
-        let working = SetEntry(orderIndex: 0, reps: 10, weightKg: 50)
-        let warmup = SetEntry(orderIndex: 1, reps: 10, weightKg: 20, isWarmup: true)
+        let working = SetEntry(orderIndex: 0, weightKg: 50, reps: 10)
+        let warmup = SetEntry(orderIndex: 1, weightKg: 20, reps: 10, isWarmup: true)
 
         XCTAssertEqual(working.volumeKg, 500)
         XCTAssertEqual(warmup.volumeKg, 0)
     }
 
     func testEpleyEstimate() {
-        let set = SetEntry(orderIndex: 0, reps: 5, weightKg: 100)
+        let set = SetEntry(orderIndex: 0, weightKg: 100, reps: 5)
         XCTAssertEqual(set.estimatedOneRepMaxKg ?? 0, 116.67, accuracy: 0.01)
     }
 
     func testNoEstimateForWarmups() {
-        let set = SetEntry(orderIndex: 0, reps: 5, weightKg: 100, isWarmup: true)
+        let set = SetEntry(orderIndex: 0, weightKg: 100, reps: 5, isWarmup: true)
         XCTAssertNil(set.estimatedOneRepMaxKg)
     }
 

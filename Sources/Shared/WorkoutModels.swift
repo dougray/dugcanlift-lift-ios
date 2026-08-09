@@ -1,34 +1,68 @@
 import Foundation
 import SwiftData
 
+enum TrainingFocus: String, Codable, CaseIterable, Identifiable {
+    case bodybuilding, powerlifting, crossfit, conditioning
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .bodybuilding: "Bodybuilding"
+        case .powerlifting: "Powerlifting"
+        case .crossfit:     "CrossFit"
+        case .conditioning: "Conditioning"
+        }
+    }
+}
+
+/// A day's training log.
+///
+/// The day is the unit of record, not a timed session — any date can be opened
+/// and logged against after the fact, which is how the Android app works.
+///
+/// A *live session* is an optional overlay: when `liveStartedAt` is set and
+/// `liveEndedAt` is not, the user is training right now, which enables rest
+/// timers and Live Activities. Nothing requires it, and a day logged
+/// retroactively is equally valid.
 @Model
-final class WorkoutSession {
+final class WorkoutDay {
     var id: UUID = UUID()
-    var startedAt: Date = Date.now
-    var endedAt: Date?
+
+    /// One record per calendar day.
     var dayKey: String = ""
-    var title: String = "Workout"
-    var notes: String?
+    var date: Date = Date.now
 
-    /// Set once the session is written to HealthKit. Presence of a UUID makes
-    /// sync idempotent — without it, every retry of a failed background sync
-    /// creates a duplicate workout in the Health app.
-    var healthKitUUID: UUID?
+    var name: String = ""
+    private var focusRaw: String = TrainingFocus.bodybuilding.rawValue
 
-    @Relationship(deleteRule: .cascade, inverse: \ExerciseEntry.session)
-    var exercises: [ExerciseEntry] = []
-
-    init(startedAt: Date = .now, title: String = "Workout") {
-        self.id = UUID()
-        self.startedAt = startedAt
-        self.dayKey = DayKey.make(from: startedAt)
-        self.title = title
+    var focus: TrainingFocus {
+        get { TrainingFocus(rawValue: focusRaw) ?? .bodybuilding }
+        set { focusRaw = newValue.rawValue }
     }
 
-    var isActive: Bool { endedAt == nil }
+    // Both nil for a retroactively logged day.
+    var liveStartedAt: Date?
+    var liveEndedAt: Date?
 
-    var duration: TimeInterval {
-        (endedAt ?? .now).timeIntervalSince(startedAt)
+    var healthKitUUID: UUID?
+
+    @Relationship(deleteRule: .cascade, inverse: \ExerciseEntry.day)
+    var exercises: [ExerciseEntry] = []
+
+    init(date: Date = .now, name: String = "", focus: TrainingFocus = .bodybuilding) {
+        self.id = UUID()
+        self.date = date
+        self.dayKey = DayKey.make(from: date)
+        self.name = name
+        self.focusRaw = focus.rawValue
+    }
+
+    var isLive: Bool { liveStartedAt != nil && liveEndedAt == nil }
+
+    var liveDuration: TimeInterval? {
+        guard let start = liveStartedAt else { return nil }
+        return (liveEndedAt ?? .now).timeIntervalSince(start)
     }
 
     var orderedExercises: [ExerciseEntry] {
@@ -39,8 +73,16 @@ final class WorkoutSession {
         exercises.reduce(0) { $0 + $1.volumeKg }
     }
 
-    var completedSetCount: Int {
-        exercises.reduce(0) { $0 + $1.sets.filter { $0.completedAt != nil }.count }
+    var totalSetCount: Int {
+        exercises.reduce(0) { $0 + $1.sets.count }
+    }
+
+    var hasContent: Bool { !exercises.isEmpty || !name.isEmpty }
+
+    /// "15 sets · 17100 lb volume"
+    func summary(unit: WeightUnit) -> String {
+        let volume = Int(unit.fromKilograms(totalVolumeKg))
+        return "\(totalSetCount) sets · \(volume) \(unit.abbreviation) volume"
     }
 }
 
@@ -48,19 +90,14 @@ final class WorkoutSession {
 final class ExerciseEntry {
     var id: UUID = UUID()
 
-    /// Foreign key into the bundled reference database, namespaced by source
-    /// (e.g. "wger:192"). Namespacing lets you add a second reference source
-    /// later without an ID collision or a migration.
     var exerciseRefID: String = ""
-
-    /// Denormalised snapshot. History must not mutate when you ship an updated
-    /// reference database, and the widget can render without opening SQLite.
+    // Snapshot fields — history must not change when reference data updates.
     var name: String = ""
     var primaryMuscle: String?
     var equipment: String?
 
     var orderIndex: Int = 0
-    var session: WorkoutSession?
+    var day: WorkoutDay?
 
     @Relationship(deleteRule: .cascade, inverse: \SetEntry.exercise)
     var sets: [SetEntry] = []
@@ -75,6 +112,12 @@ final class ExerciseEntry {
         self.equipment = equipment
     }
 
+    /// "Deadlift (Barbell)" — equipment in parentheses, as on Android.
+    var displayName: String {
+        guard let equipment, !equipment.isEmpty else { return name }
+        return "\(name) (\(equipment.capitalized))"
+    }
+
     var orderedSets: [SetEntry] {
         sets.sorted { $0.orderIndex < $1.orderIndex }
     }
@@ -82,42 +125,55 @@ final class ExerciseEntry {
     var volumeKg: Double {
         sets.reduce(0) { $0 + $1.volumeKg }
     }
-
-    var heaviestSet: SetEntry? {
-        sets.filter { !$0.isWarmup }.max { $0.weightKg < $1.weightKg }
-    }
 }
 
 @Model
 final class SetEntry {
     var id: UUID = UUID()
     var orderIndex: Int = 0
+
+    /// Canonical kilograms regardless of what the user sees. Mixed-unit
+    /// history is unrecoverable once it happens.
+    var weightKg: Double = 0
     var reps: Int = 0
 
-    /// Always kilograms. Pounds are a display concern only — storing whatever
-    /// unit the user happened to be using is how you end up with a history
-    /// that silently mixes both and totals that mean nothing.
-    var weightKg: Double = 0
+    /// Rate of perceived exertion, 6–10 in half steps. First-class here
+    /// because the Android app shows it inline on every set.
+    var rpe: Double?
 
     var isWarmup: Bool = false
-    var rpe: Double?
     var completedAt: Date?
     var exercise: ExerciseEntry?
 
-    init(orderIndex: Int, reps: Int = 0, weightKg: Double = 0, isWarmup: Bool = false) {
+    init(orderIndex: Int, weightKg: Double = 0, reps: Int = 0,
+         rpe: Double? = nil, isWarmup: Bool = false) {
         self.id = UUID()
         self.orderIndex = orderIndex
-        self.reps = reps
         self.weightKg = weightKg
+        self.reps = reps
+        self.rpe = rpe
         self.isWarmup = isWarmup
     }
 
-    /// Warm-up sets are deliberately excluded from volume.
     var volumeKg: Double {
         isWarmup ? 0 : Double(reps) * weightKg
     }
 
-    /// Epley formula. Only meaningful in the 1–10 rep range.
+    /// "325 x 5 @7.5" — weight first, then reps, then RPE.
+    func display(unit: WeightUnit) -> String {
+        let weight = unit.fromKilograms(weightKg)
+        let weightText = weight == weight.rounded()
+            ? String(Int(weight))
+            : String(format: "%.1f", weight)
+        var text = "\(weightText) x \(reps)"
+        if let rpe {
+            let rpeText = rpe == rpe.rounded() ? String(Int(rpe)) : String(format: "%.1f", rpe)
+            text += " @\(rpeText)"
+        }
+        return text
+    }
+
+    /// Epley. Only meaningful in the 1–10 rep range.
     var estimatedOneRepMaxKg: Double? {
         guard reps > 0, weightKg > 0, !isWarmup else { return nil }
         return weightKg * (1 + Double(reps) / 30.0)
@@ -125,7 +181,7 @@ final class SetEntry {
 }
 
 enum WeightUnit: String, Codable, CaseIterable {
-    case kilograms, pounds
+    case pounds, kilograms
 
     var abbreviation: String { self == .kilograms ? "kg" : "lb" }
 
@@ -153,5 +209,37 @@ final class BodyMeasurement {
         self.dayKey = DayKey.make(from: recordedAt)
         self.weightKg = weightKg
         self.bodyFatPercent = bodyFatPercent
+    }
+}
+
+// MARK: - Queries
+
+enum WorkoutQueries {
+    static func day(_ dayKey: String) -> FetchDescriptor<WorkoutDay> {
+        var descriptor = FetchDescriptor<WorkoutDay>(
+            predicate: #Predicate { $0.dayKey == dayKey }
+        )
+        descriptor.fetchLimit = 1
+        return descriptor
+    }
+
+    static func recent(limit: Int = 30) -> FetchDescriptor<WorkoutDay> {
+        var descriptor = FetchDescriptor<WorkoutDay>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        return descriptor
+    }
+
+    /// Fetches the day record, creating it if this is the first entry for it.
+    @MainActor
+    static func fetchOrCreate(_ date: Date, in context: ModelContext) -> WorkoutDay {
+        let key = DayKey.make(from: date)
+        if let existing = try? context.fetch(day(key)).first {
+            return existing
+        }
+        let created = WorkoutDay(date: date)
+        context.insert(created)
+        return created
     }
 }

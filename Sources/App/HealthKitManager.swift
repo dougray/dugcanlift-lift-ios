@@ -63,9 +63,23 @@ final class HealthKitManager {
     /// Writes a finished session to HealthKit and stamps it with the returned
     /// UUID. Returns silently if the session was already synced.
     @discardableResult
-    func sync(_ session: WorkoutSession) async throws -> UUID? {
-        guard isAvailable, session.healthKitUUID == nil else { return nil }
-        guard let end = session.endedAt else { return nil }
+    func sync(_ day: WorkoutDay) async throws -> UUID? {
+        guard isAvailable, day.healthKitUUID == nil, day.totalSetCount > 0 else { return nil }
+
+        // A live session gives real timestamps. A retroactively logged day has
+        // none, so estimate a window from set count — flagged in metadata so
+        // the approximation is visible rather than silently presented as fact.
+        let start: Date
+        let end: Date
+        if let liveStart = day.liveStartedAt, let liveEnd = day.liveEndedAt {
+            start = liveStart
+            end = liveEnd
+        } else {
+            let noon = Calendar.current.date(
+                bySettingHour: 12, minute: 0, second: 0, of: day.date) ?? day.date
+            start = noon
+            end = noon.addingTimeInterval(Double(day.totalSetCount) * 150)
+        }
 
         let configuration = HKWorkoutConfiguration()
         configuration.activityType = .traditionalStrengthTraining
@@ -79,15 +93,16 @@ final class HealthKitManager {
             device: .local()
         )
 
-        try await builder.beginCollection(at: session.startedAt)
+        try await builder.beginCollection(at: start)
 
         var metadata: [String: Any] = [
             HKMetadataKeyWorkoutBrandName: "Lift"
         ]
-        if session.totalVolumeKg > 0 {
-            metadata["LiftTotalVolumeKg"] = session.totalVolumeKg
+        if day.totalVolumeKg > 0 {
+            metadata["LiftTotalVolumeKg"] = day.totalVolumeKg
         }
-        metadata["LiftExerciseCount"] = session.exercises.count
+        metadata["LiftExerciseCount"] = day.exercises.count
+        metadata["LiftEstimatedTimes"] = (day.liveStartedAt == nil)
         try await builder.addMetadata(metadata)
 
         try await builder.endCollection(at: end)
@@ -96,7 +111,7 @@ final class HealthKitManager {
 
         // Stamp BEFORE anything else can fail, so a later error can't cause a
         // duplicate write on the next attempt.
-        session.healthKitUUID = workout.uuid
+        day.healthKitUUID = workout.uuid
         return workout.uuid
     }
 
@@ -104,14 +119,14 @@ final class HealthKitManager {
     func syncPending(context: ModelContext) async {
         guard isAvailable, isWorkoutWritingAuthorized else { return }
 
-        let descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.endedAt != nil && $0.healthKitUUID == nil }
+        let descriptor = FetchDescriptor<WorkoutDay>(
+            predicate: #Predicate { $0.healthKitUUID == nil }
         )
 
         do {
             let pending = try context.fetch(descriptor)
-            for session in pending {
-                try await sync(session)
+            for day in pending {
+                try await sync(day)
             }
             if !pending.isEmpty { try context.save() }
             lastSyncError = nil

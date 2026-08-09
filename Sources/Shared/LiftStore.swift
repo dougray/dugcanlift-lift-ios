@@ -16,7 +16,7 @@ enum LiftStore {
     static let appGroupID = "group.com.dugcanlift.lift"
 
     static let schema = Schema([
-        WorkoutSession.self,
+        WorkoutDay.self,
         ExerciseEntry.self,
         SetEntry.self,
         FoodEntry.self,
@@ -45,12 +45,73 @@ enum LiftStore {
         do {
             return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
-            // A container failure at launch means the schema and the on-disk
-            // store disagree. In production, handle this with a migration plan
-            // rather than a crash — see SchemaMigrationPlan.
+            // NSLog, not print — print never reaches the unified log, so it is
+            // invisible to `simctl spawn booted log stream`.
+            NSLog("‼️ LIFT ModelContainer failed: %@", String(describing: error))
+
+            #if DEBUG
+            diagnoseSchema()
+
+            // Schema drift: delete the store and retry once. NEVER ship this —
+            // in production it destroys user data. Needs a SchemaMigrationPlan.
+            if let url = configuration.url as URL? {
+                NSLog("‼️ LIFT deleting store at %@", url.path)
+                for suffix in ["", "-shm", "-wal"] {
+                    try? FileManager.default.removeItem(
+                        at: URL(fileURLWithPath: url.path + suffix))
+                }
+                if let recovered = try? ModelContainer(for: schema, configurations: [configuration]) {
+                    NSLog("‼️ LIFT recovered with a fresh store")
+                    return recovered
+                }
+            }
+            #endif
+
             fatalError("Could not create ModelContainer: \(error)")
         }
     }
+
+    #if DEBUG
+    /// Builds an in-memory container for each model alone, then in cumulative
+    /// groups. The first failure names the offending model — far faster than
+    /// reading SwiftData's assertion, which does not identify it.
+    static func diagnoseSchema() {
+        let models: [(String, any PersistentModel.Type)] = [
+            ("WorkoutDay", WorkoutDay.self),
+            ("ExerciseEntry", ExerciseEntry.self),
+            ("SetEntry", SetEntry.self),
+            ("FoodEntry", FoodEntry.self),
+            ("BodyMeasurement", BodyMeasurement.self)
+        ]
+
+        NSLog("‼️ LIFT --- schema diagnosis: individually ---")
+        for (name, model) in models {
+            let single = Schema([model])
+            let config = ModelConfiguration(schema: single, isStoredInMemoryOnly: true)
+            do {
+                _ = try ModelContainer(for: single, configurations: [config])
+                NSLog("‼️ LIFT   ok      %@", name)
+            } catch {
+                NSLog("‼️ LIFT   FAILED  %@ -> %@", name, String(describing: error))
+            }
+        }
+
+        NSLog("‼️ LIFT --- schema diagnosis: cumulative ---")
+        var accumulated: [any PersistentModel.Type] = []
+        for (name, model) in models {
+            accumulated.append(model)
+            let partial = Schema(accumulated)
+            let config = ModelConfiguration(schema: partial, isStoredInMemoryOnly: true)
+            do {
+                _ = try ModelContainer(for: partial, configurations: [config])
+                NSLog("‼️ LIFT   ok      through %@", name)
+            } catch {
+                NSLog("‼️ LIFT   FAILED  adding %@ -> %@", name, String(describing: error))
+                break
+            }
+        }
+    }
+    #endif
 
     /// Read-only context for the widget extension. Widgets should never write.
     static func widgetContext() -> ModelContext {

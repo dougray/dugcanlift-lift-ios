@@ -140,19 +140,4 @@ enum LiftQueries {
         )
     }
 
-    static func workouts(on dayKey: String) -> FetchDescriptor<WorkoutSession> {
-        FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.dayKey == dayKey },
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-    }
-
-    static func activeWorkout() -> FetchDescriptor<WorkoutSession> {
-        var descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.endedAt == nil },
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 1
-        return descriptor
-    }
 }

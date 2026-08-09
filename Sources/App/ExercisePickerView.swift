@@ -12,8 +12,8 @@ struct ExercisePickerView: View {
     /// signal that static ranking cannot provide: no amount of ORDER BY tuning
     /// on the reference data can tell whether "bench" means bench press or
     /// bench dips, but their own history can.
-    @Query(sort: \WorkoutSession.startedAt, order: .reverse)
-    private var sessions: [WorkoutSession]
+    @Query(sort: \WorkoutDay.date, order: .reverse)
+    private var days: [WorkoutDay]
 
     @State private var query = ""
     @State private var results: [ExerciseRecord] = []
@@ -23,8 +23,8 @@ struct ExercisePickerView: View {
     private var recentRefIDs: [String] {
         var seen = Set<String>()
         var ordered: [String] = []
-        for session in sessions {
-            for exercise in session.orderedExercises where !seen.contains(exercise.exerciseRefID) {
+        for day in days {
+            for exercise in day.orderedExercises where !seen.contains(exercise.exerciseRefID) {
                 seen.insert(exercise.exerciseRefID)
                 ordered.append(exercise.exerciseRefID)
             }

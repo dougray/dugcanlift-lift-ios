@@ -88,6 +88,9 @@ CREATE TABLE exercises (
   name          TEXT NOT NULL,
   primaryMuscle TEXT,
   equipment     TEXT,
+  category      TEXT,
+  mechanic      TEXT,
+  level         TEXT,
   instructions  TEXT,
   source        TEXT NOT NULL
 );
@@ -254,6 +257,9 @@ def load_exercises(conn: sqlite3.Connection, root: Path) -> int:
                 item.get("name", ""),
                 muscles[0] if muscles else None,
                 item.get("equipment"),
+                item.get("category"),
+                item.get("mechanic"),
+                item.get("level"),
                 "\n".join(item.get("instructions") or []) or None,
                 "free-exercise-db",
             ))
@@ -271,11 +277,14 @@ def load_exercises(conn: sqlite3.Connection, root: Path) -> int:
                 f"wger:{item.get('id')}", name,
                 (item.get("category") or {}).get("name") if isinstance(item.get("category"), dict) else None,
                 None,
+                "strength",
+                None,
+                None,
                 (item.get("description") or "").strip() or None,
                 "wger",
             ))
 
-    conn.executemany("INSERT OR IGNORE INTO exercises VALUES (?,?,?,?,?,?)", rows)
+    conn.executemany("INSERT OR IGNORE INTO exercises VALUES (?,?,?,?,?,?,?,?,?)", rows)
     conn.commit()
     return len(rows)
 

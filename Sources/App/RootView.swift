@@ -11,7 +11,7 @@ struct RootView: View {
             DiagnosticsView()
                 .tabItem { Label("Today", systemImage: "square.grid.2x2") }
 
-            Text("Workouts")
+            WorkoutsView()
                 .tabItem { Label("Workouts", systemImage: "figure.strengthtraining.traditional") }
 
             Text("Food")

@@ -41,6 +41,9 @@ struct ExerciseRecord: Codable, FetchableRecord, Identifiable, Hashable, Sendabl
     var name: String
     var primaryMuscle: String?
     var equipment: String?
+    var category: String?
+    var mechanic: String?
+    var level: String?
     var instructions: String?
     var source: String
 
@@ -142,17 +145,24 @@ actor ReferenceDatabase {
 
         return try exercises().read { db in
             guard let pattern = FTS5Pattern(matchingAllPrefixesIn: trimmed) else { return [] }
-            // bm25 alone ranks "Barbell Rollout from Bench" alongside
-            // "Bench Press" for the query "bench". Three-tier ordering:
-            // names that START with the query win, then relevance with the
-            // name column weighted 10x over muscle, then shorter names —
-            // which favours the canonical lift over its variations.
+            // Ranking is layered, because no single signal works alone.
+            // bm25 by itself put "Barbell Rollout from Bench" next to bench
+            // presses; a raw name-prefix boost then put "Bench Jump" on top.
+            // Ordering by category and mechanic first pushes plyometrics and
+            // stretches below strength work, which is what someone mid-workout
+            // is almost always searching for.
             return try ExerciseRecord.fetchAll(db, sql: """
                 SELECT exercises.*
                 FROM exercises
                 JOIN exercises_fts ON exercises_fts.rowid = exercises.rowid
                 WHERE exercises_fts MATCH ?
                 ORDER BY
+                    CASE exercises.category
+                        WHEN 'strength' THEN 0
+                        WHEN 'olympic weightlifting' THEN 1
+                        WHEN 'powerlifting' THEN 1
+                        ELSE 2 END,
+                    CASE WHEN exercises.mechanic = 'compound' THEN 0 ELSE 1 END,
                     CASE WHEN exercises.name LIKE ? THEN 0 ELSE 1 END,
                     bm25(exercises_fts, 10.0, 1.0),
                     length(exercises.name)

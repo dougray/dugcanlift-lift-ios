@@ -142,14 +142,22 @@ actor ReferenceDatabase {
 
         return try exercises().read { db in
             guard let pattern = FTS5Pattern(matchingAllPrefixesIn: trimmed) else { return [] }
+            // bm25 alone ranks "Barbell Rollout from Bench" alongside
+            // "Bench Press" for the query "bench". Three-tier ordering:
+            // names that START with the query win, then relevance with the
+            // name column weighted 10x over muscle, then shorter names —
+            // which favours the canonical lift over its variations.
             return try ExerciseRecord.fetchAll(db, sql: """
                 SELECT exercises.*
                 FROM exercises
                 JOIN exercises_fts ON exercises_fts.rowid = exercises.rowid
                 WHERE exercises_fts MATCH ?
-                ORDER BY bm25(exercises_fts)
+                ORDER BY
+                    CASE WHEN exercises.name LIKE ? THEN 0 ELSE 1 END,
+                    bm25(exercises_fts, 10.0, 1.0),
+                    length(exercises.name)
                 LIMIT ?
-                """, arguments: [pattern, limit])
+                """, arguments: [pattern, "\(trimmed)%", limit])
         }
     }
 

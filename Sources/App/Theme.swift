@@ -149,10 +149,14 @@ struct StatRow: View {
 
 extension View {
     /// Applies the page background and default text colour.
+    ///
+    /// `.scrollBounceBehavior(.always)` is deliberate: without it a ScrollView
+    /// whose content fits the screen is completely inert, which is
+    /// indistinguishable from broken scrolling.
     func liftScreen() -> some View {
         self
-            .scrollContentBackground(.hidden)
-            .background(Theme.background)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scrollBounceBehavior(.always)
             .tint(Theme.accent)
             .foregroundStyle(Theme.textPrimary)
     }

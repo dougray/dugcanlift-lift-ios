@@ -71,8 +71,8 @@ targets:
 
         # HealthKit — both strings are required or the app is rejected
         NSHealthShareUsageDescription: >-
-          Lift reads your workouts and body measurements so your training
-          history stays in sync with the Health app.
+          Lift reads your workouts, body measurements, and step count so your
+          training history stays in sync with the Health app.
         NSHealthUpdateUsageDescription: >-
           Lift saves the workouts and meals you log to the Health app.
 

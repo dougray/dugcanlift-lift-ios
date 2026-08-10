@@ -37,6 +37,9 @@ final class HealthKitManager {
         if let bodyMass = HKQuantityType.quantityType(forIdentifier: .bodyMass) {
             types.insert(bodyMass)
         }
+        if let steps = HKQuantityType.quantityType(forIdentifier: .stepCount) {
+            types.insert(steps)
+        }
         return types
     }
 
@@ -162,5 +165,25 @@ final class HealthKitManager {
         let results = try await descriptor.result(for: store)
         guard let sample = results.first else { return nil }
         return (sample.quantity.doubleValue(for: .gramUnit(with: .kilo)), sample.endDate)
+    }
+
+    // MARK: Steps
+
+    /// Sum of step count samples from midnight to now, from any source (iPhone,
+    /// Watch, or a third-party app) — whatever Health itself considers today's
+    /// total.
+    func todaysStepCount() async throws -> Double {
+        guard isAvailable,
+              let type = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return 0 }
+
+        let start = Calendar.current.startOfDay(for: .now)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: .now)
+        let descriptor = HKStatisticsQueryDescriptor(
+            predicate: .quantitySample(type: type, predicate: predicate),
+            options: .cumulativeSum
+        )
+
+        let statistics = try await descriptor.result(for: store)
+        return statistics?.sumQuantity()?.doubleValue(for: .count()) ?? 0
     }
 }

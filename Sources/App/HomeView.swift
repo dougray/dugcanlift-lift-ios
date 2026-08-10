@@ -9,6 +9,8 @@ struct MacroGoals {
     @AppStorage("goalFat")      static var fat = 49.0
     @AppStorage("goalCarbs")    static var carbs = 167.0
     @AppStorage("goalFiber")    static var fiber = 24.0
+    /// Distinguishes "user saved a goal" from the placeholder defaults above.
+    @AppStorage("goalIsSet")    static var isSet = false
 }
 
 struct HomeView: View {
@@ -18,6 +20,16 @@ struct HomeView: View {
     @AppStorage("goalFat") private var goalFat = 49.0
     @AppStorage("goalCarbs") private var goalCarbs = 167.0
     @AppStorage("goalFiber") private var goalFiber = 24.0
+    @AppStorage("goalIsSet") private var goalIsSet = false
+    /// 10,000 is a starting recommendation, not a requirement — editable via
+    /// the Steps card so someone can build up toward it.
+    @AppStorage("goalSteps") private var goalSteps = 10_000.0
+
+    @State private var showingCalculator = false
+    @State private var health = HealthKitManager.shared
+    @State private var todaySteps: Double = 0
+    @State private var showingStepGoalEditor = false
+    @State private var stepGoalInput = ""
 
     @Query private var todaysFood: [FoodEntry]
     @Query private var todaysTraining: [WorkoutDay]
@@ -46,25 +58,55 @@ struct HomeView: View {
                     .font(Theme.cardTitle)
                     .foregroundStyle(Theme.accent)
 
-                LiftCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(calorieHeadline)
-                                .font(Theme.figure)
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("\(Int(totals.calories)) of \(Int(goalCalories))")
-                                .font(Theme.detail)
-                                .foregroundStyle(Theme.textSecondary)
-                        }
+                if goalIsSet {
+                    LiftCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(calorieHeadline)
+                                    .font(Theme.figure)
+                                    .foregroundStyle(Theme.textPrimary)
+                                Text("\(Int(totals.calories)) of \(Int(goalCalories))")
+                                    .font(Theme.detail)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
 
-                        MacroProgressRow(label: "Protein", current: totals.proteinG,
-                                         goal: goalProtein, unit: "g")
-                        MacroProgressRow(label: "Fat", current: totals.fatG,
-                                         goal: goalFat, unit: "g")
-                        MacroProgressRow(label: "Carbs", current: totals.carbsG,
-                                         goal: goalCarbs, unit: "g")
-                        MacroProgressRow(label: "Fiber", current: totals.fiberG ?? 0,
-                                         goal: goalFiber, unit: "g")
+                            MacroProgressRow(label: "Protein", current: totals.proteinG,
+                                             goal: goalProtein, unit: "g")
+                            MacroProgressRow(label: "Fat", current: totals.fatG,
+                                             goal: goalFat, unit: "g")
+                            MacroProgressRow(label: "Carbs", current: totals.carbsG,
+                                             goal: goalCarbs, unit: "g")
+                            MacroProgressRow(label: "Fiber", current: totals.fiberG ?? 0,
+                                             goal: goalFiber, unit: "g")
+                        }
+                    }
+                } else {
+                    LiftCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("No goal set yet.")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text("Work out your daily calories and macros to start tracking against them.")
+                                .font(Theme.body)
+                                .foregroundStyle(Theme.textSecondary)
+                            Button("Set my goal") { showingCalculator = true }
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Theme.accent)
+                                .padding(.top, 4)
+                        }
+                    }
+                }
+
+                LiftCard(title: "Steps") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        MacroProgressRow(label: "Today", current: todaySteps,
+                                         goal: goalSteps, unit: "steps")
+                        Button("Edit goal") {
+                            stepGoalInput = String(Int(goalSteps))
+                            showingStepGoalEditor = true
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
                     }
                 }
 
@@ -99,6 +141,26 @@ struct HomeView: View {
             .padding(.bottom, 40)
         }
         .liftScreen()
+        .sheet(isPresented: $showingCalculator) {
+            CalculatorView()
+        }
+        .alert("Step Goal", isPresented: $showingStepGoalEditor) {
+            TextField("Steps per day", text: $stepGoalInput)
+                .keyboardType(.numberPad)
+            Button("Save") {
+                if let value = Double(stepGoalInput), value > 0 {
+                    goalSteps = value
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .task { await loadSteps() }
+    }
+
+    private func loadSteps() async {
+        guard health.isAvailable else { return }
+        try? await health.requestAuthorization()
+        todaySteps = (try? await health.todaysStepCount()) ?? 0
     }
 
     private var calorieHeadline: String {

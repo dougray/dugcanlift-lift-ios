@@ -186,4 +186,39 @@ final class HealthKitManager {
         let statistics = try await descriptor.result(for: store)
         return statistics?.sumQuantity()?.doubleValue(for: .count()) ?? 0
     }
+
+    /// Steps per day for the last `days` days, keyed "yyyy-MM-dd", ending
+    /// today.
+    ///
+    /// Days Health has nothing for are absent rather than zero — a coach
+    /// reading a chart needs "no data" and "did not move" to look different,
+    /// and HealthKit reports an empty bucket for both.
+    func dailyStepCounts(days: Int) async throws -> [String: Int] {
+        guard isAvailable, days > 0,
+              let type = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return [:] }
+
+        let calendar = Calendar.current
+        let endOfToday = calendar.startOfDay(for: .now)
+        guard let start = calendar.date(byAdding: .day, value: -(days - 1), to: endOfToday)
+        else { return [:] }
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: .now)
+        let descriptor = HKStatisticsCollectionQueryDescriptor(
+            predicate: .quantitySample(type: type, predicate: predicate),
+            options: .cumulativeSum,
+            // Anchoring to a day boundary is what makes each bucket a calendar
+            // day rather than a rolling 24 hours from whenever this ran.
+            anchorDate: start,
+            intervalComponents: DateComponents(day: 1)
+        )
+
+        let collection = try await descriptor.result(for: store)
+        var counts: [String: Int] = [:]
+        for statistics in collection.statistics() {
+            guard let sum = statistics.sumQuantity()?.doubleValue(for: .count()), sum > 0
+            else { continue }
+            counts[DayKey.make(from: statistics.startDate)] = Int(sum.rounded())
+        }
+        return counts
+    }
 }

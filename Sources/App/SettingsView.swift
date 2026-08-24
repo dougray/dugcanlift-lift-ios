@@ -33,6 +33,8 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                CoachSection()
+
                 Section("Apple Health") {
                     if !health.isAvailable {
                         Text("Not available on this device")

@@ -1,0 +1,46 @@
+name: Bug report
+description: Something is broken or behaving oddly in LIFT for iPhone
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing. One thing first, and it matters:
+
+        **Never paste a "Send to Coach" link into an issue.** Your whole log
+        travels inside that link, so posting one here publishes your training
+        and eating to anyone who reads this repo. Describe what happened
+        instead.
+  - type: dropdown
+    id: which
+    attributes:
+      label: Which one are you using?
+      description: The native app isn't in the App Store yet, so most testers are on the web version added to their home screen.
+      options:
+        - The web app (added to home screen from Safari)
+        - The native app (built from source or TestFlight)
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: iPhone or iPad, and iOS version
+      placeholder: iPhone 15, iOS 26.6
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do just before it happened?
+  - type: checkboxes
+    id: health
+    attributes:
+      label: Does it involve Apple Health or steps?
+      options:
+        - label: Yes, steps or Apple Health are part of the problem

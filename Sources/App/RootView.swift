@@ -13,6 +13,7 @@ enum LiftTab: String, CaseIterable, Identifiable {
 /// won out over the iOS convention here.
 struct RootView: View {
     @State private var tab: LiftTab = .home
+    @State private var showingSettings = false
     @Namespace private var indicator
 
     var body: some View {
@@ -30,6 +31,10 @@ struct RootView: View {
         }
         .background(Theme.background)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+                .preferredColorScheme(.dark)
+        }
     }
 
     private var tabBar: some View {
@@ -59,6 +64,23 @@ struct RootView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            // Settings holds the coach card and the backup file. Until this
+            // button existed nothing in the app presented SettingsView, so
+            // both were unreachable however far you dug.
+            Button {
+                showingSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.accent.opacity(0.62))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
         }
         .background(Theme.background)
     }

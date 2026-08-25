@@ -35,6 +35,8 @@ struct SettingsView: View {
 
                 CoachSection()
 
+                BackupSection()
+
                 Section("Apple Health") {
                     if !health.isAvailable {
                         Text("Not available on this device")

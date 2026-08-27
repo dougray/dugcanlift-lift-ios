@@ -123,6 +123,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.tests
+        # Without this the test bundle has no Info.plist and code signing
+        # fails, so `make test` never gets as far as running anything.
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   Lift:

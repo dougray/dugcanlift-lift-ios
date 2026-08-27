@@ -15,13 +15,10 @@ enum LiftStore {
 
     static let appGroupID = "group.com.dugcanlift.lift"
 
-    static let schema = Schema([
-        WorkoutDay.self,
-        ExerciseEntry.self,
-        SetEntry.self,
-        FoodEntry.self,
-        BodyMeasurement.self
-    ])
+    /// The current schema. Defined by the newest `VersionedSchema` rather than
+    /// listed by hand, so the migration plan and the container can never
+    /// disagree about what shape the store is in — see `LiftSchemaVersions.swift`.
+    static let schema = Schema(versionedSchema: LiftSchemaV2.self)
 
     /// Shared container. Both the app and the widget call this.
     static let shared: ModelContainer = makeContainer()
@@ -43,7 +40,11 @@ enum LiftStore {
         }
 
         do {
-            return try ModelContainer(for: schema, configurations: [configuration])
+            return try ModelContainer(
+                for: schema,
+                migrationPlan: LiftMigrationPlan.self,
+                configurations: [configuration]
+            )
         } catch {
             // NSLog, not print — print never reaches the unified log, so it is
             // invisible to `simctl spawn booted log stream`.
@@ -52,15 +53,21 @@ enum LiftStore {
             #if DEBUG
             diagnoseSchema()
 
-            // Schema drift: delete the store and retry once. NEVER ship this —
-            // in production it destroys user data. Needs a SchemaMigrationPlan.
+            // Schema drift the migration plan could not handle: delete the
+            // store and retry once. DEBUG only — this destroys data, and the
+            // fix for a real failure here is a migration stage in
+            // LiftSchemaVersions.swift, not this branch.
             if let url = configuration.url as URL? {
                 NSLog("‼️ LIFT deleting store at %@", url.path)
                 for suffix in ["", "-shm", "-wal"] {
                     try? FileManager.default.removeItem(
                         at: URL(fileURLWithPath: url.path + suffix))
                 }
-                if let recovered = try? ModelContainer(for: schema, configurations: [configuration]) {
+                if let recovered = try? ModelContainer(
+                    for: schema,
+                    migrationPlan: LiftMigrationPlan.self,
+                    configurations: [configuration]
+                ) {
                     NSLog("‼️ LIFT recovered with a fresh store")
                     return recovered
                 }

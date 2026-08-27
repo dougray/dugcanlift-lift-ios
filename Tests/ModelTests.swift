@@ -80,3 +80,81 @@ final class DayKeyTests: XCTestCase {
         XCTAssertEqual(key, "1970-01-01")
     }
 }
+
+// MARK: - Migration
+
+/// Proves an existing store survives the COOK models being added.
+///
+/// This is the failure that has no second chance: a phone with a V1 store opens
+/// a V2 build, and if the migration cannot be applied the container throws. In
+/// DEBUG that deletes the store; in a release build it is a `fatalError` on
+/// launch for everyone who already had data. So the migration is exercised
+/// against a real file on disk, not asserted about.
+final class SchemaMigrationTests: XCTestCase {
+
+    private var storeURL: URL!
+
+    override func setUpWithError() throws {
+        storeURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("migration-\(UUID().uuidString).store")
+    }
+
+    override func tearDownWithError() throws {
+        for suffix in ["", "-shm", "-wal"] {
+            try? FileManager.default.removeItem(
+                at: URL(fileURLWithPath: storeURL.path + suffix))
+        }
+    }
+
+    func testV1StoreOpensAsV2WithDataIntact() throws {
+        let loggedAt = Date(timeIntervalSince1970: 1_756_000_000)
+        let dayKey = DayKey.make(from: loggedAt)
+
+        // Write a store using only the pre-COOK models.
+        do {
+            let v1 = try ModelContainer(
+                for: Schema(versionedSchema: LiftSchemaV1.self),
+                configurations: [ModelConfiguration(url: storeURL)]
+            )
+            let context = ModelContext(v1)
+            context.insert(FoodEntry(
+                foodRefID: "usda:174608",
+                name: "Oats",
+                quantity: 2,
+                servingUnit: "serving",
+                nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
+                mealType: .breakfast,
+                loggedAt: loggedAt
+            ))
+            try context.save()
+        }
+
+        // Reopen it the way the app does.
+        let v2 = try ModelContainer(
+            for: Schema(versionedSchema: LiftSchemaV2.self),
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(v2)
+
+        let food = try context.fetch(FetchDescriptor<FoodEntry>())
+        XCTAssertEqual(food.count, 1, "the V1 entry must survive the migration")
+        XCTAssertEqual(food.first?.name, "Oats")
+        XCTAssertEqual(food.first?.dayKey, dayKey)
+        XCTAssertEqual(food.first?.nutrition.calories, 300)
+
+        // And the new models must be usable in the migrated store.
+        let recipe = Recipe(name: "Overnight oats", servings: 2)
+        context.insert(recipe)
+        try context.save()
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Recipe>()).count, 1)
+    }
+
+    func testCurrentSchemaIsTheNewestVersion() {
+        XCTAssertEqual(
+            LiftStore.schema.entities.count,
+            LiftSchemaV2.models.count,
+            "LiftStore.schema must track the newest VersionedSchema"
+        )
+    }
+}

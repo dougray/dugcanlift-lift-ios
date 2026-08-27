@@ -249,7 +249,9 @@ struct MealPlanView: View {
                     .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
 
-                if let nutrition = meal.snapshotNutrition {
+                // scaledNutrition, not the raw snapshot: the snapshot is per
+                // serving, and this row is a whole meal.
+                if let nutrition = meal.scaledNutrition {
                     Text("\(Int(nutrition.calories)) kcal")
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)

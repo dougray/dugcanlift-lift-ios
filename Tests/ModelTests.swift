@@ -247,3 +247,66 @@ final class IngredientParserTests: XCTestCase {
         XCTAssertEqual(lines.first?.amounts["g"], 30)
     }
 }
+
+/// `PlannedMeal.snapshotNutrition` is per serving on both platforms.
+///
+/// Storing it pre-scaled renders correctly and is still wrong: the moment a
+/// plan travels between clients, one side is off by a factor of `servings` and
+/// nothing looks broken enough to notice. Android already stores per serving;
+/// these tests stop iOS drifting away from it again.
+final class PlannedMealNutritionTests: XCTestCase {
+
+    private func recipe(calories: Double, servings: Double) -> Recipe {
+        Recipe(
+            name: "Test",
+            servings: servings,
+            nutritionPerServing: NutritionFacts(
+                calories: calories, proteinG: 10, carbsG: 20, fatG: 5
+            )
+        )
+    }
+
+    func testSnapshotIsStoredPerServingNotScaled() {
+        let meal = PlannedMeal(
+            recipe: recipe(calories: 300, servings: 1),
+            mealType: .dinner,
+            plannedFor: .now,
+            servings: 2
+        )
+        XCTAssertEqual(meal.snapshotNutrition?.calories, 300,
+                       "the snapshot must be per serving, not multiplied by servings")
+    }
+
+    func testScaledNutritionMultipliesByServings() {
+        let meal = PlannedMeal(
+            recipe: recipe(calories: 300, servings: 1),
+            mealType: .dinner,
+            plannedFor: .now,
+            servings: 2
+        )
+        XCTAssertEqual(meal.scaledNutrition?.calories, 600)
+        XCTAssertEqual(meal.scaledNutrition?.proteinG, 20)
+    }
+
+    /// `FoodEntry.nutrition` is already-scaled by contract, so a two-serving
+    /// dinner must log the full amount — not one serving, and not four.
+    func testLoggedEntryCarriesTheScaledAmount() {
+        let meal = PlannedMeal(
+            recipe: recipe(calories: 300, servings: 1),
+            mealType: .dinner,
+            plannedFor: .now,
+            servings: 2
+        )
+        let entry = meal.makeFoodEntry()
+        XCTAssertEqual(entry?.nutrition.calories, 600)
+        XCTAssertEqual(entry?.quantity, 2)
+        XCTAssertEqual(entry?.foodRefID, "recipe:\(meal.recipeID.uuidString)")
+    }
+
+    func testNoMacrosMeansNoEntryRatherThanAZeroCalorieDinner() {
+        let bare = Recipe(name: "Unknown", servings: 1)
+        let meal = PlannedMeal(recipe: bare, mealType: .dinner, plannedFor: .now, servings: 2)
+        XCTAssertNil(meal.scaledNutrition)
+        XCTAssertNil(meal.makeFoodEntry())
+    }
+}

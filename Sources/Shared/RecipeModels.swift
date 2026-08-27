@@ -185,6 +185,16 @@ final class PlannedMeal {
     // traverse a relationship cheaply, so everything needed to render a
     // "tonight's dinner" tile is copied here at plan time.
     var recipeName: String = ""
+
+    /// **Per serving, never pre-scaled by `servings`.**
+    ///
+    /// This is the invariant the wire format is built on and the Android build
+    /// already follows. Storing it scaled works right up until a plan travels
+    /// between clients, at which point one side is wrong by a factor of
+    /// `servings` and nothing looks broken enough to notice.
+    ///
+    /// Multiply at the point of use: the UI for display, `makeFoodEntry()` for
+    /// the log.
     var snapshotNutrition: NutritionFacts?
 
     /// Set when this plan has been turned into an actual `FoodEntry`, so
@@ -202,24 +212,30 @@ final class PlannedMeal {
         self.plannedFor = plannedFor
         self.dayKey = DayKey.make(from: plannedFor)
         self.servings = servings
-        self.snapshotNutrition = recipe.nutritionPerServing?.scaled(by: servings)
+        self.snapshotNutrition = recipe.nutritionPerServing
     }
 
     var isLogged: Bool { loggedFoodEntryID != nil }
 
+    /// Nutrition for the whole planned meal — the per-serving snapshot times
+    /// `servings`. What the UI shows.
+    var scaledNutrition: NutritionFacts? {
+        snapshotNutrition?.scaled(by: servings)
+    }
+
     /// Builds the log entry for this planned meal.
     ///
-    /// Nutrition is already scaled, matching what `FoodEntry` expects. Returns
-    /// nil when the recipe never had macros — better no entry than a zero-calorie
-    /// dinner in the day's total.
+    /// `FoodEntry.nutrition` is already-scaled by contract, so the per-serving
+    /// snapshot is multiplied here. Returns nil when the recipe never had
+    /// macros — better no entry than a zero-calorie dinner in the day's total.
     func makeFoodEntry() -> FoodEntry? {
-        guard let snapshotNutrition else { return nil }
+        guard let scaledNutrition else { return nil }
         return FoodEntry(
             foodRefID: "recipe:\(recipeID.uuidString)",
             name: recipeName,
             quantity: servings,
             servingUnit: servings == 1 ? "serving" : "servings",
-            nutrition: snapshotNutrition,
+            nutrition: scaledNutrition,
             mealType: mealType,
             loggedAt: plannedFor
         )

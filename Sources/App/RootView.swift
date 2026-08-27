@@ -3,6 +3,7 @@ import SwiftUI
 enum LiftTab: String, CaseIterable, Identifiable {
     case home = "Home"
     case food = "Food"
+    case cook = "Cook"
     case train = "Train"
 
     var id: String { rawValue }
@@ -24,6 +25,7 @@ struct RootView: View {
                 switch tab {
                 case .home:  HomeView()
                 case .food:  FoodView()
+                case .cook:  CookView()
                 case .train: TrainView()
                 }
             }

@@ -10,6 +10,21 @@ enum MealType: String, Codable, CaseIterable, Identifiable {
         rawValue.prefix(1).uppercased() + rawValue.dropFirst()
     }
 
+    /// Best guess at which meal a given time of day belongs to.
+    ///
+    /// Thresholds match `mealForHour` in the Android build exactly. If they
+    /// drift, the same food re-logged at the same time lands in different
+    /// meals on the two platforms, and a coach reading the log sees a
+    /// difference that isn't real.
+    static func forHour(_ hour: Int) -> MealType {
+        switch hour {
+        case ..<11: .breakfast
+        case ..<15: .lunch
+        case ..<21: .dinner
+        default:    .snack
+        }
+    }
+
     /// Used for ordering a day's entries in the log view.
     var sortOrder: Int {
         switch self {

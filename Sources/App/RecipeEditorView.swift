@@ -232,6 +232,13 @@ struct RecipeEditorView: View {
 /// quantities, which is worse than an unparsed line the reader can see.
 enum IngredientParser {
 
+    /// Grouping key for an ingredient with no unit — "2 eggs", "1 banana".
+    ///
+    /// A sentinel, not a unit. It keeps counts in their own bucket during
+    /// aggregation, and the shopping list drops it when printing, because
+    /// "2 x banana" is not how anyone writes a shopping list.
+    static let countUnit = "\u{0000}count"
+
     private static let units: Set<String> = [
         "g", "kg", "mg", "ml", "l",
         "tsp", "tbsp", "cup", "cups", "oz", "lb", "lbs",
@@ -266,9 +273,10 @@ enum IngredientParser {
             rawText: raw,
             item: item,
             qty: quantity,
-            // No unit means a count — "2 eggs". Naming it keeps the shopping
-            // list from adding two eggs to two cups of anything.
-            unit: unit ?? "x",
+            // No unit means a count — "2 eggs". It still needs a key, so that
+            // two eggs are never added to two cups of anything, but it is not
+            // a unit and must never be printed as one. See `countUnit`.
+            unit: unit ?? countUnit,
             grams: unit == "g" ? quantity : nil,
             sortOrder: sortOrder
         )

@@ -158,3 +158,92 @@ final class SchemaMigrationTests: XCTestCase {
         )
     }
 }
+
+/// The two platforms must agree on what time dinner is. If these thresholds
+/// drift from Android's `mealForHour`, the same food re-logged at the same time
+/// lands in a different meal on each, and a coach reading the log sees a
+/// difference that isn't real.
+final class MealForHourTests: XCTestCase {
+
+    func testMatchesAndroidThresholds() {
+        XCTAssertEqual(MealType.forHour(0),  .breakfast)
+        XCTAssertEqual(MealType.forHour(10), .breakfast)
+        XCTAssertEqual(MealType.forHour(11), .lunch)
+        XCTAssertEqual(MealType.forHour(14), .lunch)
+        XCTAssertEqual(MealType.forHour(15), .dinner)
+        XCTAssertEqual(MealType.forHour(20), .dinner)
+        XCTAssertEqual(MealType.forHour(21), .snack)
+        XCTAssertEqual(MealType.forHour(23), .snack)
+    }
+}
+
+/// The ingredient parser is deliberately small, so what matters is that it
+/// gives up cleanly rather than guessing. A confident wrong quantity on a
+/// shopping list is worse than a line the reader can see and check.
+final class IngredientParserTests: XCTestCase {
+
+    func testParsesQuantityUnitAndItem() {
+        let parsed = IngredientParser.parse("2 tbsp olive oil", sortOrder: 0)
+        XCTAssertEqual(parsed.qty, 2)
+        XCTAssertEqual(parsed.unit, "tbsp")
+        XCTAssertEqual(parsed.item, "olive oil")
+    }
+
+    func testGramsAreResolvedForMacroLookup() {
+        XCTAssertEqual(IngredientParser.parse("400 g chicken thigh", sortOrder: 0).grams, 400)
+        XCTAssertNil(IngredientParser.parse("2 tbsp olive oil", sortOrder: 0).grams,
+                     "only grams resolve to a mass")
+    }
+
+    func testCountsGetTheSentinelNotAUnit() {
+        let parsed = IngredientParser.parse("2 eggs", sortOrder: 0)
+        XCTAssertEqual(parsed.qty, 2)
+        XCTAssertEqual(parsed.item, "eggs")
+        XCTAssertEqual(parsed.unit, IngredientParser.countUnit)
+    }
+
+    /// The sentinel must be something nobody can type, or a real ingredient
+    /// measured in it would be silently treated as a count.
+    func testSentinelCannotCollideWithTypedText() {
+        XCTAssertTrue(IngredientParser.countUnit.contains("\u{0000}"))
+    }
+
+    func testFractions() {
+        XCTAssertEqual(IngredientParser.parse("1/2 cup rice", sortOrder: 0).qty, 0.5)
+        XCTAssertEqual(IngredientParser.parse("1 1/2 cups rice", sortOrder: 0).qty, 1.5)
+        XCTAssertEqual(IngredientParser.parse("0.5 kg beef", sortOrder: 0).qty, 0.5)
+    }
+
+    func testUnparseableLinesKeepTheirRawTextAndNothingElse() {
+        let parsed = IngredientParser.parse("salt to taste", sortOrder: 3)
+        XCTAssertEqual(parsed.rawText, "salt to taste")
+        XCTAssertNil(parsed.item, "a line that did not parse must not invent an item")
+        XCTAssertNil(parsed.qty)
+        XCTAssertEqual(parsed.sortOrder, 3)
+    }
+
+    func testRawTextIsKeptEvenWhenTheParseSucceeds() {
+        XCTAssertEqual(
+            IngredientParser.parse("2 tbsp olive oil", sortOrder: 0).rawText,
+            "2 tbsp olive oil"
+        )
+    }
+
+    /// Two cloves of garlic must never be added to two cups of anything.
+    func testCountsAndUnitsStayInSeparateBuckets() {
+        let recipe = Recipe(name: "Test", servings: 1)
+        let garlicCloves = IngredientParser.parse("2 cloves garlic", sortOrder: 0)
+        let garlicGrams = IngredientParser.parse("30 g garlic", sortOrder: 1)
+        garlicCloves.recipe = recipe
+        garlicGrams.recipe = recipe
+        recipe.ingredients = [garlicCloves, garlicGrams]
+
+        let meal = PlannedMeal(recipe: recipe, mealType: .dinner, plannedFor: .now)
+        let lines = ShoppingList.build(from: [meal], recipes: [recipe.id: recipe])
+
+        XCTAssertEqual(lines.count, 1, "same item name, one line")
+        XCTAssertEqual(lines.first?.amounts.count, 2, "but two units, kept apart")
+        XCTAssertEqual(lines.first?.amounts["cloves"], 2)
+        XCTAssertEqual(lines.first?.amounts["g"], 30)
+    }
+}

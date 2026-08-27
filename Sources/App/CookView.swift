@@ -76,6 +76,18 @@ struct RecipeListView: View {
                             .buttonStyle(.plain)
                     }
                 }
+
+                // Below the list on purpose: it must not appear in the top of
+                // a screenshot. DEBUG only, so it is never in a shipped build.
+                #if DEBUG
+                Button("Load sample recipes") {
+                    CookSampleData.load(into: context)
+                }
+                .font(Theme.detail)
+                .foregroundStyle(Theme.textSecondary.opacity(0.5))
+                .buttonStyle(.plain)
+                .padding(.top, 24)
+                #endif
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 40)
@@ -199,7 +211,7 @@ struct MealPlanView: View {
                     Text(meal.displayName)
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 74, alignment: .leading)
+                        .frame(width: 66, alignment: .leading)
 
                     if meals.isEmpty {
                         Button {
@@ -212,12 +224,12 @@ struct MealPlanView: View {
                         .buttonStyle(.plain)
                         Spacer()
                     } else {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 8) {
                             ForEach(meals) { plannedMeal in
                                 plannedRow(plannedMeal)
                             }
                         }
-                        Spacer()
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -226,13 +238,17 @@ struct MealPlanView: View {
         .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
     }
 
+    /// Remove is a trailing "x", matching how FoodView already deletes a
+    /// logged entry. Spelling it out cost more width than the column has: an
+    /// earlier version wrapped it mid-word, and the fixes for that either blew
+    /// the card past the page margin or truncated "Logged" to "Log...".
     private func plannedRow(_ meal: PlannedMeal) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(meal.recipeName)
-                .font(Theme.body)
-                .foregroundStyle(Theme.textPrimary)
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(meal.recipeName)
+                    .font(Theme.body)
+                    .foregroundStyle(Theme.textPrimary)
 
-            HStack(spacing: 12) {
                 if let nutrition = meal.snapshotNutrition {
                     Text("\(Int(nutrition.calories)) kcal")
                         .font(Theme.detail)
@@ -249,12 +265,18 @@ struct MealPlanView: View {
                         .foregroundStyle(Theme.accent)
                         .buttonStyle(.plain)
                 }
-
-                Button("Remove") { remove(meal) }
-                    .font(Theme.detail)
-                    .foregroundStyle(Theme.textSecondary)
-                    .buttonStyle(.plain)
             }
+
+            Spacer(minLength: 4)
+
+            Button {
+                remove(meal)
+            } label: {
+                Text("x")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Theme.accent)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -453,10 +475,15 @@ struct ShoppingListView: View {
         try? context.save()
     }
 
+    /// Counts print bare — "2", not "2 x banana".
     private func amountsLabel(_ amounts: [String: Double]) -> String {
         amounts
             .sorted { $0.key < $1.key }
-            .map { "\(trimmed($0.value)) \($0.key)" }
+            .map { unit, value in
+                unit == IngredientParser.countUnit
+                    ? trimmed(value)
+                    : "\(trimmed(value)) \(unit)"
+            }
             .joined(separator: " + ")
     }
 }

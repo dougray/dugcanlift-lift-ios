@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LIFT Workout Synchronization Envelope",
+  "type": "object",
+  "required": ["event", "workoutId", "revision", "updatedAt", "origin"],
+  "properties": {
+    "event": {
+      "enum": ["SESSION_FINISHED", "WORKOUT_EDITED", "WORKOUT_SYNC_ACK"]
+    },
+    "workoutId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "origin": {
+      "enum": ["watchOS", "wearOS", "android", "ios", "pwa"]
+    }
+  },
+  "additionalProperties": true
+}

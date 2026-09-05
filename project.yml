@@ -1,0 +1,18 @@
+name: LiftWatch
+options:
+  bundleIdPrefix: com.dugcanlift
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+targets:
+  LiftWatch:
+    type: application.watchapp2
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: LiftWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.watch
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: 4

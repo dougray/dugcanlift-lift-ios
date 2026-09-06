@@ -1,18 +1,41 @@
 name: LiftWatch
 options:
   bundleIdPrefix: com.dugcanlift
+  deploymentTarget:
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+packages:
+  LiftKit:
+    path: LiftKit
+
 settings:
   base:
-    SWIFT_VERSION: 5.0
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Left unset on purpose: signing is per-developer and must not be committed.
+    # Set your team in Xcode, or pass DEVELOPMENT_TEAM= on the xcodebuild line.
+    CODE_SIGN_STYLE: Automatic
+
 targets:
   LiftWatch:
-    type: application.watchapp2
+    # Single-target watchOS app (Xcode 14+). The legacy paired
+    # `application.watchapp2` type is not accepted by current Xcode.
+    type: application
     platform: watchOS
-    deploymentTarget: "10.0"
     sources:
       - path: LiftWatch
+    dependencies:
+      - package: LiftKit
+        product: LiftKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.watch
+        PRODUCT_NAME: LIFT
         GENERATE_INFOPLIST_FILE: YES
-        TARGETED_DEVICE_FAMILY: 4
+        INFOPLIST_KEY_WKApplication: YES
+        INFOPLIST_KEY_WKWatchOnly: YES
+        INFOPLIST_KEY_CFBundleDisplayName: LIFT
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: NO

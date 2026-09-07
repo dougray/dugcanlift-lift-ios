@@ -108,18 +108,31 @@ enum PlanImporter {
             createdRecipeIDs.append(recipe.id)
         }
 
+        // Parse in the local calendar, not UTC: "yyyy-MM-dd" is a calendar
+        // date with no time component (PLAN-FORMAT.md), so it must be
+        // interpreted in the device's own timezone or it silently shifts by a
+        // day for anyone west of UTC. Landing at midday rather than midnight
+        // avoids a second hazard: DayKey.make (local-time by default) would
+        // otherwise re-key a midnight local date back across the day
+        // boundary depending on DST — see CookView.swift's `add(_:...)` for
+        // the same convention.
         let dateFormatter: DateFormatter = {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(identifier: "UTC")
+            formatter.timeZone = .current
             formatter.dateFormat = "yyyy-MM-dd"
             return formatter
         }()
 
+        func atMidday(_ date: Date) -> Date {
+            Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
+        }
+
         for planMeal in payload.m ?? [] {
             guard planMeal.x >= 0, planMeal.x < createdRecipeIDs.count,
                   let mealType = mealType(forSlot: planMeal.s),
-                  let date = dateFormatter.date(from: planMeal.d) else { continue }
+                  let parsedDate = dateFormatter.date(from: planMeal.d) else { continue }
+            let date = atMidday(parsedDate)
             // Bind to a local constant before the #Predicate closure rather
             // than subscripting inside it — matches the pattern
             // WorkoutQueries.day(_:) already uses elsewhere in this codebase.
@@ -162,7 +175,8 @@ enum PlanImporter {
 
         for session in payload.k ?? [] {
             guard session.x >= 0, session.x < createdRoutineIDs.count,
-                  let date = dateFormatter.date(from: session.d) else { continue }
+                  let parsedDate = dateFormatter.date(from: session.d) else { continue }
+            let date = atMidday(parsedDate)
             let routineID = createdRoutineIDs[session.x] // already a local constant, safe to use directly
             let routineDescriptor = FetchDescriptor<Routine>(
                 predicate: #Predicate { $0.id == routineID }
@@ -174,7 +188,19 @@ enum PlanImporter {
         }
 
         context.insert(ImportedPlan(payloadHash: hash))
-        try context.save()
+        do {
+            try context.save()
+        } catch {
+            // Roll back every pending insert above (recipes, meals, routines,
+            // sessions, the ImportedPlan marker) so a retry after a failed
+            // save starts clean. Without this, isAlreadyImported(hash:in:)
+            // would see the still-pending (uncommitted but
+            // fetch-visible-in-this-context) ImportedPlan insert from this
+            // failed attempt and report "already imported" on the very next
+            // call, even though nothing was actually persisted.
+            context.rollback()
+            throw error
+        }
     }
 
     private static func value(_ tuple: [Double?], _ index: Int) -> Double? {

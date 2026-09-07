@@ -111,9 +111,21 @@ extension Routine {
     func startSession(on date: Date, in context: ModelContext) -> WorkoutDay {
         let day = WorkoutQueries.fetchOrCreate(date, in: context)
 
+        // Guard against duplicate invocation: nothing marks a
+        // ScheduledSession as consumed once started (TrainView's
+        // "Coach scheduled: X" banner stays tappable), and a plain Button in
+        // a List row can make the whole row a tap target — so the same
+        // routine can plausibly be started twice for the same day. Skip any
+        // exercise already landed on this day from this routine, identified
+        // by the same "routine:<exercise id>" exerciseRefID convention used
+        // below, rather than appending a second copy.
+        let existingRefIDs = Set(day.exercises.map(\.exerciseRefID))
+
         for exercise in orderedExercises {
+            let refID = "routine:\(exercise.id.uuidString)"
+            guard !existingRefIDs.contains(refID) else { continue }
             let entry = ExerciseEntry(
-                exerciseRefID: "routine:\(exercise.id.uuidString)",
+                exerciseRefID: refID,
                 name: exercise.name,
                 orderIndex: day.exercises.count,
                 equipment: exercise.equipment.isEmpty ? nil : exercise.equipment

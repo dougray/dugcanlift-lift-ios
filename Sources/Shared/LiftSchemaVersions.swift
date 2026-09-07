@@ -104,9 +104,9 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
         toVersion: LiftSchemaV2.self
     )
 
-    /// Four new model types (Routine, RoutineExercise, RoutinePrescribedSet,
-    /// ImportedPlan) and no change to any existing one — lightweight per this
-    /// file's own rule above.
+    /// Five new model types (Routine, RoutineExercise, RoutinePrescribedSet,
+    /// ImportedPlan, ScheduledSession) and no change to any existing one —
+    /// lightweight per this file's own rule above.
     static let v2ToV3 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV2.self,
         toVersion: LiftSchemaV3.self

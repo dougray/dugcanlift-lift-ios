@@ -65,6 +65,7 @@ private struct RoutineRow: View {
                 routine.startSession(on: .now, in: context)
             }
             .font(.caption.weight(.semibold))
+            .buttonStyle(.borderless)
         }
     }
 }

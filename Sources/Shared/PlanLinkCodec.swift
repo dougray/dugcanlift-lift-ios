@@ -116,6 +116,10 @@ struct PlanPayload: Decodable, Equatable {
     let k: [PlanSession]?
 }
 
+extension PlanPayload: Identifiable {
+    var id: String { l + n + String(v) } // stable enough for one sheet presentation
+}
+
 struct PlanRecipe: Decodable, Equatable {
     let n: String
     let s: Double

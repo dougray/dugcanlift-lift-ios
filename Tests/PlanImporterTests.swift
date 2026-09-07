@@ -84,6 +84,26 @@ final class PlanImporterTests: XCTestCase {
         XCTAssertEqual(sets[2].targetRPE, 9)
     }
 
+    func testAcceptSkipsAMealWithANegativeRecipeIndexInsteadOfCrashing() throws {
+        // A malformed or adversarially-crafted plan link (untrusted input,
+        // decoded externally) could carry a negative `x`. The guard in
+        // accept() must reject it rather than subscript
+        // createdRecipeIDs[planMeal.x] with a negative index, which would
+        // trap (Swift arrays don't check the lower bound via `< count`
+        // alone — `-1 < 1` is true).
+        let context = try makeContext()
+        let payloadWithNegativeIndex = PlanPayload(
+            v: 1, t: "plan", l: "a1b2c3d4", n: "Coach Dana",
+            r: examplePayload.r, m: [PlanMeal(d: "2026-08-26", s: 2, x: -1, q: 2)],
+            w: examplePayload.w, k: examplePayload.k
+        )
+
+        try PlanImporter.accept(payloadWithNegativeIndex, hash: "negative-index", in: context)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Recipe>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<PlannedMeal>()).count, 0)
+    }
+
     func testAcceptAppliesScheduledSessionsAsScheduleReferences() throws {
         // k references w by array index. We assert only that accepting does
         // not throw and the routine it points to exists — the Train-tab

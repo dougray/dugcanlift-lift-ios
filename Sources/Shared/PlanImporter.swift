@@ -97,7 +97,7 @@ enum PlanImporter {
         }()
 
         for planMeal in payload.m ?? [] {
-            guard planMeal.x < createdRecipeIDs.count,
+            guard planMeal.x >= 0, planMeal.x < createdRecipeIDs.count,
                   let mealType = mealType(forSlot: planMeal.s),
                   let date = dateFormatter.date(from: planMeal.d) else { continue }
             // Bind to a local constant before the #Predicate closure rather

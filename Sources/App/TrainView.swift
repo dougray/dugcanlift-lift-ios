@@ -22,7 +22,7 @@ struct TrainView: View {
                     .font(Theme.sectionLabel)
                     .foregroundStyle(Theme.textPrimary)
 
-                focusChips
+                FocusPicker(date: selectedDate)
 
                 DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
             }
@@ -73,31 +73,6 @@ struct TrainView: View {
         selectedDate = moved
     }
 
-    // MARK: Focus
-
-    private var focusChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(TrainingFocus.allCases) { focus in
-                    LiftChip(label: focus.displayName, isSelected: currentFocus == focus) {
-                        setFocus(focus)
-                    }
-                }
-            }
-        }
-    }
-
-    private var currentFocus: TrainingFocus {
-        (try? context.fetch(WorkoutQueries.day(DayKey.make(from: selectedDate))).first?.focus)
-            .flatMap { $0 } ?? .bodybuilding
-    }
-
-    private func setFocus(_ focus: TrainingFocus) {
-        let day = WorkoutQueries.fetchOrCreate(selectedDate, in: context)
-        day.focus = focus
-        try? context.save()
-    }
-
     private func addExercise(_ record: ExerciseRecord) {
         let day = WorkoutQueries.fetchOrCreate(selectedDate, in: context)
         let entry = ExerciseEntry(
@@ -111,6 +86,44 @@ struct TrainView: View {
         day.exercises.append(entry)
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
+    }
+}
+
+/// Bodybuilding / powerlifting / crossfit / conditioning, for one day.
+///
+/// Backed by `@Query` rather than an ad-hoc `context.fetch` in a computed
+/// property, so the highlighted chip actually updates when tapped — SwiftData
+/// only re-renders views that hold a live query on the changed object.
+private struct FocusPicker: View {
+    @Environment(\.modelContext) private var context
+    let date: Date
+
+    @Query private var days: [WorkoutDay]
+
+    init(date: Date) {
+        self.date = date
+        let key = DayKey.make(from: date)
+        _days = Query(filter: #Predicate<WorkoutDay> { $0.dayKey == key })
+    }
+
+    private var currentFocus: TrainingFocus { days.first?.focus ?? .bodybuilding }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(TrainingFocus.allCases) { focus in
+                    LiftChip(label: focus.displayName, isSelected: currentFocus == focus) {
+                        setFocus(focus)
+                    }
+                }
+            }
+        }
+    }
+
+    private func setFocus(_ focus: TrainingFocus) {
+        let day = days.first ?? WorkoutQueries.fetchOrCreate(date, in: context)
+        day.focus = focus
+        try? context.save()
     }
 }
 

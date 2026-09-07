@@ -58,16 +58,42 @@ enum LiftSchemaV2: VersionedSchema {
     }
 }
 
+// MARK: - V3 — adds Routines and imported-plan tracking
+
+enum LiftSchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            // V1/V2, unchanged.
+            WorkoutDay.self,
+            ExerciseEntry.self,
+            SetEntry.self,
+            FoodEntry.self,
+            BodyMeasurement.self,
+            Recipe.self,
+            RecipeIngredient.self,
+            PlannedMeal.self,
+            ShoppingListCheck.self,
+            // Routines + plan-link import.
+            Routine.self,
+            RoutineExercise.self,
+            RoutinePrescribedSet.self,
+            ImportedPlan.self
+        ]
+    }
+}
+
 // MARK: - Plan
 
 enum LiftMigrationPlan: SchemaMigrationPlan {
 
     static var schemas: [any VersionedSchema.Type] {
-        [LiftSchemaV1.self, LiftSchemaV2.self]
+        [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2]
+        [v1ToV2, v2ToV3]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -75,5 +101,13 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v1ToV2 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV1.self,
         toVersion: LiftSchemaV2.self
+    )
+
+    /// Four new model types (Routine, RoutineExercise, RoutinePrescribedSet,
+    /// ImportedPlan) and no change to any existing one — lightweight per this
+    /// file's own rule above.
+    static let v2ToV3 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV2.self,
+        toVersion: LiftSchemaV3.self
     )
 }

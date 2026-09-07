@@ -79,7 +79,8 @@ enum LiftSchemaV3: VersionedSchema {
             Routine.self,
             RoutineExercise.self,
             RoutinePrescribedSet.self,
-            ImportedPlan.self
+            ImportedPlan.self,
+            ScheduledSession.self
         ]
     }
 }

@@ -24,6 +24,8 @@ struct TrainView: View {
 
                 FocusPicker(date: selectedDate)
 
+                ScheduledSessionBanner(date: selectedDate)
+
                 DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
             }
             .padding(.horizontal, 16)
@@ -124,6 +126,45 @@ private struct FocusPicker: View {
         let day = days.first ?? WorkoutQueries.fetchOrCreate(date, in: context)
         day.focus = focus
         try? context.save()
+    }
+}
+
+/// "Coach scheduled: Lower A" for the selected day, if a coach's plan
+/// scheduled anything here. Tapping it starts the routine the same manual
+/// way starting any routine already works — this never pre-creates a
+/// WorkoutDay on its own.
+private struct ScheduledSessionBanner: View {
+    let date: Date
+    @Environment(\.modelContext) private var context
+
+    @Query private var sessions: [ScheduledSession]
+
+    init(date: Date) {
+        self.date = date
+        let key = DayKey.make(from: date)
+        _sessions = Query(filter: #Predicate<ScheduledSession> { $0.dayKey == key })
+    }
+
+    var body: some View {
+        ForEach(sessions) { session in
+            Button {
+                start(session)
+            } label: {
+                Label("Coach scheduled: \(session.routineName)", systemImage: "person.crop.circle.badge.clock")
+            }
+        }
+    }
+
+    private func start(_ session: ScheduledSession) {
+        // Bind to a local constant before the #Predicate closure rather than
+        // reading the property inside it — matches the pattern
+        // PlanImporter.accept already uses elsewhere in this codebase.
+        let targetRoutineID = session.routineID
+        let descriptor = FetchDescriptor<Routine>(
+            predicate: #Predicate<Routine> { $0.id == targetRoutineID }
+        )
+        guard let routine = try? context.fetch(descriptor).first else { return }
+        routine.startSession(on: date, in: context)
     }
 }
 

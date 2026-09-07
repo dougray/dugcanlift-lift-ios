@@ -23,6 +23,26 @@ final class ImportedPlan {
     }
 }
 
+/// A coach's scheduled session (`k` in PLAN-FORMAT.md) — a date paired with a
+/// routine, surfaced on that day in the Train tab. Does NOT pre-create a
+/// WorkoutDay; starting it is the same manual action as starting any routine.
+@Model
+final class ScheduledSession {
+    var id: UUID = UUID()
+    var routineID: UUID = UUID()
+    var routineName: String = ""
+    var dayKey: String = ""
+    var scheduledFor: Date = Date.now
+
+    init(routineID: UUID, routineName: String, scheduledFor: Date) {
+        self.id = UUID()
+        self.routineID = routineID
+        self.routineName = routineName
+        self.dayKey = DayKey.make(from: scheduledFor)
+        self.scheduledFor = scheduledFor
+    }
+}
+
 struct PlanImportSummary: Equatable {
     var coachName: String
     var recipeCount: Int
@@ -140,13 +160,18 @@ enum PlanImporter {
             createdRoutineIDs.append(routine.id)
         }
 
-        // Scheduled sessions (`k`) are intentionally not turned into anything
-        // here — per the design spec, a schedule is a lightweight reference
-        // surfaced on the relevant day in the Train tab (Task 6), not a
-        // pre-created WorkoutDay. `createdRoutineIDs` is threaded through so
-        // that view has a routine id to point at.
-        _ = payload.k // referenced by Task 6's schedule surfacing
-        _ = createdRoutineIDs
+        for session in payload.k ?? [] {
+            guard session.x >= 0, session.x < createdRoutineIDs.count,
+                  let date = dateFormatter.date(from: session.d) else { continue }
+            let routineID = createdRoutineIDs[session.x] // already a local constant, safe to use directly
+            let routineDescriptor = FetchDescriptor<Routine>(
+                predicate: #Predicate { $0.id == routineID }
+            )
+            guard let routine = try context.fetch(routineDescriptor).first else { continue }
+            context.insert(ScheduledSession(
+                routineID: routineID, routineName: routine.name, scheduledFor: date
+            ))
+        }
 
         context.insert(ImportedPlan(payloadHash: hash))
         try context.save()

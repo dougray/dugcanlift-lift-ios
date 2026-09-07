@@ -57,9 +57,11 @@ final class PlanImporterTests: XCTestCase {
         XCTAssertEqual(meals.first?.recipeID, recipe.id)
         XCTAssertEqual(meals.first?.mealType, .dinner) // slot 2
         XCTAssertEqual(meals.first?.servings, 2)
-        XCTAssertEqual(meals.first?.dayKey, DayKey.make(from: try XCTUnwrap(
-            ISO8601DateFormatter().date(from: "2026-08-26T00:00:00Z")
-        )))
+        // Literal expected day-key, not `DayKey.make(from: ...T00:00:00Z)` —
+        // that would compute the expected value the same (wrong) way a UTC-
+        // midnight parse does, hiding the local-timezone-shift bug that
+        // formulation can't detect. See PlanImporter.swift's dateFormatter.
+        XCTAssertEqual(meals.first?.dayKey, "2026-08-26")
     }
 
     func testAcceptCreatesARoutineWithWeightConvertedToKilograms() throws {
@@ -120,9 +122,9 @@ final class PlanImporterTests: XCTestCase {
         let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.routineName, "Lower A")
-        XCTAssertEqual(sessions.first?.dayKey, DayKey.make(from: try XCTUnwrap(
-            ISO8601DateFormatter().date(from: "2026-09-08T00:00:00Z")
-        )))
+        // Literal expected day-key — see the same note in
+        // testAcceptCreatesAPlannedMealReferencingTheImportedRecipe above.
+        XCTAssertEqual(sessions.first?.dayKey, "2026-09-08")
     }
 
     func testAcceptSkipsAScheduledSessionWithANegativeRoutineIndexInsteadOfCrashing() throws {
@@ -170,5 +172,39 @@ final class PlanImporterTests: XCTestCase {
                                  n: "Someone Else", r: different.r, m: different.m,
                                  w: different.w, k: different.k)
         XCTAssertNotEqual(h1, try PlanImporter.hash(of: different))
+    }
+
+    /// End-to-end: build the fragment the way Coach's web app would (reusing
+    /// `PlanLinkFixtures` from PlanLinkCodecTests.swift, same test target),
+    /// decode it with `PlanLinkCodec`, and feed the result straight into
+    /// `PlanImporter.accept`. Every other test here exercises exactly one of
+    /// those two layers — this is the only one that runs a payload through
+    /// both, which is exactly the seam Finding 1 (dates parsed as UTC, then
+    /// re-keyed in local time) slipped through undetected.
+    func testFullPipelineFromLinkFragmentToPersistedDayKey() throws {
+        let json = """
+        {
+          "v": 1, "t": "plan", "l": "a1b2c3d4", "n": "Coach Dana",
+          "r": [{"n": "Beef Chilli", "s": 4, "u": [438, 36, 31, 19, 9],
+                 "i": ["500 g lean beef mince"], "t": ["Brown the mince."]}],
+          "m": [{"d": "2026-08-26", "s": 2, "x": 0, "q": 2}],
+          "w": [{"n": "Lower A", "e": [{"n": "Back Squat", "q": "Barbell",
+                 "s": [[225, 5, 8]]}]}],
+          "k": [{"d": "2026-09-08", "x": 0}]
+        }
+        """
+        let fragment = PlanLinkFixtures.fragment(json: json)
+        let payload = try PlanLinkCodec.decode(fragment: fragment, expectedLifterID: "a1b2c3d4")
+
+        let context = try makeContext()
+        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context)
+
+        let meals = try context.fetch(FetchDescriptor<PlannedMeal>())
+        XCTAssertEqual(meals.count, 1)
+        XCTAssertEqual(meals.first?.dayKey, "2026-08-26")
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.dayKey, "2026-09-08")
     }
 }

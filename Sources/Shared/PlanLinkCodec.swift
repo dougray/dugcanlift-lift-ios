@@ -52,6 +52,12 @@ enum PlanLinkCodec {
         }
 
         guard payload.v == 1 else { throw PlanLinkError.unsupportedVersion(String(payload.v)) }
+        // `t` exists specifically to "distinguish this from a log arriving at
+        // the same door" (PLAN-FORMAT.md) — a coach log link
+        // (CoachShare.swift's `/coach/#1z...`) decodes to valid JSON shaped
+        // enough like a plan payload that this must be checked explicitly,
+        // not assumed from the URL alone.
+        guard payload.t == "plan" else { throw PlanLinkError.corruptPayload }
         guard payload.l == expectedLifterID else { throw PlanLinkError.notAddressedToThisDevice }
 
         return payload
@@ -114,10 +120,6 @@ struct PlanPayload: Decodable, Equatable {
     let m: [PlanMeal]?
     let w: [PlanWorkout]?
     let k: [PlanSession]?
-}
-
-extension PlanPayload: Identifiable {
-    var id: String { l + n + String(v) } // stable enough for one sheet presentation
 }
 
 struct PlanRecipe: Decodable, Equatable {

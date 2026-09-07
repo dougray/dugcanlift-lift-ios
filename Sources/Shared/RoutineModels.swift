@@ -102,18 +102,6 @@ final class RoutinePrescribedSet {
     var isLoggableToday: Bool { targetWeightKg != nil || targetReps != nil }
 }
 
-/// Temporary stand-in for the plan-link import record Task 3 defines. It only
-/// needs to exist so `LiftSchemaV3.models` can list it; Task 3 replaces this
-/// with the real type and its own fields.
-@Model
-final class ImportedPlan {
-    var id: UUID = UUID()
-
-    init() {
-        self.id = UUID()
-    }
-}
-
 extension Routine {
     /// Starts this routine on `date`: fetches or creates that day, appends one
     /// `ExerciseEntry` per routine exercise, and one `SetEntry` per prescribed

@@ -51,9 +51,3 @@ struct LiftApp: App {
         }
     }
 }
-
-// TEMPORARY — Task 5 replaces this with the real plan preview UI.
-struct PlanPreviewView: View {
-    let payload: PlanPayload
-    var body: some View { Text(payload.n) }
-}

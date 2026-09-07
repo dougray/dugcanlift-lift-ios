@@ -113,6 +113,37 @@ final class PlanImporterTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<Routine>()).count, 1)
     }
 
+    func testAcceptPersistsScheduledSessionsForTheirDay() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(examplePayload, hash: "h5", in: context)
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.routineName, "Lower A")
+        XCTAssertEqual(sessions.first?.dayKey, DayKey.make(from: try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-09-08T00:00:00Z")
+        )))
+    }
+
+    func testAcceptSkipsAScheduledSessionWithANegativeRoutineIndexInsteadOfCrashing() throws {
+        // Mirrors testAcceptSkipsAMealWithANegativeRecipeIndexInsteadOfCrashing
+        // above: a malformed or adversarially-crafted plan link could carry a
+        // negative `x` in a scheduled session too. The guard in accept() must
+        // reject it rather than subscript createdRoutineIDs[session.x] with a
+        // negative index, which would trap.
+        let context = try makeContext()
+        let payloadWithNegativeIndex = PlanPayload(
+            v: 1, t: "plan", l: "a1b2c3d4", n: "Coach Dana",
+            r: examplePayload.r, m: examplePayload.m,
+            w: examplePayload.w, k: [PlanSession(d: "2026-09-08", x: -1)]
+        )
+
+        try PlanImporter.accept(payloadWithNegativeIndex, hash: "negative-schedule-index", in: context)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Routine>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledSession>()).count, 0)
+    }
+
     func testAcceptingTheSameHashTwiceIsANoOp() throws {
         let context = try makeContext()
         try PlanImporter.accept(examplePayload, hash: "same-hash", in: context)

@@ -10,6 +10,7 @@ struct PlanPreviewView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State private var didImport = false
+    @State private var importError: String?
 
     private var summary: PlanImportSummary { PlanImporter.summary(for: payload) }
 
@@ -60,12 +61,21 @@ struct PlanPreviewView: View {
                     }
                 }
             }
+            .alert("Couldn't add this plan", isPresented: .constant(importError != nil), presenting: importError) { _ in
+                Button("OK") { importError = nil }
+            } message: { message in
+                Text(message)
+            }
         }
     }
 
     private func accept() {
-        guard let hash = try? PlanImporter.hash(of: payload) else { return }
-        try? PlanImporter.accept(payload, hash: hash, in: context)
-        didImport = true
+        do {
+            let hash = try PlanImporter.hash(of: payload)
+            try PlanImporter.accept(payload, hash: hash, in: context)
+            didImport = true
+        } catch {
+            importError = "This plan couldn't be added. Please try again."
+        }
     }
 }

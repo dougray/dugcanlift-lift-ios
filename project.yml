@@ -64,6 +64,8 @@ targets:
           - group.com.dugcanlift.lift
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        com.apple.developer.associated-domains:
+          - applinks:www.dugcanlift.com
     info:
       path: Config/Lift-Info.plist
       properties:

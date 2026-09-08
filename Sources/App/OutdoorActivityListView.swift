@@ -2,9 +2,11 @@ import SwiftData
 import SwiftUI
 
 struct OutdoorActivityListView: View {
+    @Environment(\.modelContext) private var context
     @Query(sort: \OutdoorActivity.startedAt, order: .reverse) private var activities: [OutdoorActivity]
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
     @State private var startingActivityType: OutdoorActivityType?
+    @State private var justFinishedActivity: OutdoorActivity?
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
@@ -23,12 +25,24 @@ struct OutdoorActivityListView: View {
                             row(for: activity)
                         }
                     }
+                    .onDelete { offsets in
+                        for index in offsets { context.delete(activities[index]) }
+                        try? context.save()
+                    }
                 }
             }
             .navigationTitle("Outdoor")
             .fullScreenCover(item: $startingActivityType) { type in
                 NavigationStack {
-                    OutdoorActivityRecordingView(activityType: type)
+                    OutdoorActivityRecordingView(activityType: type) { activity in
+                        startingActivityType = nil
+                        justFinishedActivity = activity
+                    }
+                }
+            }
+            .fullScreenCover(item: $justFinishedActivity) { activity in
+                NavigationStack {
+                    OutdoorActivityReviewView(activity: activity)
                 }
             }
         }

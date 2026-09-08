@@ -6,8 +6,16 @@ import SwiftUI
 /// trace. `LocationTracker` is the source of truth for points while
 /// recording; nothing here reads from HealthKit — that only happens once
 /// this screen calls `finish()` and hands off to the review screen.
+///
+/// Presentation is owned entirely by the caller: this view reports a
+/// finished activity via `onFinish` and otherwise dismisses itself (Cancel).
+/// It never presents the review screen itself — see `OutdoorActivityListView`,
+/// which presents review as a sibling `.fullScreenCover`, not nested inside
+/// this one, so finishing a run can never leave a stale recording screen
+/// sitting underneath.
 struct OutdoorActivityRecordingView: View {
     let activityType: OutdoorActivityType
+    let onFinish: (OutdoorActivity) -> Void
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -16,7 +24,6 @@ struct OutdoorActivityRecordingView: View {
     @State private var tracker = LocationTracker()
     @State private var startedAt = Date.now
     @State private var now = Date.now
-    @State private var finishedActivity: OutdoorActivity?
 
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -25,37 +32,54 @@ struct OutdoorActivityRecordingView: View {
     private var distanceMeters: Double { OutdoorActivityMath.totalDistanceMeters(tracker.points) }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Map {
-                if tracker.points.count > 1 {
-                    MapPolyline(coordinates: tracker.points.map {
-                        CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                    })
-                    .stroke(.orange, lineWidth: 4)
+        Group {
+            if tracker.authorizationStatus == .denied || tracker.authorizationStatus == .restricted {
+                ContentUnavailableView(
+                    "Location Access Needed",
+                    systemImage: "location.slash",
+                    description: Text("Enable location access for Lift in Settings to record a route.")
+                )
+            } else {
+                VStack(spacing: 16) {
+                    Map {
+                        if tracker.points.count > 1 {
+                            MapPolyline(coordinates: tracker.points.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            })
+                            .stroke(.orange, lineWidth: 4)
+                        }
+                    }
+                    .frame(height: 300)
+
+                    statsRow
+
+                    Button("Finish \(activityType.displayName)", role: .destructive) {
+                        finish()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
+            }
+        }
+        .navigationTitle(activityType.displayName)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", role: .cancel) {
+                    tracker.stop()
+                    dismiss()
                 }
             }
-            .frame(height: 300)
-
-            statsRow
-
-            Button("Finish \(activityType.displayName)", role: .destructive) {
-                finish()
-            }
-            .buttonStyle(.borderedProminent)
         }
-        .padding()
-        .navigationTitle(activityType.displayName)
         .onAppear {
+            guard !tracker.isTracking else { return }
             tracker.requestAuthorization()
             tracker.start()
             startedAt = .now
         }
-        .onReceive(tick) { now = $0 }
-        .fullScreenCover(item: $finishedActivity) { activity in
-            NavigationStack {
-                OutdoorActivityReviewView(activity: activity)
-            }
+        .onDisappear {
+            tracker.stop()
         }
+        .onReceive(tick) { now = $0 }
     }
 
     private var statsRow: some View {
@@ -97,9 +121,13 @@ struct OutdoorActivityRecordingView: View {
         activity.distanceMeters = OutdoorActivityMath.totalDistanceMeters(tracker.points)
         activity.elevationGainMeters = OutdoorActivityMath.elevationGainMeters(tracker.points)
         context.insert(activity)
-        try? context.save()
-        finishedActivity = activity
+        do {
+            try context.save()
+            onFinish(activity)
+        } catch {
+            // Do not call onFinish or dismiss on a failed save: leave the
+            // user on this screen so they can see something went wrong and
+            // try Finish again, rather than silently losing the run.
+        }
     }
 }
-
-extension OutdoorActivity: Identifiable {}

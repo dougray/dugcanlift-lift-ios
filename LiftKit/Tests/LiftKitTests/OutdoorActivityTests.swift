@@ -101,4 +101,79 @@ final class OutdoorActivityTests: XCTestCase {
         XCTAssertEqual(activity.revision, revisionAfterFinish)
         XCTAssertEqual(activity.distanceMeters, distanceAfterFinish)
     }
+
+    // MARK: - healthKitUUID / markExported(_:)
+    //
+    // The actual `HKWorkoutBuilder` call this field's idempotency guards
+    // lives in `apple/LiftWatch/HealthKitExporter.swift` and needs the
+    // Watch Simulator or a device — not testable here. What belongs in this
+    // package is `OutdoorActivity`'s own state machine around the field:
+    // it defaults to `nil`, `markExported(_:)` sets it exactly once, and —
+    // since `OutdoorActivity`'s `Codable` conformance is synthesized rather
+    // than a custom `init(from:)` — an encoded value from before this field
+    // existed still decodes with `healthKitUUID == nil` rather than failing.
+
+    func testFreshActivityHasNilHealthKitUUID() {
+        let activity = OutdoorActivity(activityType: .run, startedAt: Date(timeIntervalSince1970: 0))
+        XCTAssertNil(activity.healthKitUUID)
+    }
+
+    func testMarkExportedSetsHealthKitUUIDAndBumpsRevision() {
+        var activity = OutdoorActivity(activityType: .run, startedAt: Date(timeIntervalSince1970: 0))
+        activity.finish(at: Date(timeIntervalSince1970: 10))
+        let revisionBeforeExport = activity.revision
+        let uuid = UUID()
+
+        let accepted = activity.markExported(uuid, at: Date(timeIntervalSince1970: 20))
+
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(activity.healthKitUUID, uuid)
+        XCTAssertEqual(activity.updatedAt, Date(timeIntervalSince1970: 20))
+        XCTAssertEqual(activity.revision, revisionBeforeExport + 1)
+    }
+
+    func testMarkExportedTwiceIsANoOp() {
+        var activity = OutdoorActivity(activityType: .run, startedAt: Date(timeIntervalSince1970: 0))
+        let firstUUID = UUID()
+        XCTAssertTrue(activity.markExported(firstUUID, at: Date(timeIntervalSince1970: 10)))
+        let revisionAfterFirstExport = activity.revision
+
+        let accepted = activity.markExported(UUID(), at: Date(timeIntervalSince1970: 20))
+
+        XCTAssertFalse(accepted)
+        XCTAssertEqual(activity.healthKitUUID, firstUUID)
+        XCTAssertEqual(activity.revision, revisionAfterFirstExport)
+    }
+
+    /// The concrete backward-compatibility guarantee: JSON encoded before
+    /// `healthKitUUID` existed — the key is entirely absent, not present
+    /// with a null value — still decodes successfully, with the field
+    /// defaulting to `nil` rather than throwing `keyNotFound`.
+    func testDecodingOldFormatJSONWithoutHealthKitUUIDKeyDefaultsToNil() throws {
+        // healthKitUUID is set here (not left nil) so the encoded JSON
+        // actually contains the key — proving the test genuinely simulates
+        // stripping a *present* key, rather than trivially passing because
+        // Codable's synthesized encoder already omits nil Optionals.
+        let activity = OutdoorActivity(
+            activityType: .hike,
+            startedAt: Date(timeIntervalSince1970: 0),
+            endedAt: Date(timeIntervalSince1970: 100),
+            healthKitUUID: UUID()
+        )
+        let encoded = try JSONEncoder().encode(activity)
+
+        var json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertNotNil(json["healthKitUUID"], "precondition: the field is normally present")
+        json.removeValue(forKey: "healthKitUUID")
+        let oldFormatData = try JSONSerialization.data(withJSONObject: json)
+
+        let decoded = try JSONDecoder().decode(OutdoorActivity.self, from: oldFormatData)
+
+        XCTAssertNil(decoded.healthKitUUID)
+        XCTAssertEqual(decoded.id, activity.id)
+        XCTAssertEqual(decoded.activityType, activity.activityType)
+        XCTAssertEqual(decoded.endedAt, activity.endedAt)
+    }
 }

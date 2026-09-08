@@ -182,6 +182,11 @@ final class OutdoorActivityLibrary: ObservableObject {
     /// `guard activity.healthKitUUID == nil` protect a future retry from
     /// ever writing the same workout into Health twice.
     private func exportAndMark(_ activity: OutdoorActivity) async {
+        // A Start-then-immediately-Finish produces an activity with no
+        // route points and no distance — skip exporting an empty HKWorkout
+        // to Health for it. (lift-ios has this same gap today; this fix is
+        // watch-only.)
+        guard !activity.routePoints.isEmpty || activity.distanceMeters > 0 else { return }
         do {
             guard let uuid = try await exporter.exportOutdoorActivity(activity) else { return }
             var updated = activity

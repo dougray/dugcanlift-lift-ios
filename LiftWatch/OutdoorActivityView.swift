@@ -170,6 +170,17 @@ final class OutdoorActivityLibrary: ObservableObject {
             var updated = activity
             guard updated.markExported(uuid) else { return }
             store.store(updated)
+            // Enqueue again at the post-export revision: `finish(_:)` already
+            // enqueued once at the pre-export revision (deliberately not
+            // delayed until now — an export failure must still tell the
+            // phone the activity finished), and SyncOutbox.enqueue collapses
+            // entries by workout ID keeping the higher revision, so this
+            // replaces rather than duplicates that entry.
+            session.enqueueOutdoorActivityFinished(
+                id: updated.id,
+                revision: updated.revision,
+                updatedAt: updated.updatedAt
+            )
             lastExportError = nil
         } catch {
             // Non-fatal: the activity is already recorded locally in

@@ -101,12 +101,30 @@ final class OutdoorActivityLibrary: ObservableObject {
 
     private let exporter = HealthKitExporter(healthStore: HKHealthStore())
 
+    /// The app's one `WorkoutSessionModel`, injected from `LiftWatchApp`.
+    /// `OutdoorActivityLibrary` has no `SyncOutbox`/`PhoneSyncTransport` of
+    /// its own on purpose — see `WorkoutSessionModel.
+    /// enqueueOutdoorActivityFinished(id:revision:updatedAt:)` for why a
+    /// second `PhoneSyncTransport` would conflict with this one over
+    /// `WCSession`'s single delegate slot. Reusing `session`'s outbox is the
+    /// cheaper, conflict-free way to notify the phone.
+    private let session: WorkoutSessionModel
+
+    init(session: WorkoutSessionModel) {
+        self.session = session
+    }
+
     /// Records a just-finished activity immediately, then kicks off its
     /// HealthKit export in the background. Deliberately not `async`/awaited
     /// by the caller: the Finish button's UI transition (back to the start
     /// screen) must not block on a HealthKit write, which can take a moment.
     func finish(_ activity: OutdoorActivity) {
         store.store(activity)
+        session.enqueueOutdoorActivityFinished(
+            id: activity.id,
+            revision: activity.revision,
+            updatedAt: activity.updatedAt
+        )
         Task { [weak self] in
             await self?.exportAndMark(activity)
         }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum LiftTab: String, CaseIterable, Identifiable {
+enum LiftTab: String, CaseIterable, Identifiable, Hashable {
     case home = "Home"
     case food = "Food"
     case cook = "Cook"
@@ -13,7 +13,9 @@ enum LiftTab: String, CaseIterable, Identifiable {
 
 /// Top tab bar of equal-width pill buttons, matching the Android build.
 /// This is deliberately not a UITabView — the Android information architecture
-/// won out over the iOS convention here.
+/// won out over the iOS convention here. Swiping the content area pages
+/// between tabs the same way tapping a pill does; both drive the same
+/// `tab` selection so the highlight always matches what's on screen.
 struct RootView: View {
     @State private var tab: LiftTab = .home
     @State private var showingSettings = false
@@ -22,16 +24,16 @@ struct RootView: View {
         VStack(spacing: 0) {
             tabBar
 
-            Group {
-                switch tab {
-                case .home:     HomeView()
-                case .food:     FoodView()
-                case .cook:     CookView()
-                case .train:    TrainView()
-                case .routines: RoutinesView()
-                case .outdoor:  OutdoorActivityListView()
-                }
+            TabView(selection: $tab) {
+                HomeView().tag(LiftTab.home)
+                FoodView().tag(LiftTab.food)
+                CookView().tag(LiftTab.cook)
+                TrainView().tag(LiftTab.train)
+                RoutinesView().tag(LiftTab.routines)
+                OutdoorActivityListView().tag(LiftTab.outdoor)
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .indexViewStyle(.page(backgroundDisplayMode: .never))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Theme.background)
@@ -55,7 +57,7 @@ struct RootView: View {
                         .foregroundStyle(tab == item ? Theme.textPrimary : Theme.textSecondary)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
-                        .background(tab == item ? Theme.accent : Theme.surface)
+                        .background(tab == item ? Theme.accent : Color.clear)
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)

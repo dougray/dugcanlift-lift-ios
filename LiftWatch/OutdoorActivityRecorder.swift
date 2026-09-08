@@ -74,6 +74,22 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
     func start(type: OutdoorActivityType) {
         guard activity == nil else { return }
 
+        // A previous recording's `session` can still be alive here even
+        // though `activity` is already `nil`: `finish()` deliberately keeps
+        // the session running until that recording's HealthKit export
+        // settles (see `endHealthKitSession(at:)`), and the user is free to
+        // tap Start again before that finishes. Without ending it now,
+        // `startWorkoutSession`'s own `session == nil` guard correctly
+        // refuses to create a second session — but then this new recording
+        // would silently run with no session at all, never gaining
+        // background runtime and never flipping `isRecording` true. Ending
+        // the old one here, while the user is still foreground, hands the
+        // runtime grant to the new recording instead of leaving it stranded
+        // on the old, already-finished one.
+        if session != nil {
+            endHealthKitSession(at: Date())
+        }
+
         let startDate = Date()
         activity = OutdoorActivity(activityType: type, startedAt: startDate)
         distanceMeters = 0

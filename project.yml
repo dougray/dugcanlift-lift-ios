@@ -75,6 +75,12 @@ targets:
         WKApplication: YES
         WKWatchOnly: YES
         CFBundleDisplayName: LIFT
+        # GENERATE_INFOPLIST_FILE: YES previously derived these from
+        # MARKETING_VERSION/CURRENT_PROJECT_VERSION automatically; a real
+        # Info.plist needs them spelled out explicitly or version bumps to
+        # those settings silently stop reaching the built app.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UIBackgroundModes:
           - location
         WKBackgroundModes:

@@ -169,11 +169,14 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
     private func startWorkoutSession(type: OutdoorActivityType, startDate: Date) async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         do {
-            // Only share authorization for the workout type itself is
-            // requested: per this type's doc comment, this recorder never
-            // reads Health data and never streams live heart-rate/energy
-            // samples through a builder, so there is nothing else to ask for.
-            try await healthStore.requestAuthorization(toShare: [HKObjectType.workoutType()], read: [])
+            // Requests the same full share set HealthKitExporter needs at
+            // export time (workout type, route series, distance quantity)
+            // rather than just workoutType() — so the one system permission
+            // sheet shown across a Start→Finish cycle covers everything;
+            // HealthKitExporter.requestExportAuthorization's own call later
+            // becomes a redundant-but-harmless no-op once these are granted
+            // (HealthKit doesn't re-prompt for already-authorized types).
+            try await healthStore.requestAuthorization(toShare: HealthKitExporter.requiredShareTypes(), read: [])
 
             // requestAuthorization is an unbounded await on a system sheet.
             // If finish()/discard() ran while it was in flight, `activity`

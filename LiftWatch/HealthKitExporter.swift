@@ -48,25 +48,39 @@ struct HealthKitExporter {
         self.healthStore = healthStore
     }
 
-    /// Requests write access for everything this export path writes.
-    /// `OutdoorActivityRecorder` only ever requests share access for
-    /// `HKObjectType.workoutType()` — enough for the `HKWorkoutSession` it
-    /// owns, which writes nothing. Actually persisting a workout here also
-    /// needs share access for the route series type and the distance
-    /// quantity type: HealthKit does not throw when a sample/series type
-    /// lacks share authorization, it just silently drops that piece on
-    /// save, so without this broadened request the workout would appear in
-    /// Health with no route and no distance and no error to notice the gap
-    /// by. Confirmed against `HKWorkoutRouteBuilder.h`/`HKObjectType.h` —
-    /// distance samples and route series data are each their own
-    /// HealthKit-authorization-gated sample type, independent of the
-    /// workout object's own authorization.
-    private func requestExportAuthorization() async throws {
+    /// The full set of share-access types this export path writes: the
+    /// workout itself, its route series, and its distance quantity samples.
+    /// HealthKit does not throw when a sample/series type lacks share
+    /// authorization, it just silently drops that piece on save — so a
+    /// caller requesting anything narrower than this (e.g.
+    /// `OutdoorActivityRecorder.startWorkoutSession`, which used to request
+    /// only `workoutType()` for its `HKWorkoutSession`) risks a workout
+    /// landing in Health with no route and no distance and no error to
+    /// notice the gap by. Confirmed against `HKWorkoutRouteBuilder.h`/
+    /// `HKObjectType.h` — distance samples and route series data are each
+    /// their own HealthKit-authorization-gated sample type, independent of
+    /// the workout object's own authorization.
+    ///
+    /// Hoisted to a static helper so `OutdoorActivityRecorder` can request
+    /// this same full set up front at `start(type:)` time, instead of a
+    /// second permission sheet appearing later at export time (see the
+    /// final-review fix wave's M3).
+    static func requiredShareTypes() -> Set<HKSampleType> {
         var shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), HKSeriesType.workoutRoute()]
         if let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
             shareTypes.insert(distanceType)
         }
-        try await healthStore.requestAuthorization(toShare: shareTypes, read: [])
+        return shareTypes
+    }
+
+    /// Requests write access for everything this export path writes. Left
+    /// in place (rather than removed) for `HealthKitExporter`'s own
+    /// safety/testability in isolation — once `OutdoorActivityRecorder`
+    /// requests the full set at `start(type:)` time, HealthKit doesn't
+    /// re-prompt for already-authorized types, so this call becomes a
+    /// redundant-but-harmless no-op in the live Start→Finish flow.
+    private func requestExportAuthorization() async throws {
+        try await healthStore.requestAuthorization(toShare: Self.requiredShareTypes(), read: [])
     }
 
     /// Writes `activity` to HealthKit and returns the new workout's `UUID`,

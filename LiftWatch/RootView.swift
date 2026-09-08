@@ -3,10 +3,17 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
+    @EnvironmentObject private var outdoorRecorder: OutdoorActivityRecorder
 
     var body: some View {
         NavigationStack {
-            if session.draft == nil {
+            // An in-progress outdoor recording takes priority: once
+            // `start(type:)` is called, `activity` stays non-nil (even right
+            // after `finish()`, until `OutdoorActivityView` resets it) so
+            // this is the state that should own the screen.
+            if outdoorRecorder.activity != nil {
+                OutdoorActivityView()
+            } else if session.draft == nil {
                 StartWorkoutView()
             } else {
                 WorkoutView()
@@ -17,6 +24,7 @@ struct RootView: View {
 
 struct StartWorkoutView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
+    @EnvironmentObject private var outdoorRecorder: OutdoorActivityRecorder
     @State private var focus: TrainingFocus = .bodybuilding
 
     var body: some View {
@@ -31,6 +39,14 @@ struct StartWorkoutView: View {
             Section {
                 Button("Start Workout") {
                     session.startWorkout(named: focus.displayName, focus: focus)
+                }
+            }
+            Section {
+                Button("Start Run") {
+                    outdoorRecorder.start(type: .run)
+                }
+                Button("Start Hike") {
+                    outdoorRecorder.start(type: .hike)
                 }
             }
         }

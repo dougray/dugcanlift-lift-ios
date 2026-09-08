@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import HealthKit
 import SwiftData
@@ -19,7 +20,7 @@ final class HealthKitManager {
     var lastSyncError: String?
 
     private var shareTypes: Set<HKSampleType> {
-        var types: Set<HKSampleType> = [HKObjectType.workoutType()]
+        var types: Set<HKSampleType> = [HKObjectType.workoutType(), HKSeriesType.workoutRoute()]
         if let bodyMass = HKQuantityType.quantityType(forIdentifier: .bodyMass) {
             types.insert(bodyMass)
         }
@@ -115,6 +116,74 @@ final class HealthKitManager {
         // Stamp BEFORE anything else can fail, so a later error can't cause a
         // duplicate write on the next attempt.
         day.healthKitUUID = workout.uuid
+        return workout.uuid
+    }
+
+    /// Exports a finished outdoor activity's workout and route to
+    /// HealthKit. Mirrors `sync(_:)`'s idempotency: returns early if already
+    /// exported, stamps the UUID immediately on success so a later failure
+    /// elsewhere can never cause a duplicate write on retry.
+    @discardableResult
+    func exportOutdoorActivity(_ activity: OutdoorActivity) async throws -> UUID? {
+        guard isAvailable, activity.healthKitUUID == nil,
+              let endedAt = activity.endedAt else { return nil }
+
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = activity.activityType == .run ? .running : .hiking
+        configuration.locationType = .outdoor
+
+        let builder = HKWorkoutBuilder(
+            healthStore: store,
+            configuration: configuration,
+            device: .local()
+        )
+
+        try await builder.beginCollection(at: activity.startedAt)
+
+        var metadata: [String: Any] = [HKMetadataKeyWorkoutBrandName: "Lift"]
+        metadata["LiftElevationGainMeters"] = activity.elevationGainMeters
+        try await builder.addMetadata(metadata)
+
+        if let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning),
+           activity.distanceMeters > 0 {
+            let sample = HKCumulativeQuantitySample(
+                type: distanceType,
+                quantity: HKQuantity(unit: .meter(), doubleValue: activity.distanceMeters),
+                start: activity.startedAt,
+                end: endedAt
+            )
+            try await builder.addSamples([sample])
+        }
+
+        // Route pairing: retrieve the route's series builder FROM the
+        // workout builder — it auto-associates and auto-finishes when the
+        // workout builder finishes. Verified against HKWorkoutBuilder.h's
+        // own doc comment: HKWorkoutRouteBuilder.finishRoute(with:) is
+        // explicitly documented as "you should never call this method" when
+        // the route builder is paired with a workout builder like this — a
+        // trap the API's shape makes easy to fall into by copying the
+        // standalone-route-builder pattern instead.
+        if let routeBuilder = builder.seriesBuilder(for: HKSeriesType.workoutRoute()) as? HKWorkoutRouteBuilder {
+            let locations = activity.routePoints.map {
+                CLLocation(
+                    coordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude),
+                    altitude: $0.altitudeMeters,
+                    horizontalAccuracy: kCLLocationAccuracyBest,
+                    verticalAccuracy: kCLLocationAccuracyBest,
+                    timestamp: $0.recordedAt
+                )
+            }
+            if !locations.isEmpty {
+                try await routeBuilder.insertRouteData(locations)
+            }
+        }
+
+        try await builder.endCollection(at: endedAt)
+        guard let workout = try await builder.finishWorkout() else { return nil }
+
+        // Stamp BEFORE returning, matching sync(_:)'s comment: a later
+        // failure elsewhere must never cause a duplicate write on retry.
+        activity.healthKitUUID = workout.uuid
         return workout.uuid
     }
 

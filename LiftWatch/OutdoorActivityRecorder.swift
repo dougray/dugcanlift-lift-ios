@@ -175,6 +175,15 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
             // samples through a builder, so there is nothing else to ask for.
             try await healthStore.requestAuthorization(toShare: [HKObjectType.workoutType()], read: [])
 
+            // requestAuthorization is an unbounded await on a system sheet.
+            // If finish()/discard() ran while it was in flight, `activity`
+            // is now nil (or a different recording started), and creating a
+            // session here would leak it live forever — watchOS allows only
+            // one active HKWorkoutSession, so every subsequent start(type:)
+            // would silently fail until the app relaunches. Re-verify this
+            // is still the same in-flight recording before proceeding.
+            guard activity?.startedAt == startDate, session == nil else { return }
+
             let configuration = HKWorkoutConfiguration()
             configuration.activityType = hkActivityType(for: type)
             configuration.locationType = .outdoor
@@ -186,6 +195,14 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
             // API_DEPRECATED on watchOS.
             let newSession = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
             newSession.delegate = self
+
+            // Re-check once more right before committing to a session: the
+            // synchronous work above (creating the configuration/session) is
+            // not itself an await point, but this second guard costs nothing
+            // and keeps the invariant airtight against future changes to
+            // this method that might add one.
+            guard activity?.startedAt == startDate, session == nil else { return }
+
             session = newSession
             newSession.prepare()
             newSession.startActivity(with: startDate)

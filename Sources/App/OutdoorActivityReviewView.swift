@@ -11,6 +11,7 @@ struct OutdoorActivityReviewView: View {
     @Environment(\.modelContext) private var context
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
     @State private var exportError: String?
+    @State private var isExporting = true
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
@@ -50,9 +51,11 @@ struct OutdoorActivityReviewView: View {
                     try? context.save()
                     dismiss()
                 }
+                .disabled(isExporting)
             }
         }
         .task {
+            defer { isExporting = false }
             do {
                 try await HealthKitManager.shared.exportOutdoorActivity(activity)
                 try? context.save()

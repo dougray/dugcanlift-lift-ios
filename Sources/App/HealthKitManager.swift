@@ -30,6 +30,13 @@ final class HealthKitManager {
         if let protein = HKQuantityType.quantityType(forIdentifier: .dietaryProtein) {
             types.insert(protein)
         }
+        // exportOutdoorActivity writes a distanceWalkingRunning sample — without
+        // requesting share authorization for it too, HealthKit silently drops
+        // that sample rather than throwing, so a run's distance would never
+        // actually persist.
+        if let distance = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
+            types.insert(distance)
+        }
         return types
     }
 

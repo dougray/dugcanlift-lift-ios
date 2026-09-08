@@ -10,6 +10,15 @@ import SwiftUI
 struct OutdoorActivityView: View {
     @EnvironmentObject private var recorder: OutdoorActivityRecorder
     @EnvironmentObject private var library: OutdoorActivityLibrary
+    @EnvironmentObject private var session: WorkoutSessionModel
+
+    /// There is no separate distance-unit preference anywhere in this app
+    /// yet, so this derives from the same `WeightUnit` the user already has
+    /// set: pounds implies an imperial (miles) user, kilograms implies
+    /// metric (kilometers).
+    private var distanceUnit: DistanceUnit {
+        session.unit == .kilograms ? .kilometers : .miles
+    }
 
     var body: some View {
         List {
@@ -29,8 +38,8 @@ struct OutdoorActivityView: View {
 
             Section {
                 LabeledValue("Time", Self.formatElapsed(recorder.elapsedSeconds))
-                LabeledValue("Distance", Self.formatDistance(recorder.distanceMeters))
-                LabeledValue("Pace", Self.formatPace(recorder.averagePaceSecondsPerKilometer))
+                LabeledValue("Distance", formatDistance(recorder.distanceMeters))
+                LabeledValue("Pace", formatPace(recorder.averagePaceSecondsPerKilometer))
             }
 
             if recorder.elevationGainMeters > 0 {
@@ -89,14 +98,22 @@ struct OutdoorActivityView: View {
             : String(format: "%02d:%02d", minutes, secs)
     }
 
-    private static func formatDistance(_ meters: Double) -> String {
-        String(format: "%.2f km", meters / 1000)
+    private func formatDistance(_ meters: Double) -> String {
+        String(format: "%.2f %@", distanceUnit.fromMeters(meters), distanceUnit.abbreviation)
     }
 
-    private static func formatPace(_ secondsPerKilometer: Double?) -> String {
-        guard let secondsPerKilometer, secondsPerKilometer.isFinite else { return "--:-- /km" }
-        let total = Int(secondsPerKilometer.rounded())
-        return String(format: "%d:%02d /km", total / 60, total % 60)
+    /// `recorder.averagePaceSecondsPerKilometer` hands over the canonical
+    /// per-kilometer number (see that property's doc comment); convert to
+    /// seconds-per-`distanceUnit` here at the view layer by scaling by how
+    /// many meters one unit of `distanceUnit` covers relative to a
+    /// kilometer (1.0 for kilometers, ~1.609 for miles).
+    private func formatPace(_ secondsPerKilometer: Double?) -> String {
+        guard let secondsPerKilometer, secondsPerKilometer.isFinite else {
+            return "--:-- /\(distanceUnit.abbreviation)"
+        }
+        let secondsPerUnit = secondsPerKilometer * (distanceUnit.toMeters(1) / 1000)
+        let total = Int(secondsPerUnit.rounded())
+        return String(format: "%d:%02d /%@", total / 60, total % 60, distanceUnit.abbreviation)
     }
 
     private static func formatElevation(_ meters: Double) -> String {

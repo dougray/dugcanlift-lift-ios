@@ -8,6 +8,7 @@ struct OutdoorActivityReviewView: View {
     let activity: OutdoorActivity
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
     @State private var exportError: String?
 
@@ -43,10 +44,18 @@ struct OutdoorActivityReviewView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
             }
+            ToolbarItem(placement: .destructiveAction) {
+                Button("Discard", role: .destructive) {
+                    context.delete(activity)
+                    try? context.save()
+                    dismiss()
+                }
+            }
         }
         .task {
             do {
                 try await HealthKitManager.shared.exportOutdoorActivity(activity)
+                try? context.save()
             } catch {
                 exportError = error.localizedDescription
             }

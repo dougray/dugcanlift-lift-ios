@@ -5,7 +5,7 @@
   "required": ["event", "workoutId", "revision", "updatedAt", "origin"],
   "properties": {
     "event": {
-      "enum": ["SESSION_FINISHED", "WORKOUT_EDITED", "WORKOUT_SYNC_ACK"]
+      "enum": ["SESSION_FINISHED", "WORKOUT_EDITED", "WORKOUT_SYNC_ACK", "OUTDOOR_ACTIVITY_FINISHED"]
     },
     "workoutId": {
       "type": "string",

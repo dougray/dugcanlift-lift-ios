@@ -39,3 +39,28 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: LIFT
         TARGETED_DEVICE_FAMILY: "4"
         SKIP_INSTALL: NO
+        # HealthKit — both strings are required or the app is rejected. The
+        # watch never reads Health data today, but HKWorkoutSession itself
+        # requires the HealthKit capability + these usage strings to be
+        # present, and requesting share authorization for the workout type
+        # is how the system grants a session permission to run. Set as
+        # INFOPLIST_KEY_* settings, not a physical Info.plist, since this
+        # target already uses GENERATE_INFOPLIST_FILE: YES — the two
+        # mechanisms for producing an Info.plist conflict if mixed.
+        INFOPLIST_KEY_NSHealthShareUsageDescription: >-
+          LIFT uses HealthKit to run a workout session, which keeps GPS
+          active while recording a run or hike.
+        INFOPLIST_KEY_NSHealthUpdateUsageDescription: >-
+          LIFT saves the runs and hikes you record to the Health app.
+        # CLLocationManager itself requires this key on watchOS too: there is
+        # no requestWhenInUseAuthorization/requestAlwaysAuthorization on
+        # watchOS (confirmed absent from CLLocationManager.h for this
+        # platform) — the system presents the location prompt automatically
+        # on first use of a location API, driven off this Info.plist key.
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: >-
+          LIFT uses your location to record the route of a run or hike.
+    entitlements:
+      path: Config/LiftWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []

@@ -85,16 +85,45 @@ enum LiftSchemaV3: VersionedSchema {
     }
 }
 
+// MARK: - V4 — adds outdoor activity recording
+
+enum LiftSchemaV4: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            // V1/V2, unchanged.
+            WorkoutDay.self,
+            ExerciseEntry.self,
+            SetEntry.self,
+            FoodEntry.self,
+            BodyMeasurement.self,
+            Recipe.self,
+            RecipeIngredient.self,
+            PlannedMeal.self,
+            ShoppingListCheck.self,
+            // V3, unchanged.
+            Routine.self,
+            RoutineExercise.self,
+            RoutinePrescribedSet.self,
+            ImportedPlan.self,
+            ScheduledSession.self,
+            // Route recording.
+            OutdoorActivity.self
+        ]
+    }
+}
+
 // MARK: - Plan
 
 enum LiftMigrationPlan: SchemaMigrationPlan {
 
     static var schemas: [any VersionedSchema.Type] {
-        [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self]
+        [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3]
+        [v1ToV2, v2ToV3, v3ToV4]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -110,5 +139,12 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v2ToV3 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV2.self,
         toVersion: LiftSchemaV3.self
+    )
+
+    /// One new model type (OutdoorActivity) and no change to any existing
+    /// one — lightweight per this file's own rule above.
+    static let v3ToV4 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV3.self,
+        toVersion: LiftSchemaV4.self
     )
 }

@@ -52,6 +52,8 @@ struct RootView: View {
                     VStack(spacing: 8) {
                         Text(item.rawValue)
                             .font(.system(size: 16, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .foregroundStyle(tab == item ? Theme.accent : Theme.accent.opacity(0.62))
                             .padding(.top, 12)
 

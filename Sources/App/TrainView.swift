@@ -14,27 +14,32 @@ struct TrainView: View {
     private var unit: WeightUnit { WeightUnit(rawValue: unitRaw) ?? .pounds }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.cardSpacing) {
-                dayNavigator
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.cardSpacing) {
+                    dayNavigator
 
-                Text("Focus")
-                    .font(Theme.sectionLabel)
-                    .foregroundStyle(Theme.textPrimary)
+                    Text("Focus")
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.textPrimary)
 
-                FocusPicker(date: selectedDate)
+                    FocusPicker(date: selectedDate)
 
-                ScheduledSessionBanner(date: selectedDate)
+                    ScheduledSessionBanner(date: selectedDate)
 
-                DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
+                    DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
+
+                    OutdoorDaySection(date: selectedDate)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 40)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 40)
-        }
-        .liftScreen()
-        .sheet(isPresented: $showingPicker) {
-            ExercisePickerView { record in
-                addExercise(record)
+            .liftScreen()
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showingPicker) {
+                ExercisePickerView { record in
+                    addExercise(record)
+                }
             }
         }
     }
@@ -425,5 +430,73 @@ private struct SetRow: View {
     private func save() {
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
+    }
+}
+
+/// Run/Hike for the selected day, alongside "See all" for full history.
+/// Kept a peer to the strength `DayEditor` rather than a `TrainingFocus`
+/// chip since a day can have both a lift and a run.
+private struct OutdoorDaySection: View {
+    let date: Date
+    @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
+    @State private var startingActivityType: OutdoorActivityType?
+    @State private var justFinishedActivity: OutdoorActivity?
+
+    @Query private var activities: [OutdoorActivity]
+
+    private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
+
+    init(date: Date) {
+        self.date = date
+        let start = Calendar.current.startOfDay(for: date)
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start
+        _activities = Query(
+            filter: #Predicate<OutdoorActivity> { $0.startedAt >= start && $0.startedAt < end },
+            sort: \OutdoorActivity.startedAt
+        )
+    }
+
+    var body: some View {
+        LiftCard(title: "Outdoor") {
+            HStack {
+                Button("Start Run") { startingActivityType = .run }
+                Button("Start Hike") { startingActivityType = .hike }
+                Spacer()
+                NavigationLink("See all") {
+                    OutdoorActivityListView()
+                }
+                .foregroundStyle(Theme.textSecondary)
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Theme.accent)
+
+            ForEach(activities) { activity in
+                NavigationLink {
+                    OutdoorActivityReviewView(activity: activity)
+                } label: {
+                    HStack {
+                        Text(activity.activityType.displayName)
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Text(String(format: "%.2f %@", unit.fromMeters(activity.distanceMeters), unit.abbreviation))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .font(.system(size: 15))
+                }
+            }
+        }
+        .fullScreenCover(item: $startingActivityType) { type in
+            NavigationStack {
+                OutdoorActivityRecordingView(activityType: type) { activity in
+                    startingActivityType = nil
+                    justFinishedActivity = activity
+                }
+            }
+        }
+        .fullScreenCover(item: $justFinishedActivity) { activity in
+            NavigationStack {
+                OutdoorActivityReviewView(activity: activity)
+            }
+        }
     }
 }

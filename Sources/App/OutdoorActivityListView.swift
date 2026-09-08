@@ -1,51 +1,31 @@
 import SwiftData
 import SwiftUI
 
+/// Full outdoor-activity history. Reached via "See all" from Train's Outdoor
+/// section, which is also where starting a new run/hike lives — pushed onto
+/// Train's own NavigationStack rather than wrapping its own.
 struct OutdoorActivityListView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \OutdoorActivity.startedAt, order: .reverse) private var activities: [OutdoorActivity]
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
-    @State private var startingActivityType: OutdoorActivityType?
-    @State private var justFinishedActivity: OutdoorActivity?
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Button("Start Run") { startingActivityType = .run }
-                    Button("Start Hike") { startingActivityType = .hike }
-                }
-                Section("History") {
-                    ForEach(activities) { activity in
-                        NavigationLink {
-                            OutdoorActivityReviewView(activity: activity)
-                        } label: {
-                            row(for: activity)
-                        }
-                    }
-                    .onDelete { offsets in
-                        for index in offsets { context.delete(activities[index]) }
-                        try? context.save()
-                    }
-                }
-            }
-            .navigationTitle("Outdoor")
-            .fullScreenCover(item: $startingActivityType) { type in
-                NavigationStack {
-                    OutdoorActivityRecordingView(activityType: type) { activity in
-                        startingActivityType = nil
-                        justFinishedActivity = activity
-                    }
-                }
-            }
-            .fullScreenCover(item: $justFinishedActivity) { activity in
-                NavigationStack {
+        List {
+            ForEach(activities) { activity in
+                NavigationLink {
                     OutdoorActivityReviewView(activity: activity)
+                } label: {
+                    row(for: activity)
                 }
+            }
+            .onDelete { offsets in
+                for index in offsets { context.delete(activities[index]) }
+                try? context.save()
             }
         }
+        .navigationTitle("Outdoor")
     }
 
     private func row(for activity: OutdoorActivity) -> some View {

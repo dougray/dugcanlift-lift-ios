@@ -26,6 +26,10 @@
 	<string>LIFT saves the runs and hikes you record to the Health app.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>LIFT uses your location to record the route of a run or hike.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>WKApplication</key>
 	<true/>
 	<key>WKBackgroundModes</key>

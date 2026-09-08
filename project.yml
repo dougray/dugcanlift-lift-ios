@@ -37,24 +37,46 @@ targets:
         TARGETED_DEVICE_FAMILY: "4"
         SKIP_INSTALL: NO
     # A real generated Info.plist (not GENERATE_INFOPLIST_FILE: YES +
-    # INFOPLIST_KEY_* settings) because WKBackgroundModes needs an array
-    # value, which the INFOPLIST_KEY_* scalar mechanism can't express.
+    # INFOPLIST_KEY_* settings) because these background-mode keys need
+    # array values, which the INFOPLIST_KEY_* scalar mechanism can't
+    # express.
     #
-    # WKBackgroundModes is required for two independent reasons, both
-    # confirmed against the installed watchOS SDK during final review:
-    #   - `location`: CLLocationManager.h states verbatim that setting
+    # Two SEPARATE background-mode declarations are required here — this
+    # was only discovered by actually launching the app and tapping Start
+    # Run in the Watch Simulator (a real crash, not a static-analysis
+    # guess), because the WKBackgroundModes-only fix that looked right by
+    # reading CLLocationManager.h's *type signature* still crashed at
+    # runtime with:
+    #   *** Terminating app due to uncaught exception
+    #   'NSInternalInconsistencyException', reason: 'Invalid parameter
+    #   not satisfying: !stayUp || CLClientIsBackgroundable(...)'
+    # in OutdoorActivityRecorder.start(type:) at
+    # `locationManager.allowsBackgroundLocationUpdates = true`. Re-reading
+    # CLLocationManager.h's actual prose (not just skimming for a plausible
+    # key name) confirms verbatim: "With UIBackgroundModes set to include
+    # 'location' in Info.plist, you must also set this property to YES...
+    # Setting this property to YES when UIBackgroundModes does not include
+    # 'location' is a fatal error." — the literal key CoreLocation's runtime
+    # check reads is UIBackgroundModes (the same iOS-style key), NOT
+    # WKBackgroundModes.
+    #   - `UIBackgroundModes: [location]`: required for
     #     allowsBackgroundLocationUpdates = true (OutdoorActivityRecorder.swift)
-    #     without this background mode declared is a fatal error at runtime.
-    #   - `workout-processing`: HKWorkoutSession's background-runtime grant
-    #     (the whole premise behind skipping a foreground-service equivalent —
-    #     GPS staying alive while the wrist drops) depends on this being
-    #     declared; confirmed via WatchKit.tbd symbol inspection.
+    #     not to be a fatal error at runtime — confirmed by reproducing the
+    #     crash in the Watch Simulator before this key was added, then
+    #     confirming Start Run no longer crashes after adding it.
+    #   - `WKBackgroundModes: [location, workout-processing]`: separately
+    #     required for HKWorkoutSession's background-runtime grant (the
+    #     premise behind skipping a foreground-service equivalent — GPS
+    #     staying alive while the wrist drops); confirmed via WatchKit.tbd
+    #     symbol inspection during the final whole-branch review.
     info:
       path: Config/LiftWatch-Info.plist
       properties:
         WKApplication: YES
         WKWatchOnly: YES
         CFBundleDisplayName: LIFT
+        UIBackgroundModes:
+          - location
         WKBackgroundModes:
           - location
           - workout-processing

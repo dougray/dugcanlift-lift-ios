@@ -5,6 +5,7 @@ enum LiftTab: String, CaseIterable, Identifiable {
     case food = "Food"
     case cook = "Cook"
     case train = "Train"
+    case routines = "Routines"
 
     var id: String { rawValue }
 }
@@ -23,10 +24,11 @@ struct RootView: View {
 
             Group {
                 switch tab {
-                case .home:  HomeView()
-                case .food:  FoodView()
-                case .cook:  CookView()
-                case .train: TrainView()
+                case .home:     HomeView()
+                case .food:     FoodView()
+                case .cook:     CookView()
+                case .train:    TrainView()
+                case .routines: RoutinesView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

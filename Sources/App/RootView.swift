@@ -58,7 +58,6 @@ struct RootView: View {
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                         .background(tab == item ? Theme.accent : Color.clear)
-                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }

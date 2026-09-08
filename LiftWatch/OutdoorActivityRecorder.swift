@@ -107,34 +107,61 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
     /// nothing was being recorded. Callers only expose "Finish" while
     /// `isRecording`/`activity` is non-nil, but an optional return is a
     /// trivially cheap defense against that misuse rather than a crash.
+    ///
+    /// Deliberately does *not* end the `HKWorkoutSession` — only the
+    /// location-manager half of teardown happens here (GPS is no longer
+    /// needed once the activity is finished). The session must keep running
+    /// until the HealthKit export attempt completes (success or failure), so
+    /// the app retains background runtime through the export; callers finish
+    /// that with `endHealthKitSession(at:)` once the export settles. See
+    /// `OutdoorActivityView.finish()` for the full sequencing and why.
     @discardableResult
     func finish() -> OutdoorActivity? {
         guard var current = activity else { return nil }
         let endDate = Date()
         current.finish(at: endDate)
         activity = current
-        teardown(endDate: endDate)
+        teardownLocation()
+        isRecording = false
         return current
     }
 
     /// Ends the recording and discards it — no finished `OutdoorActivity` is
-    /// produced or returned.
+    /// produced or returned. No export happens on this path, so both halves
+    /// of teardown (location + session) happen immediately, same as before.
     func discard() {
         guard activity != nil else { return }
-        teardown(endDate: Date())
+        teardownLocation()
+        endHealthKitSession(at: Date())
+        isRecording = false
         activity = nil
     }
 
-    private func teardown(endDate: Date) {
+    /// Clears `activity` back to `nil` without touching the location manager
+    /// or the workout session — used after `finish()` once the caller has
+    /// captured the returned snapshot, so `RootView` routes back to the start
+    /// screen immediately while the session (already left running by
+    /// `finish()`) stays alive for the in-flight HealthKit export.
+    func resetAfterFinish() {
+        activity = nil
+    }
+
+    private func teardownLocation() {
         tickTimer?.invalidate()
         tickTimer = nil
         recordingStartDate = nil
         locationManager.stopUpdatingLocation()
         locationManager.allowsBackgroundLocationUpdates = false
+    }
+
+    /// Ends the `HKWorkoutSession` — safe to call even if `session` is
+    /// already `nil` (no-op). Split out from location teardown so the
+    /// session can be kept alive until a HealthKit export attempt (success
+    /// or failure) completes; see `finish()`'s doc comment.
+    func endHealthKitSession(at endDate: Date) {
         session?.stopActivity(with: endDate)
         session?.end()
         session = nil
-        isRecording = false
     }
 
     // MARK: - HealthKit

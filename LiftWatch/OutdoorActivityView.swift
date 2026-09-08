@@ -35,22 +35,26 @@ struct OutdoorActivityView: View {
     }
 
     /// Finishing hands the recorder's own returned snapshot straight to
-    /// `library.finish(_:)` — which stores it immediately and exports it to
-    /// HealthKit in the background — then resets the recorder to `nil` so
-    /// `RootView` returns to the start screen and a new recording can begin.
+    /// `library.finish(_:)`, then resets the recorder to `nil` immediately so
+    /// `RootView` returns to the start screen without waiting on the
+    /// HealthKit export — the UI must not block on a write that can take a
+    /// moment.
     ///
-    /// Calling `discard()` right after `finish()` is safe and intentional,
-    /// not a mistake: `finish()` already tore down the session/location
-    /// updates and captured the finished activity in its return value, so
-    /// this second call only clears `recorder.activity` back to `nil` — it
-    /// throws nothing away. `OutdoorActivityRecorder` has no dedicated
-    /// "reset after finish" API; this is the sanctioned way to get one,
-    /// using the same "caller re-assigns/owns the returned copy" contract
-    /// the recorder and `OutdoorActivity` already use throughout.
+    /// The `HKWorkoutSession` is deliberately kept alive across that gap:
+    /// `recorder.finish()` only tears down the location manager (GPS is no
+    /// longer needed), not the session. The session — and the background
+    /// runtime it grants — stays live until `library.finish(_:)`'s export
+    /// attempt (success or failure) has actually completed, at which point
+    /// `endHealthKitSession(at:)` ends it. This closes the gap where dropping
+    /// the wrist right after tapping Finish could suspend the app before an
+    /// export in flight ever ran.
     private func finish() {
         guard let finished = recorder.finish() else { return }
-        library.finish(finished)
-        recorder.discard()
+        recorder.resetAfterFinish()
+        Task {
+            await library.finish(finished)
+            recorder.endHealthKitSession(at: finished.endedAt ?? Date())
+        }
     }
 
     // MARK: - Formatting
@@ -99,6 +103,12 @@ struct OutdoorActivityView: View {
 final class OutdoorActivityLibrary: ObservableObject {
     @Published private(set) var store = OutdoorActivityStore()
 
+    /// Set when the most recent HealthKit export attempt failed; cleared to
+    /// `nil` on a successful export. Surfaced to the user in
+    /// `OutdoorActivityView` (see I3 in the final-review fix wave) so a
+    /// failed, non-retried export is never silently swallowed.
+    @Published private(set) var lastExportError: Error?
+
     private let exporter = HealthKitExporter(healthStore: HKHealthStore())
 
     /// The app's one `WorkoutSessionModel`, injected from `LiftWatchApp`.
@@ -114,20 +124,22 @@ final class OutdoorActivityLibrary: ObservableObject {
         self.session = session
     }
 
-    /// Records a just-finished activity immediately, then kicks off its
-    /// HealthKit export in the background. Deliberately not `async`/awaited
-    /// by the caller: the Finish button's UI transition (back to the start
-    /// screen) must not block on a HealthKit write, which can take a moment.
-    func finish(_ activity: OutdoorActivity) {
+    /// Records a just-finished activity immediately, then awaits its
+    /// HealthKit export. `async` rather than fire-and-forget: the caller
+    /// (`OutdoorActivityView.finish()`) needs to know when the export
+    /// attempt has settled so it can end the `HKWorkoutSession` only then —
+    /// not before, or a dropped wrist right after tapping Finish could
+    /// suspend the app mid-export with no way to retry. The UI itself still
+    /// doesn't block on this: the caller resets the recorder back to the
+    /// start screen first, then awaits this in its own `Task`.
+    func finish(_ activity: OutdoorActivity) async {
         store.store(activity)
         session.enqueueOutdoorActivityFinished(
             id: activity.id,
             revision: activity.revision,
             updatedAt: activity.updatedAt
         )
-        Task { [weak self] in
-            await self?.exportAndMark(activity)
-        }
+        await exportAndMark(activity)
     }
 
     /// Exports `activity`, then stamps and re-stores the returned UUID via
@@ -144,10 +156,14 @@ final class OutdoorActivityLibrary: ObservableObject {
             var updated = activity
             guard updated.markExported(uuid) else { return }
             store.store(updated)
+            lastExportError = nil
         } catch {
-            // Non-fatal: the activity is already recorded locally in `store`,
-            // and `healthKitUUID` stays `nil` so a later retry path (Task 6's
-            // sync work) can still attempt the export again.
+            // Non-fatal: the activity is already recorded locally in
+            // `store`, and `healthKitUUID` stays `nil`. There is currently
+            // no automatic retry path — the failure is recorded in
+            // `lastExportError` (surfaced to the user in
+            // `OutdoorActivityView`) so it isn't silently swallowed.
+            lastExportError = error
         }
     }
 }

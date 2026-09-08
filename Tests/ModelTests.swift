@@ -150,6 +150,50 @@ final class SchemaMigrationTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<Recipe>()).count, 1)
     }
 
+    func testV3StoreOpensAsV4WithDataIntact() throws {
+        let loggedAt = Date(timeIntervalSince1970: 1_756_000_000)
+        let dayKey = DayKey.make(from: loggedAt)
+
+        // Write a store using only the pre-outdoor-activity models.
+        do {
+            let v3 = try ModelContainer(
+                for: Schema(versionedSchema: LiftSchemaV3.self),
+                configurations: [ModelConfiguration(url: storeURL)]
+            )
+            let context = ModelContext(v3)
+            context.insert(FoodEntry(
+                foodRefID: "usda:174608",
+                name: "Oats",
+                quantity: 2,
+                servingUnit: "serving",
+                nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
+                mealType: .breakfast,
+                loggedAt: loggedAt
+            ))
+            try context.save()
+        }
+
+        // Reopen it the way the app does.
+        let v4 = try ModelContainer(
+            for: Schema(versionedSchema: LiftSchemaV4.self),
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(v4)
+
+        let food = try context.fetch(FetchDescriptor<FoodEntry>())
+        XCTAssertEqual(food.count, 1, "the V3 entry must survive the migration")
+        XCTAssertEqual(food.first?.name, "Oats")
+        XCTAssertEqual(food.first?.dayKey, dayKey)
+        XCTAssertEqual(food.first?.nutrition.calories, 300)
+
+        // And the new model (OutdoorActivity) must be usable in the migrated store.
+        let activity = OutdoorActivity(activityType: .run, startedAt: .now)
+        context.insert(activity)
+        try context.save()
+        XCTAssertEqual(try context.fetch(FetchDescriptor<OutdoorActivity>()).count, 1)
+    }
+
     func testCurrentSchemaIsTheNewestVersion() {
         XCTAssertEqual(
             LiftStore.schema.entities.count,

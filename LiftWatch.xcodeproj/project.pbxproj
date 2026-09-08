@@ -14,6 +14,7 @@
 		9E6AB45D047596FBC963EB2C /* WorkoutSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 900B153C7A9E855D6220680C /* WorkoutSessionModel.swift */; };
 		AC8755C6F499BD7149CA9629 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE31C8B7691C8E9F59A6857D /* RootView.swift */; };
 		B8DE6EE19B2DA6D575A44A98 /* PhoneSyncTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9CF49F374C06EC02BAED965 /* PhoneSyncTransport.swift */; };
+		C3AADB61A4864A5F15197135 /* HealthKitExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C75CE0E4B0A49F5006BB74D /* HealthKitExporter.swift */; };
 		D62BA9841502AA38AB8ECC73 /* LogSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864598B14FCF13673677EAA0 /* LogSetView.swift */; };
 		DBDC6BBC046CB7CA47119189 /* LiftKit in Frameworks */ = {isa = PBXBuildFile; productRef = DD9A4C869DBD773EFC314F6B /* LiftKit */; };
 		E9F75F1C3FF42DA992D44A8A /* LiftWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3CDE7C3773FDDA12CCA94DD /* LiftWatchApp.swift */; };
@@ -23,6 +24,7 @@
 /* Begin PBXFileReference section */
 		01BD8582B0B881C932060EE1 /* LiftKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LiftKit; path = LiftKit; sourceTree = SOURCE_ROOT; };
 		04C766A1BE81BAFDEF8A119B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		0C75CE0E4B0A49F5006BB74D /* HealthKitExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitExporter.swift; sourceTree = "<group>"; };
 		160777E51AB80474040B77BF /* OutdoorActivityRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutdoorActivityRecorder.swift; sourceTree = "<group>"; };
 		1D44A90AE1F309408F75943F /* SummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryView.swift; sourceTree = "<group>"; };
 		2168F9B3C55BC0204B9BDC02 /* WorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutView.swift; sourceTree = "<group>"; };
@@ -59,6 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				04C766A1BE81BAFDEF8A119B /* Assets.xcassets */,
+				0C75CE0E4B0A49F5006BB74D /* HealthKitExporter.swift */,
 				F3CDE7C3773FDDA12CCA94DD /* LiftWatchApp.swift */,
 				864598B14FCF13673677EAA0 /* LogSetView.swift */,
 				160777E51AB80474040B77BF /* OutdoorActivityRecorder.swift */,
@@ -165,6 +168,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C3AADB61A4864A5F15197135 /* HealthKitExporter.swift in Sources */,
 				E9F75F1C3FF42DA992D44A8A /* LiftWatchApp.swift in Sources */,
 				D62BA9841502AA38AB8ECC73 /* LogSetView.swift in Sources */,
 				F0AF38223D1A0FDD44D7D559 /* OutdoorActivityRecorder.swift in Sources */,

@@ -19,6 +19,18 @@ public struct OutdoorActivity: Identifiable, Codable, Equatable, Sendable {
     public private(set) var revision: Int
     public private(set) var updatedAt: Date
 
+    /// The `HKWorkout.uuid` this activity was exported as, once
+    /// `HealthKitExporter.exportOutdoorActivity(_:)` (watch-side) succeeds.
+    /// `nil` until then. Mirrors `lift-ios`'s `OutdoorActivity.
+    /// healthKitUUID` / `WorkoutDay.healthKitUUID` idempotency pattern: set
+    /// only after a successful export, checked before ever exporting the
+    /// same activity twice. An optional field with a `nil` default, exactly
+    /// like every other field here — an old encoded value recorded before
+    /// this field existed decodes with `healthKitUUID == nil` via Codable's
+    /// synthesized conformance (Optional-typed stored properties decode as
+    /// `nil` when their key is absent), no custom `init(from:)` required.
+    public private(set) var healthKitUUID: UUID?
+
     public init(
         id: UUID = UUID(),
         activityType: OutdoorActivityType,
@@ -28,7 +40,8 @@ public struct OutdoorActivity: Identifiable, Codable, Equatable, Sendable {
         elevationGainMeters: Double = 0,
         routePoints: [RoutePoint] = [],
         revision: Int = 1,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        healthKitUUID: UUID? = nil
     ) {
         self.id = id
         self.activityType = activityType
@@ -39,6 +52,7 @@ public struct OutdoorActivity: Identifiable, Codable, Equatable, Sendable {
         self.routePoints = routePoints
         self.revision = max(1, revision)
         self.updatedAt = updatedAt ?? startedAt
+        self.healthKitUUID = healthKitUUID
     }
 
     public var isFinished: Bool { endedAt != nil }
@@ -102,6 +116,22 @@ public struct OutdoorActivity: Identifiable, Codable, Equatable, Sendable {
         routePoints.append(point)
         elevationGainMeters = OutdoorActivityMath.elevationGainMeters(routePoints)
         commit(point.recordedAt)
+        return true
+    }
+
+    /// Records the HealthKit workout UUID after a successful
+    /// `HealthKitExporter.exportOutdoorActivity(_:)` call. No-op (and no
+    /// revision bump) if a UUID was already recorded — the same rejection
+    /// shape as `finish(at:)` and `appendPoint(_:)`, and the invariant the
+    /// exporter's own `guard activity.healthKitUUID == nil` depends on: once
+    /// stamped, an activity must never be exported (or stamped) a second
+    /// time, which is exactly what prevents a retry from writing a duplicate
+    /// workout into Apple Health.
+    @discardableResult
+    public mutating func markExported(_ uuid: UUID, at date: Date = Date()) -> Bool {
+        guard healthKitUUID == nil else { return false }
+        healthKitUUID = uuid
+        commit(date)
         return true
     }
 }

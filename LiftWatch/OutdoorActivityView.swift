@@ -13,6 +13,20 @@ struct OutdoorActivityView: View {
 
     var body: some View {
         List {
+            if recorder.authorizationStatus == .denied || recorder.authorizationStatus == .restricted {
+                Section {
+                    Text("Location access is off — grant it in Settings to record a route.")
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if library.lastExportError != nil {
+                Section {
+                    Text("Couldn't save to Health — will keep local data but won't retry automatically.")
+                        .foregroundStyle(.red)
+                }
+            }
+
             Section {
                 LabeledValue("Time", Self.formatElapsed(recorder.elapsedSeconds))
                 LabeledValue("Distance", Self.formatDistance(recorder.distanceMeters))

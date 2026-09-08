@@ -45,6 +45,23 @@ final class SyncEnvelopeTests: XCTestCase {
         XCTAssertEqual(decoded, envelope)
     }
 
+    func testOutdoorActivityFinishedRoundTrips() throws {
+        let envelope = SyncEnvelope(
+            event: .outdoorActivityFinished,
+            workoutID: UUID(),
+            revision: 3,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            origin: .watchOS
+        )
+        let object = try json(envelope)
+        XCTAssertEqual(object["event"] as? String, "OUTDOOR_ACTIVITY_FINISHED")
+
+        let data = try SyncEnvelope.encoder.encode(envelope)
+        let decoded = try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
+        XCTAssertEqual(decoded, envelope)
+        XCTAssertEqual(decoded.event, .outdoorActivityFinished)
+    }
+
     func testRevisionMustBePositive() throws {
         let data = Data("""
         {"event":"WORKOUT_EDITED","workoutId":"6A2A8B6E-3D2F-4E77-9B4E-2C6A5E8C1D01",

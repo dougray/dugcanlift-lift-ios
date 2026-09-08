@@ -8,9 +8,10 @@ import Foundation
 public struct SyncEnvelope: Codable, Equatable, Sendable {
 
     public enum Event: String, Codable, Sendable {
-        case sessionFinished = "SESSION_FINISHED"
-        case workoutEdited   = "WORKOUT_EDITED"
-        case workoutSyncAck  = "WORKOUT_SYNC_ACK"
+        case sessionFinished          = "SESSION_FINISHED"
+        case workoutEdited            = "WORKOUT_EDITED"
+        case workoutSyncAck           = "WORKOUT_SYNC_ACK"
+        case outdoorActivityFinished  = "OUTDOOR_ACTIVITY_FINISHED"
     }
 
     public enum Origin: String, Codable, Sendable {

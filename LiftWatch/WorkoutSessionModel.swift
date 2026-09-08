@@ -76,11 +76,31 @@ final class WorkoutSessionModel: ObservableObject {
     // MARK: - Synchronization
 
     private func enqueue(_ event: SyncEnvelope.Event, for workout: WorkoutDraft) {
+        enqueue(event, workoutID: workout.id, revision: workout.revision, updatedAt: workout.updatedAt)
+    }
+
+    /// Entry point for sync notifications that don't originate from a
+    /// `WorkoutDraft` — currently just `OutdoorActivityLibrary.finish(_:)`.
+    ///
+    /// `OutdoorActivityLibrary` has no `SyncOutbox`/`PhoneSyncTransport` of
+    /// its own and deliberately doesn't get one: `WCSession` supports exactly
+    /// one delegate per process, and `PhoneSyncTransport` claims that slot in
+    /// its initializer, so a second instance built from `WCSession.default`
+    /// would silently steal reachability/message callbacks away from this
+    /// model's transport rather than adding a second listener. Routing
+    /// through this model's existing outbox/transport (it holds the app's
+    /// only `PhoneSyncTransport`, injected once from `LiftWatchApp`) avoids
+    /// standing up that conflict for one notification event.
+    func enqueueOutdoorActivityFinished(id: UUID, revision: Int, updatedAt: Date) {
+        enqueue(.outdoorActivityFinished, workoutID: id, revision: revision, updatedAt: updatedAt)
+    }
+
+    private func enqueue(_ event: SyncEnvelope.Event, workoutID: UUID, revision: Int, updatedAt: Date) {
         let envelope = SyncEnvelope(
             event: event,
-            workoutID: workout.id,
-            revision: workout.revision,
-            updatedAt: workout.updatedAt,
+            workoutID: workoutID,
+            revision: revision,
+            updatedAt: updatedAt,
             origin: .watchOS
         )
         outbox.enqueue(envelope)
@@ -100,10 +120,12 @@ final class WorkoutSessionModel: ObservableObject {
         switch envelope.event {
         case .workoutSyncAck:
             outbox.acknowledge(envelope)
-        case .workoutEdited, .sessionFinished:
+        case .workoutEdited, .sessionFinished, .outdoorActivityFinished:
             // The envelope is a notification, not the workout. A full snapshot
             // fetch belongs here once the phone exposes one; until then the
             // revision is recorded so the outbox does not resend needlessly.
+            // (In practice the watch only ever sends `.outdoorActivityFinished`,
+            // never receives it back, but the switch must stay exhaustive.)
             outbox.acknowledge(
                 SyncEnvelope(event: .workoutSyncAck, workoutID: envelope.workoutID,
                              revision: envelope.revision, updatedAt: envelope.updatedAt,

@@ -18,7 +18,7 @@ enum LiftStore {
     /// The current schema. Defined by the newest `VersionedSchema` rather than
     /// listed by hand, so the migration plan and the container can never
     /// disagree about what shape the store is in — see `LiftSchemaVersions.swift`.
-    static let schema = Schema(versionedSchema: LiftSchemaV3.self)
+    static let schema = Schema(versionedSchema: LiftSchemaV4.self)
 
     /// Shared container. Both the app and the widget call this.
     static let shared: ModelContainer = makeContainer()

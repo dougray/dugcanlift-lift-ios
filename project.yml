@@ -83,10 +83,20 @@ targets:
         NSCameraUsageDescription: >-
           Lift uses the camera to scan barcodes when you log food.
 
-        # Background refresh for HealthKit sync (BGTaskScheduler).
+        NSLocationWhenInUseUsageDescription: >-
+          Lift uses your location to record the route of a run or hike
+          while you're using the app.
+        NSLocationAlwaysAndWhenInUseUsageDescription: >-
+          Lift uses your location to record the route of a run or hike,
+          including while your phone is locked or Lift is in the
+          background.
+
+        # Background refresh for HealthKit sync (BGTaskScheduler), plus
+        # location updates for outdoor activity recording (LocationTracker).
         # Identifiers MUST match the strings passed to BGTaskScheduler.register.
         UIBackgroundModes:
           - processing
+          - location
         BGTaskSchedulerPermittedIdentifiers:
           - com.dugcanlift.lift.healthsync
 

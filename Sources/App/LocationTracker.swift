@@ -57,12 +57,23 @@ extension LocationTracker: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        let newPoints = locations.map {
+        // Filter out invalid/stale/inaccurate fixes before they ever become a
+        // RoutePoint: CoreLocation's first delivered location is routinely a
+        // stale cached fix, and a negative horizontalAccuracy means the
+        // coordinate itself is invalid.
+        let goodLocations = locations.filter {
+            $0.horizontalAccuracy >= 0 &&
+            $0.horizontalAccuracy <= 50 &&
+            abs($0.timestamp.timeIntervalSinceNow) <= 5
+        }
+        let newPoints = goodLocations.map {
             RoutePoint(
                 latitude: $0.coordinate.latitude,
                 longitude: $0.coordinate.longitude,
                 altitudeMeters: $0.altitude,
-                recordedAt: $0.timestamp
+                recordedAt: $0.timestamp,
+                horizontalAccuracyMeters: $0.horizontalAccuracy,
+                verticalAccuracyMeters: $0.verticalAccuracy
             )
         }
         Task { @MainActor in

@@ -26,6 +26,8 @@ struct RoutePoint: Codable, Equatable {
     var longitude: Double
     var altitudeMeters: Double
     var recordedAt: Date
+    var horizontalAccuracyMeters: Double
+    var verticalAccuracyMeters: Double
 }
 
 /// A GPS-tracked Run or Hike. Deliberately not part of `WorkoutDay` —
@@ -78,6 +80,8 @@ final class OutdoorActivity {
         return duration / distanceMeters
     }
 }
+
+extension OutdoorActivity: Identifiable {}
 
 // MARK: - Calculations
 

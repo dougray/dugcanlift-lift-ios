@@ -16,8 +16,8 @@ final class OutdoorActivityModelsTests: XCTestCase {
         let context = try makeContext()
         let activity = OutdoorActivity(activityType: .run, startedAt: .now)
         let points = [
-            RoutePoint(latitude: 30.2672, longitude: -97.7431, altitudeMeters: 149, recordedAt: .now),
-            RoutePoint(latitude: 30.2675, longitude: -97.7429, altitudeMeters: 151, recordedAt: .now)
+            RoutePoint(latitude: 30.2672, longitude: -97.7431, altitudeMeters: 149, recordedAt: .now, horizontalAccuracyMeters: 5.0, verticalAccuracyMeters: 5.0),
+            RoutePoint(latitude: 30.2675, longitude: -97.7429, altitudeMeters: 151, recordedAt: .now, horizontalAccuracyMeters: 5.0, verticalAccuracyMeters: 5.0)
         ]
         activity.routePoints = points
         context.insert(activity)

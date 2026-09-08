@@ -168,8 +168,8 @@ final class HealthKitManager {
                 CLLocation(
                     coordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude),
                     altitude: $0.altitudeMeters,
-                    horizontalAccuracy: kCLLocationAccuracyBest,
-                    verticalAccuracy: kCLLocationAccuracyBest,
+                    horizontalAccuracy: $0.horizontalAccuracyMeters,
+                    verticalAccuracy: $0.verticalAccuracyMeters,
                     timestamp: $0.recordedAt
                 )
             }

@@ -64,6 +64,46 @@ public struct OutdoorActivity: Identifiable, Codable, Equatable, Sendable {
         commit(date)
         return true
     }
+
+    /// Appends one recorded GPS fix to the route, updating the running
+    /// distance and elevation gain. No-op (and no revision bump) once the
+    /// activity has finished — matches `finish(at:)`'s own rejection rule,
+    /// so a stray fix arriving after `finish()` can never reopen the record.
+    ///
+    /// Distance is updated incrementally: a new fix only ever adds the one
+    /// new segment between it and the previous point, so this reuses
+    /// `OutdoorActivityMath.totalDistanceMeters` on just that pair rather
+    /// than re-summing the whole route (the exact same haversine formula,
+    /// just applied to two points instead of the full history). On watch
+    /// hardware, recomputing an O(n) sum on every single GPS tick would mean
+    /// the per-tick cost grows with how long the activity has been running —
+    /// wasted CPU (and battery) for no different a result, since the total is
+    /// always "old total plus one new segment."
+    ///
+    /// Elevation gain is recomputed from the full route on every call
+    /// instead. Its hysteresis filter (see `OutdoorActivityMath.
+    /// elevationGainMeters`) tracks a "last altitude that cleared the
+    /// threshold" reference that only advances on *some* fixes, not every
+    /// one — turning that into an incremental update would mean adding new
+    /// mutable bookkeeping state to this struct that has to stay perfectly
+    /// synchronized with `routePoints` on every mutation path, in a value
+    /// type that is also `Codable`/`Equatable` and gets reconciled across
+    /// devices. That correctness risk isn't worth it: elevation is a
+    /// slower-changing, less latency-critical number on the live screen than
+    /// distance, and a full recompute reusing the already-tested pure
+    /// function unmodified is O(n) per fix — cheap at the point counts a
+    /// multi-hour hike produces with a 5-meter GPS distance filter.
+    @discardableResult
+    public mutating func appendPoint(_ point: RoutePoint) -> Bool {
+        guard endedAt == nil else { return false }
+        if let previous = routePoints.last {
+            distanceMeters += OutdoorActivityMath.totalDistanceMeters([previous, point])
+        }
+        routePoints.append(point)
+        elevationGainMeters = OutdoorActivityMath.elevationGainMeters(routePoints)
+        commit(point.recordedAt)
+        return true
+    }
 }
 
 // MARK: - Store

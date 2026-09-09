@@ -50,13 +50,19 @@ enum BackupStore {
             ]
             entry.brand.map { extras["brand"] = $0 }
             entry.servingGrams.map { extras["servingGrams"] = $0 }
-            entry.amountGrams.map { extras["amountGrams"] = $0 }
             facts.sugarG.map { extras["sugarG"] = $0 }
             facts.sodiumMg.map { extras["sodiumMg"] = $0 }
             entry.healthKitUUID.map { extras["healthKitUUID"] = $0.uuidString }
             iosFood[key] = extras
 
-            return [
+            // amountGrams lives in the common shape, not ext.ios: LIFT
+            // Android also has this field and writes it at the top level
+            // of its own food[] objects (its JSON encoder has no
+            // common/extras split at all), so nesting it under an
+            // iOS-only extras block here would make a backup taken on
+            // either platform silently lose the field when restored on
+            // the other. See coach/BACKUP-FORMAT.md in dugcanlift-site.
+            var common: [String: Any] = [
                 "id": key,
                 "name": entry.name,
                 "servings": entry.quantity,
@@ -69,6 +75,8 @@ enum BackupStore {
                 "loggedAt": Int(entry.loggedAt.timeIntervalSince1970 * 1000),
                 "meal": entry.mealType.rawValue.uppercased()
             ]
+            entry.amountGrams.map { common["amountGrams"] = $0 }
+            return common
         }
 
         // ---- workouts ----
@@ -234,7 +242,7 @@ enum BackupStore {
                 quantity: double(raw["servings"]) ?? 1,
                 servingUnit: extras["servingUnit"] as? String ?? "serving",
                 servingGrams: double(extras["servingGrams"]),
-                amountGrams: double(extras["amountGrams"]),
+                amountGrams: double(raw["amountGrams"]),
                 nutrition: NutritionFacts(
                     calories: double(raw["calories"]) ?? 0,
                     proteinG: double(raw["proteinG"]) ?? 0,

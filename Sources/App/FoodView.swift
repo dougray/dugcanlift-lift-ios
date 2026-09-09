@@ -2,8 +2,10 @@ import SwiftUI
 import SwiftData
 import WidgetKit
 
-/// Meal-grouped food log. Search is unavailable until food.db is built —
-/// see Tools/build_reference.py and SETUP.md.
+/// Meal-grouped food log. `food.db` now ships (see SETUP.md) and
+/// `ReferenceDatabase.searchFoods` is ready to query — the search-and-log
+/// UI itself is still to be built (tracked in the gram-based-serving plan;
+/// today this view only supports re-logging a past entry or deleting one).
 struct FoodView: View {
     @Environment(\.modelContext) private var context
 

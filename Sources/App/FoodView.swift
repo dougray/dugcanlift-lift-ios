@@ -11,9 +11,6 @@ struct FoodView: View {
 
     @Query private var entries: [FoodEntry]
 
-    /// The whole log, newest first — the source for Recent below.
-    @Query(sort: \FoodEntry.loggedAt, order: .reverse) private var allEntries: [FoodEntry]
-
     @State private var showingSearch = false
 
     /// Same pattern as `WeightUnit`/`DistanceUnit`/`FoodSearchView`: a live,
@@ -35,15 +32,7 @@ struct FoodView: View {
     /// Matches the Android build's Recent list, deliberately — same count, same
     /// de-duplication by name, same one-tap behaviour.
     private var recent: [FoodEntry] {
-        var seen = Set<String>()
-        var result: [FoodEntry] = []
-        for entry in allEntries {
-            let key = entry.displayName.trimmingCharacters(in: .whitespaces).lowercased()
-            guard !key.isEmpty, seen.insert(key).inserted else { continue }
-            result.append(entry)
-            if result.count == 10 { break }
-        }
-        return result
+        RecentFoodsQuery.recent(context: context, limit: 10)
     }
 
     var body: some View {

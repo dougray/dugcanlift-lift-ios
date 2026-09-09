@@ -39,7 +39,7 @@ final class BackupStoreTests: XCTestCase {
 
         let restored = try destinationContext.fetch(FetchDescriptor<FoodEntry>())
         XCTAssertEqual(restored.count, 1)
-        XCTAssertEqual(restored.first?.amountGrams, 150, "amountGrams must round-trip through ext.ios.food")
+        XCTAssertEqual(restored.first?.amountGrams, 150, "amountGrams must round-trip through the common food[] shape")
         XCTAssertEqual(restored.first?.name, "Chicken breast")
     }
 

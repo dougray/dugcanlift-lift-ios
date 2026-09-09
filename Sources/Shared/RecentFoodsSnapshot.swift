@@ -5,8 +5,8 @@ import Foundation
 /// trip. Lives alongside `SyncEnvelope` because it is the same kind of thing:
 /// a cross-platform contract, not an implementation detail internal to
 /// `WatchSyncReceiver`. See
-/// `dugcanlift-watch/shared/contracts/workout-sync.schema.json`'s
-/// `RecentFoodsSnapshot` entry for the contract of record.
+/// `dugcanlift-watch/shared/contracts/recent-foods-snapshot.schema.json`
+/// for the contract of record.
 ///
 /// Field names here are a contract, not an implementation detail —
 /// `RecentFoodsSnapshotTests` pins them to the schema, same as

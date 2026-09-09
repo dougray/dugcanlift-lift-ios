@@ -154,6 +154,85 @@ final class WatchSyncReceiverTests: XCTestCase {
         XCTAssertTrue(entries.isEmpty)
     }
 
+    // MARK: - Phone -> watch mapping (WatchSyncReceiver.makeSnapshot)
+
+    /// The pure mapping half of `pushRecentFoodsSnapshot()`. The
+    /// `activationState == .activated` guard in that method never passes in
+    /// a unit test process (no real `WCSession` activates here), so this is
+    /// the only way to exercise it — and it's the exact contract the
+    /// not-yet-started watch-side plan will build against.
+    func testMakeSnapshotMapsBrandPrefixedDisplayName() throws {
+        let entry = FoodEntry(
+            foodRefID: "off:3017620422003",
+            name: "Nutella",
+            brand: "Ferrero",
+            quantity: 15,
+            servingUnit: "g",
+            amountGrams: 15,
+            nutrition: NutritionFacts(calories: 80, proteinG: 1, carbsG: 8.7, fatG: 4.6),
+            mealType: .snack
+        )
+
+        let snapshot = WatchSyncReceiver.makeSnapshot(from: [entry], generatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        let item = try XCTUnwrap(snapshot.items.first)
+        XCTAssertEqual(item.foodRefID, "off:3017620422003")
+        XCTAssertEqual(item.displayName, "Ferrero Nutella")
+        XCTAssertEqual(item.lastAmountGrams, 15)
+        XCTAssertEqual(snapshot.generatedAt, Date(timeIntervalSince1970: 1_700_000_000))
+    }
+
+    /// A legacy entry logged before `amountGrams` existed (or where
+    /// migration couldn't determine a gram equivalent) must map to
+    /// `lastAmountGrams: nil`, never a guessed value.
+    func testMakeSnapshotMapsLegacyEntryWithNilAmountGramsToNilLastAmountGrams() throws {
+        let legacyEntry = FoodEntry(
+            foodRefID: "usda:174608",
+            name: "Chicken breast, roll, oven-roasted",
+            quantity: 1,
+            servingUnit: "serving",
+            amountGrams: nil,
+            nutrition: NutritionFacts(calories: 201, proteinG: 21.885, carbsG: 2.685, fatG: 11.475),
+            mealType: .lunch
+        )
+
+        let snapshot = WatchSyncReceiver.makeSnapshot(from: [legacyEntry])
+
+        let item = try XCTUnwrap(snapshot.items.first)
+        XCTAssertNil(item.lastAmountGrams)
+        XCTAssertEqual(item.foodRefID, "usda:174608")
+    }
+
+    /// `makeSnapshot` itself does no capping — respecting `limit` is
+    /// `RecentFoodsQuery.recent(context:limit:)`'s job, already covered by
+    /// `RecentFoodsQueryTests`. This pins the other half of the contract:
+    /// `pushRecentFoodsSnapshot()` must actually pass its `limit: 20`
+    /// through to `RecentFoodsQuery.recent`, so the count that reaches
+    /// `makeSnapshot` is already capped.
+    func testPushRecentFoodsSnapshotPassesLimitThroughToRecentFoodsQuery() throws {
+        let context = makeContext()
+        for index in 0..<25 {
+            let entry = FoodEntry(
+                foodRefID: "usda:\(index)",
+                name: "Food \(index)",
+                quantity: 100,
+                servingUnit: "g",
+                amountGrams: 100,
+                nutrition: NutritionFacts(calories: 100, proteinG: 1, carbsG: 1, fatG: 1),
+                mealType: .snack,
+                loggedAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(index))
+            )
+            context.insert(entry)
+        }
+        try context.save()
+
+        let recent = RecentFoodsQuery.recent(context: context, limit: 20)
+
+        XCTAssertEqual(recent.count, 20)
+        // Newest first: index 24 was logged last.
+        XCTAssertEqual(recent.first?.foodRefID, "usda:24")
+    }
+
     // MARK: - Message-dictionary decoding path (deliver's own responsibility)
 
     /// Exercises the same `SyncEnvelope(messageBody:)` decode that

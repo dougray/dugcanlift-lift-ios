@@ -1,10 +1,9 @@
 import XCTest
 @testable import Lift
 
-/// `dugcanlift-watch/shared/contracts/workout-sync.schema.json`'s
-/// `RecentFoodsSnapshot` entry is the wire contract shared with watchOS.
-/// These tests pin the encoding to that schema, same as `SyncEnvelopeTests`
-/// does for `SyncEnvelope`.
+/// `dugcanlift-watch/shared/contracts/recent-foods-snapshot.schema.json`
+/// is the wire contract shared with watchOS. These tests pin the encoding
+/// to that schema, same as `SyncEnvelopeTests` does for `SyncEnvelope`.
 final class RecentFoodsSnapshotTests: XCTestCase {
 
     private func json(_ snapshot: RecentFoodsSnapshot) throws -> [String: Any] {

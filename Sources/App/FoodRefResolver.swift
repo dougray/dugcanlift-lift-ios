@@ -18,6 +18,18 @@ import SwiftData
 /// `Sources/Reference`, so putting this file there would break
 /// `LiftWidgets` with an undefined `ReferenceDatabase` symbol.
 enum FoodRefResolver {
+    /// `@MainActor`, not `nonisolated` (the SE-0338 default for a free
+    /// static function): the `recipe:` branch below calls
+    /// `context.fetch(descriptor)` against a `ModelContext` that is always
+    /// `LiftStore.shared.mainContext`, a `@MainActor`-isolated context. Its
+    /// only production caller, `WatchSyncReceiver.handleFoodLogged`, is
+    /// itself `@MainActor` — but per SE-0338 an `await` on a `nonisolated
+    /// async` function does NOT inherit the caller's actor, so without this
+    /// annotation the function body (and its `context.fetch`) would run on
+    /// the cooperative thread pool instead, off the main actor. Same defect
+    /// class as the `pushRecentFoodsSnapshot()` fix elsewhere in this
+    /// branch.
+    @MainActor
     static func nutrition(
         for foodRefID: String,
         grams: Double,

@@ -183,6 +183,7 @@ struct FoodView: View {
         context.insert(copy)
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
+        WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
     }
 
     /// "140 g - 240 kcal - P 8 - F 2 - C 46 - Fib 2"

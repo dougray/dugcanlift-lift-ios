@@ -7,6 +7,7 @@ struct SettingsView: View {
 
     @AppStorage("weightUnit") private var unitRaw = WeightUnit.pounds.rawValue
     @AppStorage("distanceUnit") private var distanceUnitRaw = DistanceUnit.miles.rawValue
+    @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
 
     @Query(filter: #Predicate<WorkoutDay> { $0.healthKitUUID == nil })
     private var unsynced: [WorkoutDay]
@@ -40,6 +41,16 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     Text("Distances are always stored in meters; this only changes how they're shown.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Picker("Serving size", selection: $servingUnitRaw) {
+                        ForEach(ServingUnit.allCases, id: \.rawValue) { unit in
+                            Text(unit.abbreviation).tag(unit.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Text("Serving amounts are always stored in grams; this only changes how they're shown.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -110,26 +110,29 @@ final class SchemaMigrationTests: XCTestCase {
         let loggedAt = Date(timeIntervalSince1970: 1_756_000_000)
         let dayKey = DayKey.make(from: loggedAt)
 
-        // Write a store using only the pre-COOK models.
+        // Write a store using only the pre-COOK models. LiftSchemaV1 points at
+        // the frozen LiftPreGramServingShapes.FoodEntry, not the live
+        // FoodEntry — see the doc comment on LiftPreGramServingShapes.
         do {
             let v1 = try ModelContainer(
                 for: Schema(versionedSchema: LiftSchemaV1.self),
                 configurations: [ModelConfiguration(url: storeURL)]
             )
             let context = ModelContext(v1)
-            context.insert(FoodEntry(
+            context.insert(LiftPreGramServingShapes.FoodEntry(
                 foodRefID: "usda:174608",
                 name: "Oats",
                 quantity: 2,
                 servingUnit: "serving",
                 nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
-                mealType: .breakfast,
+                mealTypeRaw: MealType.breakfast.rawValue,
                 loggedAt: loggedAt
             ))
             try context.save()
         }
 
-        // Reopen it the way the app does.
+        // Reopen it the way the app does. LiftSchemaV2 also points at the
+        // frozen shapes, so the store is still read back through them here.
         let v2 = try ModelContainer(
             for: Schema(versionedSchema: LiftSchemaV2.self),
             migrationPlan: LiftMigrationPlan.self,
@@ -137,17 +140,17 @@ final class SchemaMigrationTests: XCTestCase {
         )
         let context = ModelContext(v2)
 
-        let food = try context.fetch(FetchDescriptor<FoodEntry>())
+        let food = try context.fetch(FetchDescriptor<LiftPreGramServingShapes.FoodEntry>())
         XCTAssertEqual(food.count, 1, "the V1 entry must survive the migration")
         XCTAssertEqual(food.first?.name, "Oats")
         XCTAssertEqual(food.first?.dayKey, dayKey)
         XCTAssertEqual(food.first?.nutrition.calories, 300)
 
         // And the new models must be usable in the migrated store.
-        let recipe = Recipe(name: "Overnight oats", servings: 2)
+        let recipe = LiftPreGramServingShapes.Recipe(name: "Overnight oats", servings: 2)
         context.insert(recipe)
         try context.save()
-        XCTAssertEqual(try context.fetch(FetchDescriptor<Recipe>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<LiftPreGramServingShapes.Recipe>()).count, 1)
     }
 
     func testV3StoreOpensAsV4WithDataIntact() throws {
@@ -155,19 +158,20 @@ final class SchemaMigrationTests: XCTestCase {
         let dayKey = DayKey.make(from: loggedAt)
 
         // Write a store using only the pre-outdoor-activity models.
+        // LiftSchemaV3/V4 both point at the frozen shapes.
         do {
             let v3 = try ModelContainer(
                 for: Schema(versionedSchema: LiftSchemaV3.self),
                 configurations: [ModelConfiguration(url: storeURL)]
             )
             let context = ModelContext(v3)
-            context.insert(FoodEntry(
+            context.insert(LiftPreGramServingShapes.FoodEntry(
                 foodRefID: "usda:174608",
                 name: "Oats",
                 quantity: 2,
                 servingUnit: "serving",
                 nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
-                mealType: .breakfast,
+                mealTypeRaw: MealType.breakfast.rawValue,
                 loggedAt: loggedAt
             ))
             try context.save()
@@ -181,23 +185,77 @@ final class SchemaMigrationTests: XCTestCase {
         )
         let context = ModelContext(v4)
 
-        let food = try context.fetch(FetchDescriptor<FoodEntry>())
+        let food = try context.fetch(FetchDescriptor<LiftPreGramServingShapes.FoodEntry>())
         XCTAssertEqual(food.count, 1, "the V3 entry must survive the migration")
         XCTAssertEqual(food.first?.name, "Oats")
         XCTAssertEqual(food.first?.dayKey, dayKey)
         XCTAssertEqual(food.first?.nutrition.calories, 300)
 
-        // And the new model (OutdoorActivity) must be usable in the migrated store.
+        // And the new model (OutdoorActivity) must be usable in the migrated
+        // store. OutdoorActivity never changed shape, so it's still the live
+        // (unfrozen) type in both V4 and V5.
         let activity = OutdoorActivity(activityType: .run, startedAt: .now)
         context.insert(activity)
         try context.save()
         XCTAssertEqual(try context.fetch(FetchDescriptor<OutdoorActivity>()).count, 1)
     }
 
+    func testV4StoreOpensAsV5WithDataIntact() throws {
+        let loggedAt = Date(timeIntervalSince1970: 1_756_000_000)
+        let dayKey = DayKey.make(from: loggedAt)
+
+        // Write a store using only the pre-gram-serving models. LiftSchemaV4
+        // points at the frozen LiftPreGramServingShapes.FoodEntry (no
+        // amountGrams column) — this is the last version before the live
+        // FoodEntry gained the gram fields, so this genuinely exercises the
+        // v4ToV5 lightweight stage rather than trivially reopening an
+        // already-current store.
+        do {
+            let v4 = try ModelContainer(
+                for: Schema(versionedSchema: LiftSchemaV4.self),
+                configurations: [ModelConfiguration(url: storeURL)]
+            )
+            let context = ModelContext(v4)
+            context.insert(LiftPreGramServingShapes.FoodEntry(
+                foodRefID: "usda:174608",
+                name: "Oats",
+                quantity: 2,
+                servingUnit: "serving",
+                nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
+                mealTypeRaw: MealType.breakfast.rawValue,
+                loggedAt: loggedAt
+            ))
+            try context.save()
+        }
+
+        // Reopen it the way the app does. LiftSchemaV5 uses the live,
+        // gram-aware FoodEntry/Recipe.
+        let v5 = try ModelContainer(
+            for: Schema(versionedSchema: LiftSchemaV5.self),
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(v5)
+
+        let food = try context.fetch(FetchDescriptor<FoodEntry>())
+        XCTAssertEqual(food.count, 1, "the V4 entry must survive the migration")
+        XCTAssertEqual(food.first?.name, "Oats")
+        XCTAssertEqual(food.first?.dayKey, dayKey)
+        XCTAssertEqual(food.first?.nutrition.calories, 300)
+        XCTAssertNil(food.first?.amountGrams, "legacy entries have no gram amount until logged via the new flow")
+
+        // And the new field must be usable in the migrated store.
+        let recipe = Recipe(name: "Chili", servings: 4)
+        recipe.totalWeightGrams = 1200
+        context.insert(recipe)
+        try context.save()
+        XCTAssertEqual(recipe.totalWeightGrams, 1200)
+    }
+
     func testCurrentSchemaIsTheNewestVersion() {
         XCTAssertEqual(
             LiftStore.schema.entities.count,
-            LiftSchemaV4.models.count,
+            LiftSchemaV5.models.count,
             "LiftStore.schema must track the newest VersionedSchema"
         )
     }

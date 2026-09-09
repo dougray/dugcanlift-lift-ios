@@ -306,6 +306,7 @@ struct MealPlanView: View {
         meal.loggedFoodEntryID = entry.id
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
+        WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
     }
 }
 

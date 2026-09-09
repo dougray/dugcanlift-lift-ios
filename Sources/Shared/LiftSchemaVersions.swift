@@ -61,6 +61,18 @@ import SwiftData
 // because its `recipe` relationship is typed to whichever `Recipe` it points
 // at, and that type has to be the frozen one to stay inside the same
 // (V1-V4) schema graph.
+//
+// The same drift risk applies one level down: these frozen classes also
+// reference shared VALUE TYPES (`NutritionFacts`, used by FoodEntry, Recipe
+// and PlannedMeal alike) by the live, unversioned struct — not a frozen copy.
+// A future task that changes `NutritionFacts`'s own shape (a new field, a
+// removed one) will silently change what all four frozen shapes above
+// declare themselves to be, with nothing in this file touched to reveal it —
+// the same "duplicate version checksums" failure this whole enum exists to
+// prevent, just triggered from underneath it instead of from a change made
+// directly here. Whoever writes `LiftSchemaV6` should check any shared value
+// type these frozen models reference for that kind of change too, not just
+// the model classes themselves.
 enum LiftPreGramServingShapes {
 
     @Model

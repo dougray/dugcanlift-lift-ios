@@ -411,4 +411,74 @@ final class PlannedMealNutritionTests: XCTestCase {
         XCTAssertNil(meal.scaledNutrition)
         XCTAssertNil(meal.makeFoodEntry())
     }
+
+    // MARK: - Gram-based arithmetic
+
+    private func gramRecipe(totalWeightGrams: Double? = 1200) -> Recipe {
+        let recipe = Recipe(
+            name: "Gram Test",
+            servings: 4,
+            nutritionPerServing: NutritionFacts(
+                calories: 300, proteinG: 20, carbsG: 30, fatG: 10
+            )
+        )
+        recipe.totalWeightGrams = totalWeightGrams
+        return recipe
+    }
+
+    func testTotalNutritionIsNutritionPerServingTimesServings() {
+        let recipe = gramRecipe()
+        XCTAssertEqual(recipe.totalNutrition?.calories, 1200)
+        XCTAssertEqual(recipe.totalNutrition?.proteinG, 80)
+        XCTAssertEqual(recipe.totalNutrition?.carbsG, 120)
+        XCTAssertEqual(recipe.totalNutrition?.fatG, 40)
+    }
+
+    func testNutritionPerGramIsTotalNutritionDividedByTotalWeightGrams() throws {
+        let recipe = gramRecipe(totalWeightGrams: 1200)
+        let perGram = try XCTUnwrap(recipe.nutritionPerGram)
+        XCTAssertEqual(perGram.calories, 1, accuracy: 0.0001)
+        XCTAssertEqual(perGram.proteinG, 80.0 / 1200.0, accuracy: 0.0001)
+    }
+
+    func testNutritionPerGramIsNilWithoutTotalWeightGrams() {
+        let recipe = gramRecipe(totalWeightGrams: nil)
+        XCTAssertNil(recipe.nutritionPerGram)
+    }
+
+    func testNutritionPerGramIsNilWithoutNutritionPerServing() {
+        let recipe = Recipe(name: "No Macros", servings: 4)
+        recipe.totalWeightGrams = 1200
+        XCTAssertNil(recipe.nutritionPerGram)
+    }
+
+    func testScaledNutritionUsesGramBranchWhenAmountGramsIsSet() throws {
+        let recipe = gramRecipe(totalWeightGrams: 1200)
+        let meal = PlannedMeal(
+            recipe: recipe,
+            mealType: .dinner,
+            plannedFor: .now,
+            amountGrams: 150
+        )
+        // nutritionPerGram: 1 kcal/g, 0.0667 g protein/g -> * 150 g
+        let scaled = try XCTUnwrap(meal.scaledNutrition)
+        XCTAssertEqual(scaled.calories, 150, accuracy: 0.0001)
+        XCTAssertEqual(scaled.proteinG, (80.0 / 1200.0) * 150.0, accuracy: 0.0001)
+    }
+
+    func testMakeFoodEntryUsesGramBranchWhenAmountGramsIsSet() throws {
+        let recipe = gramRecipe(totalWeightGrams: 1200)
+        let meal = PlannedMeal(
+            recipe: recipe,
+            mealType: .dinner,
+            plannedFor: .now,
+            amountGrams: 150
+        )
+        let entry = try XCTUnwrap(meal.makeFoodEntry())
+        XCTAssertEqual(entry.amountGrams, 150)
+        XCTAssertEqual(entry.quantity, 150)
+        XCTAssertEqual(entry.servingUnit, "g")
+        XCTAssertEqual(entry.nutrition.calories, 150, accuracy: 0.0001)
+        XCTAssertEqual(entry.nutrition.proteinG, (80.0 / 1200.0) * 150.0, accuracy: 0.0001)
+    }
 }

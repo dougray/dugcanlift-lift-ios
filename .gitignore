@@ -31,3 +31,6 @@ data/
 # phase (Open Food Facts branded data, FNDDS survey data) grows it back
 # into multi-hundred-MB territory; Git LFS or a CI build step would be
 # needed at that point instead.
+
+# Claude Code worktree scratch directories
+.claude/worktrees/

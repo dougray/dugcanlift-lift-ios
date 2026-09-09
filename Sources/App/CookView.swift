@@ -182,8 +182,8 @@ struct MealPlanView: View {
             get: { picking.map { PickerTarget(day: $0.day, meal: $0.meal) } },
             set: { if $0 == nil { picking = nil } }
         )) { target in
-            RecipePickerView(recipes: recipes) { recipe, servings in
-                add(recipe, servings: servings, to: target.day, meal: target.meal)
+            RecipePickerView(recipes: recipes) { recipe, servings, amountGrams in
+                add(recipe, servings: servings, amountGrams: amountGrams, to: target.day, meal: target.meal)
                 picking = nil
             }
             .preferredColorScheme(.dark)
@@ -282,11 +282,11 @@ struct MealPlanView: View {
         }
     }
 
-    private func add(_ recipe: Recipe, servings: Double, to day: Date, meal: MealType) {
+    private func add(_ recipe: Recipe, servings: Double, amountGrams: Double?, to day: Date, meal: MealType) {
         // Plan at midday, not midnight — a meal planned for "Tuesday" that
         // lands at 00:00 reads as Monday night in a log sorted by time.
         let at = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day
-        context.insert(PlannedMeal(recipe: recipe, mealType: meal, plannedFor: at, servings: servings))
+        context.insert(PlannedMeal(recipe: recipe, mealType: meal, plannedFor: at, servings: servings, amountGrams: amountGrams))
         try? context.save()
     }
 
@@ -313,68 +313,177 @@ struct MealPlanView: View {
 
 struct RecipePickerView: View {
     let recipes: [Recipe]
-    let onPick: (Recipe, Double) -> Void
+    let onPick: (Recipe, Double, Double?) -> Void  // recipe, servings, amountGrams
 
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
+
     @State private var servings: Double = 1
+    @State private var amountText = ""
+    @State private var selected: Recipe?
+
+    private var servingUnit: ServingUnit { ServingUnit(rawValue: servingUnitRaw) ?? .grams }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.cardSpacing) {
-                    HStack {
-                        Text("Servings")
-                            .font(Theme.body)
-                        Spacer()
-                        Stepper(
-                            value: $servings,
-                            in: 0.5...12,
-                            step: 0.5
-                        ) {
-                            Text(servingsLabel(servings))
-                                .font(Theme.body)
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        .fixedSize()
-                    }
-                    .padding(Theme.cardPadding)
-                    .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
-
-                    ForEach(recipes) { recipe in
-                        Button {
-                            onPick(recipe, servings)
-                            dismiss()
-                        } label: {
-                            HStack {
-                                Text(recipe.name)
-                                    .font(Theme.body)
-                                    .foregroundStyle(Theme.textPrimary)
-                                Spacer()
-                                if let nutrition = recipe.nutritionPerServing {
-                                    Text("\(Int(nutrition.calories * servings)) kcal")
-                                        .font(Theme.detail)
-                                        .foregroundStyle(Theme.textSecondary)
-                                }
-                            }
-                            .padding(Theme.cardPadding)
-                            .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-            }
-            .liftScreen()
-            .background(Theme.background)
-            .navigationTitle("Pick a recipe")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+            // Gated on `nutritionPerGram`, not `totalWeightGrams` alone: a
+            // recipe can have a total weight set but no macros ever entered,
+            // in which case there is no per-gram nutrition to scale by and
+            // the legacy servings path is the only one that can work.
+            if let selected, selected.nutritionPerGram != nil {
+                gramEntry(for: selected)
+            } else {
+                recipeList
             }
         }
+    }
+
+    private var recipeList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.cardSpacing) {
+                HStack {
+                    Text("Servings")
+                        .font(Theme.body)
+                    Spacer()
+                    Stepper(
+                        value: $servings,
+                        in: 0.5...12,
+                        step: 0.5
+                    ) {
+                        Text(servingsLabel(servings))
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .fixedSize()
+                }
+                .padding(Theme.cardPadding)
+                .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+
+                ForEach(recipes) { recipe in
+                    Button {
+                        if recipe.nutritionPerGram != nil {
+                            selected = recipe
+                        } else {
+                            onPick(recipe, servings, nil)
+                            dismiss()
+                        }
+                    } label: {
+                        HStack {
+                            Text(recipe.name)
+                                .font(Theme.body)
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            if let nutrition = recipe.nutritionPerServing {
+                                Text("\(Int(nutrition.calories * servings)) kcal")
+                                    .font(Theme.detail)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        .padding(Theme.cardPadding)
+                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .liftScreen()
+        .background(Theme.background)
+        .navigationTitle("Pick a recipe")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+        }
+    }
+
+    // MARK: Gram entry
+
+    /// Mirrors `FoodSearchView.amountEntry(for:)`: an amount typed in the
+    /// person's preferred `ServingUnit`, converted to grams via
+    /// `ServingUnit.toGrams(_:)` before it ever reaches `onPick`/`PlannedMeal`.
+    private func gramEntry(for recipe: Recipe) -> some View {
+        let enteredAmount = Double(amountText)
+        let grams = enteredAmount.map { servingUnit.toGrams($0) }
+        let preview = grams.flatMap { recipe.nutritionPerGram?.scaled(by: $0) }
+
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(recipe.name)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accent)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Amount")
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accent)
+
+                    HStack {
+                        TextField("0", text: $amountText)
+                            .keyboardType(.decimalPad)
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.textPrimary)
+                        Text(servingUnit.abbreviation)
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .padding(Theme.cardPadding)
+                    .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.cardPadding)
+                .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+
+                if let preview {
+                    previewCard(preview)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .liftScreen()
+        .background(Theme.background)
+        .navigationTitle(recipe.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Back") {
+                    selected = nil
+                    amountText = ""
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Log") {
+                    guard let enteredAmount, enteredAmount > 0 else { return }
+                    onPick(recipe, servings, servingUnit.toGrams(enteredAmount))
+                    dismiss()
+                }
+                .disabled(!(enteredAmount.map { $0 > 0 } ?? false))
+            }
+        }
+    }
+
+    private func previewCard(_ nutrition: NutritionFacts) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(Int(nutrition.calories)) kcal")
+                .font(Theme.figure)
+                .foregroundStyle(Theme.textPrimary)
+            HStack(spacing: 10) {
+                Text("P \(Int(nutrition.proteinG))")
+                Text("C \(Int(nutrition.carbsG))")
+                Text("F \(Int(nutrition.fatG))")
+                if let fiber = nutrition.fiberG {
+                    Text("Fib \(Int(fiber))")
+                }
+            }
+            .font(Theme.detail)
+            .foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.cardPadding)
+        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
     }
 }
 

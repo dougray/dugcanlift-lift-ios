@@ -5,7 +5,7 @@
   "required": ["event", "workoutId", "revision", "updatedAt", "origin"],
   "properties": {
     "event": {
-      "enum": ["SESSION_FINISHED", "WORKOUT_EDITED", "WORKOUT_SYNC_ACK", "OUTDOOR_ACTIVITY_FINISHED"]
+      "enum": ["SESSION_FINISHED", "WORKOUT_EDITED", "WORKOUT_SYNC_ACK", "OUTDOOR_ACTIVITY_FINISHED", "FOOD_LOGGED"]
     },
     "workoutId": {
       "type": "string",
@@ -21,6 +21,26 @@
     },
     "origin": {
       "enum": ["watchOS", "wearOS", "android", "ios", "pwa"]
+    },
+    "foodLog": {
+      "type": "object",
+      "description": "Present only when event is FOOD_LOGGED.",
+      "properties": {
+        "foodRefID": {
+          "type": "string"
+        },
+        "amountGrams": {
+          "type": "number"
+        },
+        "meal": {
+          "type": "string"
+        },
+        "loggedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["foodRefID", "amountGrams", "meal", "loggedAt"]
     }
   },
   "additionalProperties": true

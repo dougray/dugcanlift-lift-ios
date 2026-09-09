@@ -52,7 +52,7 @@ struct RecipeEditorView: View {
 
                     field(
                         "Total weight",
-                        hint: "Optional. Set this along with macros above to enable gram-based logging when planning this recipe."
+                        hint: "Optional. Set this along with macros below to enable gram-based logging when planning this recipe."
                     ) {
                         HStack {
                             TextField("0", text: $totalWeightText)

@@ -50,6 +50,7 @@ enum BackupStore {
             ]
             entry.brand.map { extras["brand"] = $0 }
             entry.servingGrams.map { extras["servingGrams"] = $0 }
+            entry.amountGrams.map { extras["amountGrams"] = $0 }
             facts.sugarG.map { extras["sugarG"] = $0 }
             facts.sodiumMg.map { extras["sodiumMg"] = $0 }
             entry.healthKitUUID.map { extras["healthKitUUID"] = $0.uuidString }
@@ -233,6 +234,7 @@ enum BackupStore {
                 quantity: double(raw["servings"]) ?? 1,
                 servingUnit: extras["servingUnit"] as? String ?? "serving",
                 servingGrams: double(extras["servingGrams"]),
+                amountGrams: double(extras["amountGrams"]),
                 nutrition: NutritionFacts(
                     calories: double(raw["calories"]) ?? 0,
                     proteinG: double(raw["proteinG"]) ?? 0,

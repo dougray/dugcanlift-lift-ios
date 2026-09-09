@@ -2,10 +2,10 @@ import SwiftUI
 import SwiftData
 import WidgetKit
 
-/// Meal-grouped food log. `food.db` now ships (see SETUP.md) and
-/// `ReferenceDatabase.searchFoods` is ready to query — the search-and-log
-/// UI itself is still to be built (tracked in the gram-based-serving plan;
-/// today this view only supports re-logging a past entry or deleting one).
+/// Meal-grouped food log. `food.db` ships (see SETUP.md) and
+/// `FoodSearchView` — presented here as a sheet — is the search-and-log UI,
+/// gram-based from the start. This view also supports re-logging a past
+/// entry or deleting one.
 struct FoodView: View {
     @Environment(\.modelContext) private var context
 
@@ -13,6 +13,8 @@ struct FoodView: View {
 
     /// The whole log, newest first — the source for Recent below.
     @Query(sort: \FoodEntry.loggedAt, order: .reverse) private var allEntries: [FoodEntry]
+
+    @State private var showingSearch = false
 
     init() {
         let key = DayKey.today
@@ -42,6 +44,18 @@ struct FoodView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                Button {
+                    showingSearch = true
+                } label: {
+                    Label("Log food", systemImage: "plus")
+                        .font(Theme.body.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Theme.cardPadding)
+                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                }
+                .buttonStyle(.plain)
+
                 ForEach(MealType.allCases) { meal in
                     let mealEntries = entries.filter { $0.mealType == meal }
                     section(meal, entries: mealEntries)
@@ -54,6 +68,9 @@ struct FoodView: View {
             .padding(.bottom, 40)
         }
         .liftScreen()
+        .sheet(isPresented: $showingSearch) {
+            FoodSearchView(mealType: MealType.forHour(Calendar.current.component(.hour, from: .now)))
+        }
     }
 
     private func section(_ meal: MealType, entries mealEntries: [FoodEntry]) -> some View {

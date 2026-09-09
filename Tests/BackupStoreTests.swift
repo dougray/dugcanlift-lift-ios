@@ -2,9 +2,11 @@ import XCTest
 import SwiftData
 @testable import Lift
 
-/// `amountGrams` travels through the backup file under `ext.ios.food`,
-/// alongside `servingGrams` — it isn't part of the shared cross-platform
-/// shape. A round trip that dropped it would silently revert a
+/// `amountGrams` travels through the backup file's common `food[]` shape,
+/// same as `servings`/`calories` — it's a genuinely cross-platform field
+/// (LIFT Android has it too, at the top level of its own export, with no
+/// common/extras split at all), unlike `servingGrams` which stays iOS-only
+/// under `ext.ios`. A round trip that dropped it would silently revert a
 /// gram-logged entry back to legacy quantity/servingUnit display on restore.
 final class BackupStoreTests: XCTestCase {
 

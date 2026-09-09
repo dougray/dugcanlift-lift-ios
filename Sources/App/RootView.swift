@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 enum LiftTab: String, CaseIterable, Identifiable, Hashable {
     case home = "Home"
@@ -16,6 +17,7 @@ enum LiftTab: String, CaseIterable, Identifiable, Hashable {
 /// between tabs the same way tapping a pill does; both drive the same
 /// `tab` selection so the highlight always matches what's on screen.
 struct RootView: View {
+    @Environment(\.modelContext) private var context
     @State private var tab: LiftTab = .home
     @State private var showingSettings = false
 
@@ -40,6 +42,7 @@ struct RootView: View {
             SettingsView()
                 .preferredColorScheme(.dark)
         }
+        .task { FoodEntryGramMigration.run(context: context) }
     }
 
     private var tabBar: some View {

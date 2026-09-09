@@ -16,6 +16,11 @@ struct FoodView: View {
 
     @State private var showingSearch = false
 
+    /// Same pattern as `WeightUnit`/`DistanceUnit`/`FoodSearchView`: a live,
+    /// current-device display preference, not part of any stored record.
+    @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
+    private var servingUnit: ServingUnit { ServingUnit(rawValue: servingUnitRaw) ?? .grams }
+
     init() {
         let key = DayKey.today
         _entries = Query(
@@ -170,6 +175,7 @@ struct FoodView: View {
             quantity: entry.quantity,
             servingUnit: entry.servingUnit,
             servingGrams: entry.servingGrams,
+            amountGrams: entry.amountGrams,
             nutrition: entry.nutrition,
             mealType: MealType.forHour(Calendar.current.component(.hour, from: now)),
             loggedAt: now
@@ -179,14 +185,51 @@ struct FoodView: View {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    /// "240 kcal - P 8 - F 2 - C 46 - Fib 2"
+    /// "140 g - 240 kcal - P 8 - F 2 - C 46 - Fib 2"
     private func macroLine(_ entry: FoodEntry) -> String {
         let n = entry.nutrition
-        var parts = ["\(Int(n.calories)) kcal",
+        var parts = [FoodEntryDisplay.amountText(for: entry, preferredUnit: servingUnit),
+                     "\(Int(n.calories)) kcal",
                      "P \(Int(n.proteinG))",
                      "F \(Int(n.fatG))",
                      "C \(Int(n.carbsG))"]
         if let fiber = n.fiberG { parts.append("Fib \(Int(fiber))") }
         return parts.joined(separator: " - ")
+    }
+}
+
+/// Pure formatting logic for a `FoodEntry`'s amount/serving text, factored
+/// out of `FoodView` so it's directly unit-testable without standing up a
+/// view (`FoodView` itself needs a live `ModelContext`/`Query` environment).
+///
+/// `amountGrams` is the canonical gram amount for entries logged via the
+/// gram-based search-and-log flow (Task 4) or successfully backfilled by the
+/// migration (Task 3). Display always converts it to whichever `ServingUnit`
+/// is *currently* selected in Settings — that's a live, current-device
+/// preference, not part of the historical record, so it's applied regardless
+/// of which unit was active when the entry was originally logged.
+///
+/// Entries where `amountGrams` is `nil` (legacy entries the migration
+/// couldn't backfill, e.g. no `servingGrams` to convert from) keep showing
+/// the pre-existing `quantity`/`servingUnit` text, completely unaffected by
+/// the `ServingUnit` preference — this is the one branch the whole
+/// migration strategy depends on being correct.
+enum FoodEntryDisplay {
+    static func amountText(for entry: FoodEntry, preferredUnit: ServingUnit) -> String {
+        guard let amountGrams = entry.amountGrams else {
+            return "\(formatAmount(entry.quantity)) \(entry.servingUnit)"
+        }
+        let converted = preferredUnit.fromGrams(amountGrams)
+        return "\(formatAmount(converted)) \(preferredUnit.abbreviation)"
+    }
+
+    /// Whole numbers print without a decimal ("140 g"); anything else gets
+    /// one decimal place ("4.9 oz") so a gram amount converted to ounces
+    /// doesn't collapse to a misleadingly precise-looking integer.
+    private static func formatAmount(_ value: Double) -> String {
+        if value.rounded() == value {
+            return String(Int(value))
+        }
+        return String(format: "%.1f", value)
     }
 }

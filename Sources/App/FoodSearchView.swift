@@ -219,6 +219,7 @@ struct FoodSearchView: View {
         context.insert(entry)
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
+        WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
         onLogged()
         dismiss()
     }

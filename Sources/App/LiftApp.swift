@@ -24,6 +24,16 @@ struct LiftApp: App {
     @State private var incomingPlan: IdentifiablePlan?
     @State private var planLinkError: PlanLinkError?
 
+    // `WatchSyncReceiver` doesn't drive any UI, so it isn't `@State` — it
+    // just needs to exist for the app's lifetime so its `WCSessionDelegate`
+    // stays registered. `init()` (below) is where it's actually built,
+    // because that's the one place in this type that's guaranteed to run on
+    // the main actor before this: `App.init()` is declared `@MainActor` by
+    // SwiftUI itself, which `LiftStore.shared.mainContext` needs.
+    init() {
+        WatchSyncReceiver.activate(context: LiftStore.shared.mainContext)
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

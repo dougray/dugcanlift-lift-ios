@@ -31,6 +31,17 @@ struct FoodView: View {
     ///
     /// Matches the Android build's Recent list, deliberately — same count, same
     /// de-duplication by name, same one-tap behaviour.
+    ///
+    /// This does a fresh, non-reactive fetch on every call rather than using
+    /// `@Query` directly — it stays live today only because `entries` above
+    /// *is* an `@Query` scoped to today's `dayKey`, and every mutation this
+    /// view can currently trigger (logging, re-logging) always lands in
+    /// today's `dayKey`, so SwiftUI's `entries`-driven re-render always
+    /// re-evaluates this too. A future write path that can log to a
+    /// *different* day (e.g. a backdated entry, or a watch-originated log)
+    /// would not trigger that re-render, and "Recent" could go stale until
+    /// something else causes one. Not a bug today — just an implicit
+    /// coupling worth knowing about before adding such a path.
     private var recent: [FoodEntry] {
         RecentFoodsQuery.recent(context: context, limit: 10)
     }

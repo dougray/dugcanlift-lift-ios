@@ -14,6 +14,7 @@ struct RecipeEditorView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
 
     @State private var name = ""
     @State private var servings: Double = 1
@@ -25,7 +26,13 @@ struct RecipeEditorView: View {
     @State private var carbs = ""
     @State private var fat = ""
 
+    /// Displayed and entered in the person's preferred `ServingUnit`, not
+    /// necessarily grams — converted to/from `Recipe.totalWeightGrams` at
+    /// load/save time, the same way `FoodSearchView`'s amount field converts.
+    @State private var totalWeightText = ""
+
     private var isEditing: Bool { recipe != nil }
+    private var servingUnit: ServingUnit { ServingUnit(rawValue: servingUnitRaw) ?? .grams }
 
     var body: some View {
         NavigationStack {
@@ -39,6 +46,18 @@ struct RecipeEditorView: View {
                     field("Servings") {
                         Stepper(value: $servings, in: 1...24, step: 1) {
                             Text(servingsLabel(servings))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+
+                    field(
+                        "Total weight",
+                        hint: "Optional. Set this along with macros above to enable gram-based logging when planning this recipe."
+                    ) {
+                        HStack {
+                            TextField("0", text: $totalWeightText)
+                                .keyboardType(.decimalPad)
+                            Text(servingUnit.abbreviation)
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -155,6 +174,10 @@ struct RecipeEditorView: View {
             .joined(separator: "\n")
         stepText = recipe.steps.joined(separator: "\n")
 
+        if let totalWeightGrams = recipe.totalWeightGrams {
+            totalWeightText = trimmed(servingUnit.fromGrams(totalWeightGrams))
+        }
+
         if let nutrition = recipe.nutritionPerServing {
             calories = trimmed(nutrition.calories)
             protein = trimmed(nutrition.proteinG)
@@ -177,6 +200,17 @@ struct RecipeEditorView: View {
         target.servings = servings
         target.steps = lines(from: stepText)
         target.nutritionPerServing = enteredNutrition()
+
+        // Empty/unparseable stays nil — a recipe without a total weight
+        // simply keeps using the legacy servings-based path. Otherwise
+        // convert from the person's preferred `ServingUnit` into the
+        // canonical grams `Recipe.totalWeightGrams` stores, exactly the way
+        // `FoodSearchView.log(_:)` converts its own amount field.
+        if let entered = Double(totalWeightText.trimmingCharacters(in: .whitespaces)) {
+            target.totalWeightGrams = servingUnit.toGrams(entered)
+        } else {
+            target.totalWeightGrams = nil
+        }
 
         // Replace rather than diff. Ingredients have no identity the user can
         // see — they typed a block of text — so matching old rows to new lines

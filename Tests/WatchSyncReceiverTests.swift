@@ -205,11 +205,15 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     /// `makeSnapshot` itself does no capping — respecting `limit` is
     /// `RecentFoodsQuery.recent(context:limit:)`'s job, already covered by
-    /// `RecentFoodsQueryTests`. This pins the other half of the contract:
-    /// `pushRecentFoodsSnapshot()` must actually pass its `limit: 20`
-    /// through to `RecentFoodsQuery.recent`, so the count that reaches
-    /// `makeSnapshot` is already capped.
-    func testPushRecentFoodsSnapshotPassesLimitThroughToRecentFoodsQuery() throws {
+    /// `RecentFoodsQueryTests`. `pushRecentFoodsSnapshot()`'s own `limit: 20`
+    /// argument can't be exercised directly: it's gated behind
+    /// `WCSession.activationState == .activated`, which never passes in a
+    /// unit test process. What we *can* pin here is that composing the two
+    /// — feeding an already-capped `RecentFoodsQuery.recent` result into
+    /// `makeSnapshot` — produces a snapshot with exactly that many items,
+    /// in the same order, so the seam between them is type- and
+    /// count-correct even though the real caller is untestable.
+    func testMakeSnapshotPreservesCountAndOrderOfAlreadyCappedRecentFoodsQueryResult() throws {
         let context = makeContext()
         for index in 0..<25 {
             let entry = FoodEntry(
@@ -227,10 +231,11 @@ final class WatchSyncReceiverTests: XCTestCase {
         try context.save()
 
         let recent = RecentFoodsQuery.recent(context: context, limit: 20)
+        let snapshot = WatchSyncReceiver.makeSnapshot(from: recent)
 
-        XCTAssertEqual(recent.count, 20)
+        XCTAssertEqual(snapshot.items.count, 20)
         // Newest first: index 24 was logged last.
-        XCTAssertEqual(recent.first?.foodRefID, "usda:24")
+        XCTAssertEqual(snapshot.items.first?.foodRefID, "usda:24")
     }
 
     // MARK: - Message-dictionary decoding path (deliver's own responsibility)

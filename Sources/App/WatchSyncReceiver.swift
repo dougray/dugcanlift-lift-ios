@@ -48,8 +48,13 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         shared = WatchSyncReceiver(context: context)
     }
 
+    // WatchConnectivity delivers this on a background serial queue, not the
+    // main actor. `pushRecentFoodsSnapshot()` is `@MainActor` (it reads
+    // `context`, a `@MainActor`-isolated `ModelContext`), so hop explicitly
+    // rather than calling it synchronously from here.
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
-        if activationState == .activated {
+        guard activationState == .activated else { return }
+        Task { @MainActor in
             pushRecentFoodsSnapshot()
         }
     }
@@ -120,6 +125,7 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// `FoodView.logAgain`, `CookView`'s planned-meal logging) — see those
     /// files for the call — so a phone-logged food reaches the watch's
     /// cache immediately rather than waiting for some unrelated sync event.
+    @MainActor
     func pushRecentFoodsSnapshot() {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
         let recent = RecentFoodsQuery.recent(context: context, limit: 20)
@@ -127,19 +133,7 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
             RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName, lastAmountGrams: $0.amountGrams)
         }
         let snapshot = RecentFoodsSnapshot(items: items, generatedAt: .now)
-        guard let data = try? JSONEncoder().encode(snapshot),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
+        guard let dict = try? snapshot.messageBody() else { return }
         try? WCSession.default.updateApplicationContext(dict)
     }
-}
-
-struct RecentFoodsSnapshot: Codable {
-    struct Item: Codable {
-        let foodRefID: String
-        let displayName: String
-        let lastAmountGrams: Double?
-    }
-    let items: [Item]
-    let generatedAt: Date
 }

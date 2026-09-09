@@ -129,11 +129,21 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     func pushRecentFoodsSnapshot() {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
         let recent = RecentFoodsQuery.recent(context: context, limit: 20)
-        let items = recent.map {
-            RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName, lastAmountGrams: $0.amountGrams)
-        }
-        let snapshot = RecentFoodsSnapshot(items: items, generatedAt: .now)
+        let snapshot = Self.makeSnapshot(from: recent)
         guard let dict = try? snapshot.messageBody() else { return }
         try? WCSession.default.updateApplicationContext(dict)
+    }
+
+    /// The pure phone -> watch mapping half of `pushRecentFoodsSnapshot()`,
+    /// pulled out so it's testable without a real, activated `WCSession` —
+    /// the `activationState == .activated` guard above never passes in a
+    /// unit test process, so this was previously untested even though it's
+    /// the exact contract the watch-side plan builds against. `internal`,
+    /// not `private`, so `WatchSyncReceiverTests` can call it directly.
+    static func makeSnapshot(from entries: [FoodEntry], generatedAt: Date = .now) -> RecentFoodsSnapshot {
+        let items = entries.map {
+            RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName, lastAmountGrams: $0.amountGrams)
+        }
+        return RecentFoodsSnapshot(items: items, generatedAt: generatedAt)
     }
 }

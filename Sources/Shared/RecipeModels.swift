@@ -47,6 +47,15 @@ final class Recipe {
     /// food database. Surfaced in the UI before the user logs anything.
     var nutritionIsEstimated: Bool = false
 
+    /// Total finished weight of the whole dish, in grams. `nil` until Doug
+    /// (or any user) fills it in via the recipe editor — neither platform
+    /// tracked this before, and per-ingredient gram resolution is too
+    /// unreliable to infer it automatically (see `IngredientParser.parse`'s
+    /// own doc comment: only ingredients already written in grams resolve).
+    /// A recipe with `totalWeightGrams == nil` keeps working exactly as
+    /// before — servings-based planning/logging via `PlannedMeal.servings`.
+    var totalWeightGrams: Double?
+
     /// Caption, transcript and OCR text merged, kept verbatim.
     ///
     /// This is not a nicety. An import is shown next to its source text so a
@@ -83,6 +92,21 @@ final class Recipe {
     var foodRefID: String { "recipe:\(id.uuidString)" }
 
     var wasImported: Bool { sourceURL != nil }
+
+    /// Total nutrition for the whole finished dish — `nutritionPerServing`
+    /// (per ONE serving) times how many servings the recipe yields. `nil`
+    /// if `nutritionPerServing` was never entered/estimated.
+    var totalNutrition: NutritionFacts? {
+        nutritionPerServing?.scaled(by: servings)
+    }
+
+    /// Nutrition per gram of the finished dish. `nil` until both
+    /// `nutritionPerServing` and `totalWeightGrams` exist.
+    var nutritionPerGram: NutritionFacts? {
+        guard let totalNutrition, let totalWeightGrams, totalWeightGrams > 0
+        else { return nil }
+        return totalNutrition.scaled(by: 1 / totalWeightGrams)
+    }
 }
 
 // MARK: - Ingredient
@@ -197,14 +221,24 @@ final class PlannedMeal {
     /// the log.
     var snapshotNutrition: NutritionFacts?
 
+    /// Grams of the dish this planned/logged instance represents, when
+    /// created via the gram-based recipe-logging flow. `nil` for legacy
+    /// instances that use `servings` instead.
+    var amountGrams: Double?
+
+    /// `recipe.nutritionPerGram` captured once at creation time — matches
+    /// `snapshotNutrition`'s own "snapshot on write" convention exactly, so
+    /// a later edit to the recipe (a new totalWeightGrams, a corrected
+    /// nutritionPerServing) never silently changes an already-planned or
+    /// already-logged meal's numbers. `nil` whenever `amountGrams` is nil,
+    /// or whenever the recipe had no `nutritionPerGram` at creation time.
+    var snapshotNutritionPerGram: NutritionFacts?
+
     /// Set when this plan has been turned into an actual `FoodEntry`, so
     /// logging twice is visible and idempotent.
     var loggedFoodEntryID: UUID?
 
-    init(recipe: Recipe,
-         mealType: MealType,
-         plannedFor: Date,
-         servings: Double = 1) {
+    init(recipe: Recipe, mealType: MealType, plannedFor: Date, servings: Double = 1, amountGrams: Double? = nil) {
         self.id = UUID()
         self.recipeID = recipe.id
         self.recipeName = recipe.name
@@ -213,14 +247,21 @@ final class PlannedMeal {
         self.dayKey = DayKey.make(from: plannedFor)
         self.servings = servings
         self.snapshotNutrition = recipe.nutritionPerServing
+        self.amountGrams = amountGrams
+        self.snapshotNutritionPerGram = amountGrams != nil ? recipe.nutritionPerGram : nil
     }
 
     var isLogged: Bool { loggedFoodEntryID != nil }
 
-    /// Nutrition for the whole planned meal — the per-serving snapshot times
-    /// `servings`. What the UI shows.
+    /// Prefers the gram-based snapshot when this instance was created via
+    /// the gram-based flow; falls back to the legacy servings-based
+    /// computation otherwise. Exactly one of the two snapshot fields is
+    /// ever meaningfully non-nil for a given instance.
     var scaledNutrition: NutritionFacts? {
-        snapshotNutrition?.scaled(by: servings)
+        if let amountGrams, let snapshotNutritionPerGram {
+            return snapshotNutritionPerGram.scaled(by: amountGrams)
+        }
+        return snapshotNutrition?.scaled(by: servings)
     }
 
     /// Builds the log entry for this planned meal.
@@ -230,6 +271,18 @@ final class PlannedMeal {
     /// macros — better no entry than a zero-calorie dinner in the day's total.
     func makeFoodEntry() -> FoodEntry? {
         guard let scaledNutrition else { return nil }
+        if let amountGrams, snapshotNutritionPerGram != nil {
+            return FoodEntry(
+                foodRefID: "recipe:\(recipeID.uuidString)",
+                name: recipeName,
+                quantity: amountGrams,
+                servingUnit: "g",
+                amountGrams: amountGrams,
+                nutrition: scaledNutrition,
+                mealType: mealType,
+                loggedAt: plannedFor
+            )
+        }
         return FoodEntry(
             foodRefID: "recipe:\(recipeID.uuidString)",
             name: recipeName,

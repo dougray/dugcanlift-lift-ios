@@ -107,6 +107,15 @@ final class FoodEntry {
     var servingUnit: String = "serving"
     var servingGrams: Double?
 
+    /// The authoritative gram amount for this entry, when logged via the
+    /// gram-based search-and-log flow. `nil` for legacy entries logged
+    /// before this field existed, or entries where the best-effort
+    /// migration (see the migration task) couldn't determine a gram
+    /// equivalent — those keep displaying via `quantity`/`servingUnit`
+    /// unchanged. Never guess a value here; `nil` means "unknown," not
+    /// "zero."
+    var amountGrams: Double?
+
     /// Already scaled to `quantity`. Summing a day is a plain reduce.
     var nutrition: NutritionFacts = NutritionFacts.zero
 
@@ -114,6 +123,7 @@ final class FoodEntry {
 
     init(foodRefID: String, name: String, brand: String? = nil,
          quantity: Double, servingUnit: String, servingGrams: Double? = nil,
+         amountGrams: Double? = nil,
          nutrition: NutritionFacts, mealType: MealType, loggedAt: Date = .now) {
         self.id = UUID()
         self.foodRefID = foodRefID
@@ -122,6 +132,7 @@ final class FoodEntry {
         self.quantity = quantity
         self.servingUnit = servingUnit
         self.servingGrams = servingGrams
+        self.amountGrams = amountGrams
         self.nutrition = nutrition
         self.mealTypeRaw = mealType.rawValue
         self.loggedAt = loggedAt

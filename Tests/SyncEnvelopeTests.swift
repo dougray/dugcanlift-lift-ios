@@ -1,7 +1,7 @@
 import XCTest
 @testable import Lift
 
-/// `dugcanlift-watch/shared/contracts/workout-sync.schema.json` is the wire
+/// `dugcanlift-lift-watch/shared/contracts/workout-sync.schema.json` is the wire
 /// contract shared with watchOS. These tests pin the encoding to the field
 /// names and enum values in that schema so the two platforms cannot drift
 /// apart silently.

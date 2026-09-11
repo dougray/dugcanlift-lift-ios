@@ -13,6 +13,10 @@ final class WorkoutSessionModel: ObservableObject {
     @Published private(set) var draft: WorkoutDraft?
     @Published private(set) var store = WorkoutStore()
     @Published private(set) var outbox = SyncOutbox()
+    /// Retained regardless of whether a phone exists. See
+    /// `StandaloneFoodLog`'s doc comment for why `SyncOutbox` cannot serve
+    /// this purpose.
+    let foodLog = StandaloneFoodLog()
     @Published var restTimer = RestTimer()
     @Published var unit: WeightUnit = .pounds
     @Published var servingUnit: ServingUnit = .grams
@@ -117,6 +121,13 @@ final class WorkoutSessionModel: ObservableObject {
         let payload = FoodLogPayload(foodRefID: foodRefID, amountGrams: amountGrams,
                                       meal: meal.rawValue, loggedAt: loggedAt)
         enqueue(.foodLogged, workoutID: UUID(), revision: 1, updatedAt: loggedAt, foodLog: payload)
+    }
+
+    /// Records a food in the retained local log. Called alongside
+    /// `enqueueFoodLogged` when a `foodRefID` exists, and on its own when the
+    /// food came from the bundled library and has no reference id at all.
+    func recordLocally(food: WatchFood, grams: Double, meal: FoodLogMeal, loggedAt: Date = .now) {
+        foodLog.append(LoggedFood(food: food, grams: grams, meal: meal, loggedAt: loggedAt))
     }
 
     private func enqueue(_ event: SyncEnvelope.Event, workoutID: UUID, revision: Int,

@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		056844BB2B2233C898B0FCE8 /* FoodAmountEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDACD875363836C5FC72A4AC /* FoodAmountEntryView.swift */; };
 		0BAC503F5F7FD88FD7F3D2BF /* RestTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C4800C1EA0AE78E891D94F /* RestTimerView.swift */; };
+		F935547CDDCB42189216BC72 /* QRCodeImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB93D090870A435C9208B905 /* QRCodeImage.swift */; };
+		6E3747398D07452FAEDC11DA /* FoodSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 244A92C14F5D44B69E44B5B0 /* FoodSearchView.swift */; };
+		E35585F014D74E2FACB24112 /* ExportFoodsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6093721001A44EE38AA6771C /* ExportFoodsView.swift */; };
 		3440413F6A79B595CD2C006D /* RecentFoodsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D0A5F49030D38F32670272 /* RecentFoodsListView.swift */; };
 		3F501FE6707A1AEF607603EA /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D44A90AE1F309408F75943F /* SummaryView.swift */; };
 		5374FA0D408C297FB7C35B3C /* WorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2168F9B3C55BC0204B9BDC02 /* WorkoutView.swift */; };
@@ -37,6 +40,9 @@
 		95F08369115B5F1CA403423D /* LiftWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiftWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A4C4800C1EA0AE78E891D94F /* RestTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerView.swift; sourceTree = "<group>"; };
 		BDACD875363836C5FC72A4AC /* FoodAmountEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodAmountEntryView.swift; sourceTree = "<group>"; };
+		EB93D090870A435C9208B905 /* QRCodeImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeImage.swift; sourceTree = "<group>"; };
+		244A92C14F5D44B69E44B5B0 /* FoodSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodSearchView.swift; sourceTree = "<group>"; };
+		6093721001A44EE38AA6771C /* ExportFoodsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFoodsView.swift; sourceTree = "<group>"; };
 		D9CF49F374C06EC02BAED965 /* PhoneSyncTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneSyncTransport.swift; sourceTree = "<group>"; };
 		DE31C8B7691C8E9F59A6857D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		E4D0A5F49030D38F32670272 /* RecentFoodsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentFoodsListView.swift; sourceTree = "<group>"; };
@@ -68,6 +74,8 @@
 			children = (
 				04C766A1BE81BAFDEF8A119B /* Assets.xcassets */,
 				BDACD875363836C5FC72A4AC /* FoodAmountEntryView.swift */,
+				6093721001A44EE38AA6771C /* ExportFoodsView.swift */,
+				244A92C14F5D44B69E44B5B0 /* FoodSearchView.swift */,
 				0C75CE0E4B0A49F5006BB74D /* HealthKitExporter.swift */,
 				F3CDE7C3773FDDA12CCA94DD /* LiftWatchApp.swift */,
 				864598B14FCF13673677EAA0 /* LogSetView.swift */,
@@ -80,6 +88,7 @@
 				1D44A90AE1F309408F75943F /* SummaryView.swift */,
 				900B153C7A9E855D6220680C /* WorkoutSessionModel.swift */,
 				2168F9B3C55BC0204B9BDC02 /* WorkoutView.swift */,
+				EB93D090870A435C9208B905 /* QRCodeImage.swift */,
 			);
 			path = LiftWatch;
 			sourceTree = "<group>";
@@ -178,6 +187,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				056844BB2B2233C898B0FCE8 /* FoodAmountEntryView.swift in Sources */,
+				E35585F014D74E2FACB24112 /* ExportFoodsView.swift in Sources */,
+				6E3747398D07452FAEDC11DA /* FoodSearchView.swift in Sources */,
 				C3AADB61A4864A5F15197135 /* HealthKitExporter.swift in Sources */,
 				E9F75F1C3FF42DA992D44A8A /* LiftWatchApp.swift in Sources */,
 				D62BA9841502AA38AB8ECC73 /* LogSetView.swift in Sources */,
@@ -190,6 +201,7 @@
 				3F501FE6707A1AEF607603EA /* SummaryView.swift in Sources */,
 				9E6AB45D047596FBC963EB2C /* WorkoutSessionModel.swift in Sources */,
 				5374FA0D408C297FB7C35B3C /* WorkoutView.swift in Sources */,
+				F935547CDDCB42189216BC72 /* QRCodeImage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

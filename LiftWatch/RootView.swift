@@ -53,6 +53,12 @@ struct StartWorkoutView: View {
                 NavigationLink("Log Food") {
                     RecentFoodsListView()
                 }
+                NavigationLink("All Foods") {
+                    FoodSearchView()
+                }
+                NavigationLink("Export Foods") {
+                    ExportFoodsView()
+                }
             }
         }
         .navigationTitle("LIFT")

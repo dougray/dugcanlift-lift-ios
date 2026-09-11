@@ -50,6 +50,12 @@ struct FoodAmountEntryView: View {
                         amountGrams: unit.toGrams(amount),
                         meal: meal
                     )
+                    // Also retain it locally. An item cached before macros
+                    // were added has none, and an entry with unknown macros
+                    // is skipped rather than exported as a zero-calorie meal.
+                    if let food = item.watchFood {
+                        session.recordLocally(food: food, grams: unit.toGrams(amount), meal: meal)
+                    }
                     dismiss()
                 }
             }

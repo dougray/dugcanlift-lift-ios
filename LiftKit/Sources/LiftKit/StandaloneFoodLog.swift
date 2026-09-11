@@ -58,7 +58,14 @@ public final class StandaloneFoodLog {
         defaults.removeObject(forKey: key)
     }
 
-    /// 200 entries or 60 days, whichever bites first, oldest dropped.
+    /// 200 entries or just under 60 days, whichever bites first, oldest
+    /// dropped.
+    ///
+    /// "Just under": the cutoff is recomputed from `.now` on every call, so
+    /// an entry logged exactly 60 days ago is already fractionally past the
+    /// line by the time a later append re-evaluates it, and is dropped. Any
+    /// implementation reading the clock at two different instants has that
+    /// epsilon; it is named here so the boundary is not mistaken for a bug.
     ///
     /// Age uses `Calendar`, not `now - days * 86400`: seconds-based day
     /// arithmetic repeats a day across a DST fall-back, which would keep a

@@ -88,4 +88,27 @@ final class RecentFoodsSnapshotTests: XCTestCase {
         let snapshot = try RecentFoodsSnapshot(applicationContext: context)
         XCTAssertNil(snapshot.items[0].lastAmountGrams)
     }
+
+    func testItemDecodesWithoutMacrosForBackwardCompatibility() throws {
+        // A snapshot cached before this change has no macros. It must still
+        // decode — the user's recents list keeps working — with macros nil.
+        let json = """
+        {"generatedAt":"1970-01-01T00:00:00Z","items":[{"foodRefID":"usda:1","displayName":"Oats","lastAmountGrams":50}]}
+        """.data(using: .utf8)!
+        let snapshot = try SyncEnvelope.decoder.decode(RecentFoodsSnapshot.self, from: json)
+        XCTAssertNil(snapshot.items[0].nutritionPer100g)
+        XCTAssertNil(snapshot.items[0].watchFood)
+    }
+
+    func testWatchFoodUsesTheItemsOwnDisplayName() {
+        // The phone sends the reference food's macros, but the display name
+        // the user recognises is the item's. Exporting the reference name
+        // would show them a food they never chose.
+        let macros = WatchFood(name: "ignored", kcal: 379, protein: 13.2,
+                               fat: 6.5, carbs: 67.7, fibre: 10.1)
+        let item = RecentFoodsSnapshot.Item(foodRefID: "usda:1", displayName: "Porridge",
+                                            lastAmountGrams: 50, nutritionPer100g: macros)
+        XCTAssertEqual(item.watchFood?.name, "Porridge")
+        XCTAssertEqual(item.watchFood?.kcal, 379)
+    }
 }

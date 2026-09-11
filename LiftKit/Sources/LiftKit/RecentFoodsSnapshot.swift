@@ -12,11 +12,26 @@ public struct RecentFoodsSnapshot: Codable, Equatable, Sendable {
         public var foodRefID: String
         public var displayName: String
         public var lastAmountGrams: Double?
+        /// Per 100 g, so a watch-logged entry can be exported without the
+        /// reader having to resolve `foodRefID` — which nothing downstream
+        /// can do. Optional because snapshots cached before this field
+        /// existed decode without it; an entry whose macros are unknown is
+        /// excluded from export rather than exported as zeroes.
+        public var nutritionPer100g: WatchFood?
 
-        public init(foodRefID: String, displayName: String, lastAmountGrams: Double?) {
+        public init(foodRefID: String, displayName: String,
+                    lastAmountGrams: Double?, nutritionPer100g: WatchFood? = nil) {
             self.foodRefID = foodRefID
             self.displayName = displayName
             self.lastAmountGrams = lastAmountGrams
+            self.nutritionPer100g = nutritionPer100g
+        }
+
+        /// The macros under the name the user actually picked.
+        public var watchFood: WatchFood? {
+            guard let macros = nutritionPer100g else { return nil }
+            return WatchFood(name: displayName, kcal: macros.kcal, protein: macros.protein,
+                             fat: macros.fat, carbs: macros.carbs, fibre: macros.fibre)
         }
     }
 

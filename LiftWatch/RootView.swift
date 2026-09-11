@@ -49,6 +49,11 @@ struct StartWorkoutView: View {
                     outdoorRecorder.start(type: .hike)
                 }
             }
+            Section {
+                NavigationLink("Log Food") {
+                    RecentFoodsListView()
+                }
+            }
         }
         .navigationTitle("LIFT")
     }

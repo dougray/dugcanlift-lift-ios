@@ -1,7 +1,7 @@
 import XCTest
 @testable import Lift
 
-/// `dugcanlift-watch/shared/contracts/recent-foods-snapshot.schema.json`
+/// `dugcanlift-lift-watch/shared/contracts/recent-foods-snapshot.schema.json`
 /// is the wire contract shared with watchOS. These tests pin the encoding
 /// to that schema, same as `SyncEnvelopeTests` does for `SyncEnvelope`.
 final class RecentFoodsSnapshotTests: XCTestCase {

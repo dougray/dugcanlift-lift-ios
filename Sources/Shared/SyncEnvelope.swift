@@ -2,7 +2,7 @@ import Foundation
 
 /// Wire format shared with LIFT watchOS (ported, not shared source — the two
 /// apps are separate Xcode projects with no shared source, only an agreed
-/// wire format). See `dugcanlift-watch/shared/contracts/workout-sync.schema.json`
+/// wire format). See `dugcanlift-lift-watch/shared/contracts/workout-sync.schema.json`
 /// for the contract of record both platforms' Swift types must match exactly.
 ///
 /// Field names and enum spellings here are a contract, not an implementation
@@ -81,7 +81,7 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
 }
 
 /// Payload for the `.foodLogged` event, added to the wire contract by the
-/// watch food quick-log feature. `dugcanlift-watch` does not have a matching
+/// watch food quick-log feature. `dugcanlift-lift-watch` does not have a matching
 /// Swift type yet — this is the iOS side landing first; the watch side and
 /// the schema update land alongside this task.
 ///

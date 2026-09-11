@@ -123,4 +123,46 @@ final class SyncOutboxTests: XCTestCase {
                                  updatedAt: Date(timeIntervalSince1970: 7), origin: .ios))
         XCTAssertEqual(outbox.pending.map(\.revision), [6])
     }
+
+    /// `.foodLogged` is a one-shot request with nothing to reconcile — the
+    /// phone never sends a `WORKOUT_SYNC_ACK` for it, so `remove(workoutID:)`
+    /// (not `acknowledge(_:)`) is how `WorkoutSessionModel.flushOutbox()`
+    /// drops it after a successful send. This pins that removal is scoped to
+    /// exactly the matching `workoutID`, leaving an unrelated food log and an
+    /// unrelated workout edit queued.
+    func testRemoveDropsOnlyTheMatchingFoodLogEntry() {
+        var outbox = SyncOutbox()
+        let firstFoodLogID = UUID()
+        let secondFoodLogID = UUID()
+        let workoutID = UUID()
+        let foodLog = FoodLogPayload(foodRefID: "usda:1", amountGrams: 100, meal: "BREAKFAST",
+                                     loggedAt: Date(timeIntervalSince1970: 8))
+
+        outbox.enqueue(.init(event: .foodLogged, workoutID: firstFoodLogID, revision: 1,
+                             updatedAt: Date(timeIntervalSince1970: 8), origin: .watchOS, foodLog: foodLog))
+        outbox.enqueue(.init(event: .foodLogged, workoutID: secondFoodLogID, revision: 1,
+                             updatedAt: Date(timeIntervalSince1970: 9), origin: .watchOS, foodLog: foodLog))
+        outbox.enqueue(.init(event: .workoutEdited, workoutID: workoutID, revision: 3,
+                             updatedAt: Date(timeIntervalSince1970: 10), origin: .watchOS))
+        XCTAssertEqual(outbox.pending.count, 3)
+
+        outbox.remove(workoutID: firstFoodLogID)
+
+        let remainingIDs = Set(outbox.pending.map(\.workoutID))
+        XCTAssertEqual(remainingIDs, [secondFoodLogID, workoutID])
+        XCTAssertEqual(outbox.pending.count, 2)
+        XCTAssertTrue(outbox.pending.contains { $0.workoutID == secondFoodLogID && $0.event == .foodLogged })
+        XCTAssertTrue(outbox.pending.contains { $0.workoutID == workoutID && $0.event == .workoutEdited })
+    }
+
+    func testRemoveOfUnknownWorkoutIDIsANoOp() {
+        var outbox = SyncOutbox()
+        let id = UUID()
+        outbox.enqueue(.init(event: .workoutEdited, workoutID: id, revision: 4,
+                             updatedAt: Date(timeIntervalSince1970: 4), origin: .watchOS))
+
+        outbox.remove(workoutID: UUID())
+
+        XCTAssertEqual(outbox.pending.count, 1)
+    }
 }

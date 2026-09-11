@@ -111,4 +111,34 @@ final class RecentFoodsSnapshotTests: XCTestCase {
         XCTAssertEqual(item.watchFood?.name, "Porridge")
         XCTAssertEqual(item.watchFood?.kcal, 379)
     }
+
+    func testMacrosSurviveAFullEncodeDecodeRoundTrip() throws {
+        // Encode and decode together, through the real coders, with macros
+        // present. The other tests either build an Item directly or decode a
+        // hand-written literal, so neither would notice if the Swift property
+        // names drifted away from the names
+        // `shared/contracts/recent-foods-snapshot.schema.json` pins — the
+        // encoder and the literal would simply drift together. This is the
+        // test that fails when that happens.
+        let macros = WatchFood(name: "Oats, rolled, dry", kcal: 379, protein: 13.2,
+                               fat: 6.5, carbs: 67.7, fibre: 10.1)
+        let original = RecentFoodsSnapshot(
+            items: [RecentFoodsSnapshot.Item(foodRefID: "usda:1", displayName: "Porridge",
+                                             lastAmountGrams: 50, nutritionPer100g: macros)],
+            generatedAt: Date(timeIntervalSince1970: 1_757_500_800)
+        )
+
+        let data = try SyncEnvelope.encoder.encode(original)
+        let decoded = try SyncEnvelope.decoder.decode(RecentFoodsSnapshot.self, from: data)
+        XCTAssertEqual(decoded, original)
+
+        // And the wire keys themselves, since equality would still hold if
+        // both sides renamed a field in step.
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let item = try XCTUnwrap((object["items"] as? [[String: Any]])?.first)
+        let nutrition = try XCTUnwrap(item["nutritionPer100g"] as? [String: Any])
+        XCTAssertEqual(Set(nutrition.keys),
+                       ["name", "kcal", "protein", "fat", "carbs", "fibre"])
+    }
 }

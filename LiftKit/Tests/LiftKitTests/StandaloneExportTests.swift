@@ -61,21 +61,43 @@ final class StandaloneExportTests: XCTestCase {
         return result
     }
 
-    /// Reverses one code back into its JSON object, the way the PWA will.
+    /// Matches the PWA's `frag.match(/^(\d+)([zu])([A-Za-z0-9_-]+)$/)`
+    /// (`lift/app.js`'s `decodeIncomingPlan`) -- the envelope every code now
+    /// carries: `<formatVersion><codec><base64url>`.
+    private let envelopePattern = try! NSRegularExpression(pattern: "^(\\d+)([zu])([A-Za-z0-9_-]+)$")
+
+    /// Reverses one code back into its JSON object, the way the PWA will:
+    /// parse the envelope, then either inflate (`z`) or decode the base64url
+    /// bytes directly as JSON (`u`).
     private func decode(_ code: String) throws -> [String: Any] {
-        var padded = code.replacingOccurrences(of: "-", with: "+")
-                         .replacingOccurrences(of: "_", with: "/")
+        let range = NSRange(code.startIndex..., in: code)
+        let match = try XCTUnwrap(envelopePattern.firstMatch(in: code, range: range),
+                                  "code did not match the <formatVersion><codec><base64url> envelope: \(code)")
+        let codecRange = try XCTUnwrap(Range(match.range(at: 2), in: code))
+        let base64Range = try XCTUnwrap(Range(match.range(at: 3), in: code))
+        let codec = code[codecRange]
+
+        var padded = String(code[base64Range])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
         while padded.count % 4 != 0 { padded += "=" }
-        let deflated = try XCTUnwrap(Data(base64Encoded: padded))
-        let capacity = 1 << 20
-        let destination = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
-        defer { destination.deallocate() }
-        let written = deflated.withUnsafeBytes { raw -> Int in
-            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return 0 }
-            return compression_decode_buffer(destination, capacity, base, deflated.count,
-                                             nil, COMPRESSION_ZLIB)
+        let raw = try XCTUnwrap(Data(base64Encoded: padded))
+
+        let json: Data
+        if codec == "z" {
+            let capacity = 1 << 20
+            let destination = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
+            defer { destination.deallocate() }
+            let written = raw.withUnsafeBytes { rawPtr -> Int in
+                guard let base = rawPtr.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                return compression_decode_buffer(destination, capacity, base, raw.count,
+                                                 nil, COMPRESSION_ZLIB)
+            }
+            json = Data(bytes: destination, count: written)
+        } else {
+            // `u`: the base64url bytes are the raw JSON, no inflate step.
+            json = raw
         }
-        let json = Data(bytes: destination, count: written)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
     }
 
@@ -202,5 +224,59 @@ final class StandaloneExportTests: XCTestCase {
         // further -- the guarantee is that it still arrives, not that it's
         // scannable.
         XCTAssertGreaterThan(codes[0].count, StandaloneExport.maxCodeBytes)
+    }
+
+    func testEveryCodeMatchesTheShareFormatEnvelope() throws {
+        // `1z<base64url>` or `1u<base64url>` -- the same envelope
+        // `SHARE-FORMAT`/`PLAN-FORMAT` already use, and the exact shape the
+        // PWA's `frag.match(/^(\d+)([zu])([A-Za-z0-9_-]+)$/)` requires. Cover
+        // a plain small log, a multi-code realistic split, and the
+        // single-oversized-entry edge case -- every emitted string, no
+        // exceptions.
+        var longName = ""
+        var i = 0
+        while longName.count < 1600 { longName += String(i); i += 1 }
+        let oversized = [LoggedFood(food: food(longName), grams: 100, meal: .lunch,
+                                    loggedAt: Date(timeIntervalSince1970: 1))]
+
+        let allCodes = StandaloneExport.codes(for: entries(9))
+            + StandaloneExport.codes(for: realisticEntries(120))
+            + StandaloneExport.codes(for: oversized)
+
+        XCTAssertFalse(allCodes.isEmpty)
+        for code in allCodes {
+            XCTAssertNotNil(code.range(of: "^1[zu][A-Za-z0-9_-]+$", options: .regularExpression),
+                            "code did not match ^1[zu][A-Za-z0-9_-]+$: \(code)")
+        }
+    }
+
+    func testUncompressedFallbackIsPrefixedUAndDecodesBackToTheOriginalJSON() throws {
+        // `StandaloneExport.envelope(for:deflate:)` is the `internal` seam
+        // this test uses to force the `u` codec: no JSON shape the encoder
+        // actually produces was found to make the real
+        // `CompactEncoding.deflateRaw` return nil (only large, uniformly
+        // random full-byte-range data reliably does), so the fallback branch
+        // isn't reachable through the public `codes(for:)` API with
+        // realistic input. Injecting a `deflate` that always reports "would
+        // grow it" exercises the exact branch `encode(...)` takes on a real
+        // `nil`, without relying on manufacturing incompressible data.
+        let originalJSON = try XCTUnwrap("""
+        {"e":[[0,140,2,1]],"fd":[["Chicken breast, roasted",165,31,3.6,0,0]],"p":[1,1],"v":1,"z":1}
+        """.data(using: .utf8))
+
+        let code = StandaloneExport.envelope(for: originalJSON, deflate: { _ in nil })
+
+        XCTAssertTrue(code.hasPrefix("1u"), "expected the 'u' codec when deflate reports nil, got: \(code)")
+
+        var padded = String(code.dropFirst(2))
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while padded.count % 4 != 0 { padded += "=" }
+        let roundTripped = try XCTUnwrap(Data(base64Encoded: padded))
+
+        // The `u` codec means the base64url bytes are the JSON verbatim --
+        // no inflate step -- so this must equal the input exactly, not just
+        // parse as equivalent JSON.
+        XCTAssertEqual(roundTripped, originalJSON)
     }
 }

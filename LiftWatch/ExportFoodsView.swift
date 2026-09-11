@@ -19,7 +19,7 @@ struct ExportFoodsView: View {
     var body: some View {
         Group {
             if codes.isEmpty {
-                Text("Nothing logged yet.")
+                Text(emptyStateMessage)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding()
@@ -71,5 +71,16 @@ struct ExportFoodsView: View {
         } message: {
             Text("Only do this once the codes have been scanned. This cannot be undone.")
         }
+    }
+
+    /// "Nothing logged" and "nothing exportable" are different states: a
+    /// paired user can log foods every one of which lacks macros today
+    /// (LIFT iOS doesn't populate `nutritionPer100g` yet), and telling them
+    /// their log is empty would contradict what they just did.
+    private var emptyStateMessage: String {
+        let skipped = session.foodLog.skippedCount
+        guard skipped > 0 else { return "Nothing logged yet." }
+        let entryWord = skipped == 1 ? "entry" : "entries"
+        return "\(skipped) \(entryWord) can't be exported yet. Update LIFT on your iPhone."
     }
 }

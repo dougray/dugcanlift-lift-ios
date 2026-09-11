@@ -133,12 +133,28 @@ final class WorkoutSessionModel: ObservableObject {
         flushOutbox()
     }
 
+    /// Always attempts delivery via `transport.send`, regardless of current
+    /// reachability — `PhoneSyncTransport.send` uses `transferUserInfo`,
+    /// which the OS queues and delivers once the phone comes back in range,
+    /// even across this app being suspended or terminated in the meantime.
+    /// Gating this on `transport.isReachable` (as this used to) would only
+    /// have delayed delivery to the next explicit flush trigger for no
+    /// benefit, since the in-memory `SyncOutbox` itself is what can't survive
+    /// termination — the OS-level queue `transferUserInfo` hands off to can.
     private func flushOutbox() {
-        guard transport.isReachable, !outbox.isEmpty else { return }
+        guard !outbox.isEmpty else { return }
         // Entries stay queued until the phone acknowledges the revision; a send
-        // that silently fails must not look like a delivery.
+        // that silently fails must not look like a delivery. `.foodLogged` is
+        // the one exception: it's a one-shot request with nothing to
+        // reconcile (see `enqueueFoodLogged`'s doc comment), and the phone
+        // never sends a `WORKOUT_SYNC_ACK` for it — so it must be removed
+        // right after sending, or it resends (and re-inserts a duplicate
+        // `FoodEntry`) on every later flush.
         for envelope in outbox.pending {
             transport.send(envelope)
+            if envelope.event == .foodLogged {
+                outbox.remove(workoutID: envelope.workoutID)
+            }
         }
     }
 

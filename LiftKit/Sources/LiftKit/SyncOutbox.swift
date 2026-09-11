@@ -37,6 +37,15 @@ public struct SyncOutbox: Equatable, Sendable {
         entries.removeAll { $0.workoutID == ack.workoutID && $0.revision <= ack.revision }
     }
 
+    /// Removes the queued entry for `workoutID` unconditionally, with no ack
+    /// required. Meant for one-shot requests (e.g. a `.foodLogged` envelope)
+    /// where there is nothing for the counterpart to reconcile a revision
+    /// against, unlike a workout edit, which must stay queued until it is
+    /// genuinely acknowledged.
+    public mutating func remove(workoutID: UUID) {
+        entries.removeAll { $0.workoutID == workoutID }
+    }
+
     /// Hands over everything pending, oldest first, and clears the queue.
     public mutating func drain() -> [SyncEnvelope] {
         let drained = entries.sorted { $0.revision < $1.revision }

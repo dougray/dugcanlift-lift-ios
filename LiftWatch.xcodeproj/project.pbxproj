@@ -7,7 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		056844BB2B2233C898B0FCE8 /* FoodAmountEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDACD875363836C5FC72A4AC /* FoodAmountEntryView.swift */; };
 		0BAC503F5F7FD88FD7F3D2BF /* RestTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C4800C1EA0AE78E891D94F /* RestTimerView.swift */; };
+		3440413F6A79B595CD2C006D /* RecentFoodsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D0A5F49030D38F32670272 /* RecentFoodsListView.swift */; };
 		3F501FE6707A1AEF607603EA /* SummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D44A90AE1F309408F75943F /* SummaryView.swift */; };
 		5374FA0D408C297FB7C35B3C /* WorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2168F9B3C55BC0204B9BDC02 /* WorkoutView.swift */; };
 		9024D3C3EB1A728757025483 /* OutdoorActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41D60453E11F04C81323640B /* OutdoorActivityView.swift */; };
@@ -34,8 +36,10 @@
 		900B153C7A9E855D6220680C /* WorkoutSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionModel.swift; sourceTree = "<group>"; };
 		95F08369115B5F1CA403423D /* LiftWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiftWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A4C4800C1EA0AE78E891D94F /* RestTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestTimerView.swift; sourceTree = "<group>"; };
+		BDACD875363836C5FC72A4AC /* FoodAmountEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodAmountEntryView.swift; sourceTree = "<group>"; };
 		D9CF49F374C06EC02BAED965 /* PhoneSyncTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneSyncTransport.swift; sourceTree = "<group>"; };
 		DE31C8B7691C8E9F59A6857D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		E4D0A5F49030D38F32670272 /* RecentFoodsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentFoodsListView.swift; sourceTree = "<group>"; };
 		F3CDE7C3773FDDA12CCA94DD /* LiftWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiftWatchApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -63,12 +67,14 @@
 			isa = PBXGroup;
 			children = (
 				04C766A1BE81BAFDEF8A119B /* Assets.xcassets */,
+				BDACD875363836C5FC72A4AC /* FoodAmountEntryView.swift */,
 				0C75CE0E4B0A49F5006BB74D /* HealthKitExporter.swift */,
 				F3CDE7C3773FDDA12CCA94DD /* LiftWatchApp.swift */,
 				864598B14FCF13673677EAA0 /* LogSetView.swift */,
 				160777E51AB80474040B77BF /* OutdoorActivityRecorder.swift */,
 				41D60453E11F04C81323640B /* OutdoorActivityView.swift */,
 				D9CF49F374C06EC02BAED965 /* PhoneSyncTransport.swift */,
+				E4D0A5F49030D38F32670272 /* RecentFoodsListView.swift */,
 				A4C4800C1EA0AE78E891D94F /* RestTimerView.swift */,
 				DE31C8B7691C8E9F59A6857D /* RootView.swift */,
 				1D44A90AE1F309408F75943F /* SummaryView.swift */,
@@ -171,12 +177,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				056844BB2B2233C898B0FCE8 /* FoodAmountEntryView.swift in Sources */,
 				C3AADB61A4864A5F15197135 /* HealthKitExporter.swift in Sources */,
 				E9F75F1C3FF42DA992D44A8A /* LiftWatchApp.swift in Sources */,
 				D62BA9841502AA38AB8ECC73 /* LogSetView.swift in Sources */,
 				F0AF38223D1A0FDD44D7D559 /* OutdoorActivityRecorder.swift in Sources */,
 				9024D3C3EB1A728757025483 /* OutdoorActivityView.swift in Sources */,
 				B8DE6EE19B2DA6D575A44A98 /* PhoneSyncTransport.swift in Sources */,
+				3440413F6A79B595CD2C006D /* RecentFoodsListView.swift in Sources */,
 				0BAC503F5F7FD88FD7F3D2BF /* RestTimerView.swift in Sources */,
 				AC8755C6F499BD7149CA9629 /* RootView.swift in Sources */,
 				3F501FE6707A1AEF607603EA /* SummaryView.swift in Sources */,

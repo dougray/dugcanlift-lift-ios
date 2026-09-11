@@ -35,10 +35,15 @@ final class PhoneSyncTransport: NSObject {
     }
 
     func send(_ envelope: SyncEnvelope) {
-        guard let session, session.isReachable else { return }
+        guard let session else { return }
         guard let body = try? envelope.messageBody() else { return }
         // `transferUserInfo` rather than `sendMessage`: it is queued by the OS
-        // and survives the app being suspended between sets.
+        // and delivered once the phone is reachable, surviving both the watch
+        // app being suspended between sets and it being terminated outright —
+        // which is the entire point of using it over `sendMessage`. Gating
+        // this call on `session.isReachable` (as this used to) would defeat
+        // that: the whole reason to prefer `transferUserInfo` is that it does
+        // *not* need the counterpart reachable right now.
         session.transferUserInfo(body)
     }
 }

@@ -81,4 +81,90 @@ final class SyncEnvelopeTests: XCTestCase {
         XCTAssertEqual(decoded.event, .workoutSyncAck)
         XCTAssertEqual(decoded.origin, .ios)
     }
+
+    func testFoodLoggedEncodesContractFieldNames() throws {
+        let envelope = SyncEnvelope(
+            event: .foodLogged,
+            workoutID: UUID(uuidString: "6A2A8B6E-3D2F-4E77-9B4E-2C6A5E8C1D01")!,
+            revision: 1,
+            updatedAt: Date(timeIntervalSince1970: 0),
+            origin: .watchOS,
+            foodLog: FoodLogPayload(
+                foodRefID: "usda:174608",
+                amountGrams: 140,
+                meal: "LUNCH",
+                loggedAt: Date(timeIntervalSince1970: 0)
+            )
+        )
+        let object = try json(envelope)
+
+        XCTAssertEqual(object["event"] as? String, "FOOD_LOGGED")
+        let foodLog = try XCTUnwrap(object["foodLog"] as? [String: Any])
+        XCTAssertEqual(foodLog["foodRefID"] as? String, "usda:174608")
+        XCTAssertEqual(foodLog["amountGrams"] as? Double, 140)
+        XCTAssertEqual(foodLog["meal"] as? String, "LUNCH")
+        XCTAssertEqual(foodLog["loggedAt"] as? String, "1970-01-01T00:00:00Z")
+    }
+
+    func testFoodLoggedRoundTrips() throws {
+        let envelope = SyncEnvelope(
+            event: .foodLogged,
+            workoutID: UUID(),
+            revision: 1,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            origin: .watchOS,
+            foodLog: FoodLogPayload(
+                foodRefID: "recipe:6A2A8B6E-3D2F-4E77-9B4E-2C6A5E8C1D01",
+                amountGrams: 250.5,
+                meal: "DINNER",
+                loggedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+        )
+        let data = try SyncEnvelope.encoder.encode(envelope)
+        let decoded = try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
+        XCTAssertEqual(decoded, envelope)
+        XCTAssertEqual(decoded.foodLog?.foodRefID, "recipe:6A2A8B6E-3D2F-4E77-9B4E-2C6A5E8C1D01")
+    }
+
+    func testSessionFinishedOmitsFoodLogKeyEntirely() throws {
+        // A nil foodLog must not cross the wire as `"foodLog": null` — the
+        // phone-side code (a separate repo) round-trips this exact contract
+        // and drops the key entirely for every non-food event.
+        let envelope = SyncEnvelope(
+            event: .sessionFinished,
+            workoutID: UUID(),
+            revision: 1,
+            updatedAt: Date(timeIntervalSince1970: 0),
+            origin: .watchOS
+        )
+        let object = try json(envelope)
+        XCTAssertNil(object["foodLog"])
+        XCTAssertFalse(object.keys.contains("foodLog"))
+    }
+
+    func testSessionFinishedRoundTripsWithNilFoodLog() throws {
+        let envelope = SyncEnvelope(
+            event: .sessionFinished,
+            workoutID: UUID(),
+            revision: 1,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            origin: .watchOS
+        )
+        let data = try SyncEnvelope.encoder.encode(envelope)
+        let decoded = try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
+        XCTAssertEqual(decoded, envelope)
+        XCTAssertNil(decoded.foodLog)
+    }
+
+    func testUnknownFieldsAreToleratedWithFoodLogPresent() throws {
+        let data = Data("""
+        {"event":"FOOD_LOGGED","workoutId":"6A2A8B6E-3D2F-4E77-9B4E-2C6A5E8C1D01",
+         "revision":1,"updatedAt":"1970-01-01T00:00:00Z","origin":"watchOS",
+         "foodLog":{"foodRefID":"usda:1","amountGrams":100,"meal":"SNACK",
+         "loggedAt":"1970-01-01T00:00:00Z","futureField":true},"futureField":true}
+        """.utf8)
+        let decoded = try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
+        XCTAssertEqual(decoded.event, .foodLogged)
+        XCTAssertEqual(decoded.foodLog?.foodRefID, "usda:1")
+    }
 }

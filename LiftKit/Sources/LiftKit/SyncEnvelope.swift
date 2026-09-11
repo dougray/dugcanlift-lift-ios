@@ -12,6 +12,7 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
         case workoutEdited            = "WORKOUT_EDITED"
         case workoutSyncAck           = "WORKOUT_SYNC_ACK"
         case outdoorActivityFinished  = "OUTDOOR_ACTIVITY_FINISHED"
+        case foodLogged               = "FOOD_LOGGED"
     }
 
     public enum Origin: String, Codable, Sendable {
@@ -23,6 +24,10 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
     public var revision: Int
     public var updatedAt: Date
     public var origin: Origin
+    /// Present only when `event == .foodLogged`. `workoutID` is repurposed
+    /// for a food-log event as a fresh, one-shot request ID (not an actual
+    /// workout) — see `FoodLogPayload`'s own doc comment.
+    public var foodLog: FoodLogPayload?
 
     private enum CodingKeys: String, CodingKey {
         case event
@@ -30,14 +35,17 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
         case revision
         case updatedAt
         case origin
+        case foodLog
     }
 
-    public init(event: Event, workoutID: UUID, revision: Int, updatedAt: Date, origin: Origin) {
+    public init(event: Event, workoutID: UUID, revision: Int, updatedAt: Date,
+                origin: Origin, foodLog: FoodLogPayload? = nil) {
         self.event = event
         self.workoutID = workoutID
         self.revision = revision
         self.updatedAt = updatedAt
         self.origin = origin
+        self.foodLog = foodLog
     }
 
     public init(from decoder: Decoder) throws {
@@ -47,6 +55,7 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
         revision = try container.decode(Int.self, forKey: .revision)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         origin = try container.decode(Origin.self, forKey: .origin)
+        foodLog = try container.decodeIfPresent(FoodLogPayload.self, forKey: .foodLog)
 
         // The schema says `revision` has a minimum of 1. Decoding is the only
         // place a foreign device's value enters, so reject it here rather than
@@ -58,6 +67,25 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
                 debugDescription: "revision must be >= 1, got \(revision)"
             )
         }
+    }
+}
+
+/// `event == .foodLogged`'s payload. `meal` is deliberately a plain string
+/// (matching the schema, which does not constrain it to an enum) rather than
+/// `FoodLogMeal`'s raw value being required here — `FoodLogMeal` (see
+/// `FoodLogMeal.swift`) is this app's own convenience type for the picker UI;
+/// callers pass `FoodLogMeal.rawValue` in.
+public struct FoodLogPayload: Codable, Equatable, Sendable {
+    public var foodRefID: String
+    public var amountGrams: Double
+    public var meal: String
+    public var loggedAt: Date
+
+    public init(foodRefID: String, amountGrams: Double, meal: String, loggedAt: Date) {
+        self.foodRefID = foodRefID
+        self.amountGrams = amountGrams
+        self.meal = meal
+        self.loggedAt = loggedAt
     }
 }
 

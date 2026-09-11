@@ -120,6 +120,12 @@ final class WorkoutSessionModel: ObservableObject {
         switch envelope.event {
         case .workoutSyncAck:
             outbox.acknowledge(envelope)
+        case .foodLogged:
+            // The phone never echoes this back — it refreshes the watch via a
+            // separate, non-`SyncEnvelope` channel (`RecentFoodsSnapshot` via
+            // `updateApplicationContext`, see `RecentFoodsSnapshotStore`).
+            // This case exists only so the switch stays exhaustive.
+            break
         case .workoutEdited, .sessionFinished, .outdoorActivityFinished:
             // The envelope is a notification, not the workout. A full snapshot
             // fetch belongs here once the phone exposes one; until then the

@@ -1,0 +1,85 @@
+import Foundation
+
+/// One food the user logged on the watch, complete enough to stand alone.
+public struct LoggedFood: Codable, Equatable, Hashable, Sendable {
+    public var food: WatchFood
+    public var grams: Double
+    public var meal: FoodLogMeal
+    public var loggedAt: Date
+
+    public init(food: WatchFood, grams: Double, meal: FoodLogMeal, loggedAt: Date) {
+        self.food = food
+        self.grams = grams
+        self.meal = meal
+        self.loggedAt = loggedAt
+    }
+}
+
+/// Every food logged on this watch, retained until the user exports it.
+///
+/// Deliberately separate from `SyncOutbox`. That queue hands an envelope to
+/// `transferUserInfo` and forgets it — correct when a phone exists, because
+/// the OS delivers eventually. But `transferUserInfo` also returns normally
+/// when **no iPhone has ever been paired**, and the watch cannot read back
+/// from the OS queue, so a standalone watch retains nothing. This store is
+/// what the export screen reads.
+///
+/// `UserDefaults`-backed, following `RecentFoodsSnapshotStore` — the repo's
+/// only persistence pattern.
+public final class StandaloneFoodLog {
+
+    private let defaults: UserDefaults
+    private let key = "com.dugcanlift.lift.standaloneFoodLog"
+    private let maxEntries: Int
+    private let maxAgeDays: Int
+
+    public init(defaults: UserDefaults = .standard,
+                maxEntries: Int = 200,
+                maxAgeDays: Int = 60) {
+        self.defaults = defaults
+        self.maxEntries = maxEntries
+        self.maxAgeDays = maxAgeDays
+    }
+
+    /// Oldest first — the order the export encodes, and the order a reader
+    /// would expect a log to arrive in.
+    public var entries: [LoggedFood] {
+        guard let data = defaults.data(forKey: key),
+              let stored = try? SyncEnvelope.decoder.decode([LoggedFood].self, from: data)
+        else { return [] }
+        return stored.sorted { $0.loggedAt < $1.loggedAt }
+    }
+
+    public func append(_ entry: LoggedFood) {
+        write(capped(entries + [entry]))
+    }
+
+    public func clear() {
+        defaults.removeObject(forKey: key)
+    }
+
+    /// 200 entries or 60 days, whichever bites first, oldest dropped.
+    ///
+    /// Age uses `Calendar`, not `now - days * 86400`: seconds-based day
+    /// arithmetic repeats a day across a DST fall-back, which would keep a
+    /// 61-day-old entry alive for one extra day every autumn.
+    private func capped(_ all: [LoggedFood]) -> [LoggedFood] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let cutoff = calendar.date(byAdding: .day, value: -maxAgeDays, to: .now)
+
+        var kept = all.sorted { $0.loggedAt < $1.loggedAt }
+        if let cutoff {
+            kept = kept.filter { $0.loggedAt >= cutoff }
+        }
+        if kept.count > maxEntries {
+            kept = Array(kept.suffix(maxEntries))
+        }
+        return kept
+    }
+
+    private func write(_ all: [LoggedFood]) {
+        guard let data = try? SyncEnvelope.encoder.encode(all) else { return }
+        defaults.set(data, forKey: key)
+    }
+}

@@ -30,6 +30,7 @@ public final class StandaloneFoodLog {
 
     private let defaults: UserDefaults
     private let key = "com.dugcanlift.lift.standaloneFoodLog"
+    private let skippedCountKey = "com.dugcanlift.lift.standaloneFoodLog.skippedCount"
     private let maxEntries: Int
     private let maxAgeDays: Int
 
@@ -54,8 +55,21 @@ public final class StandaloneFoodLog {
         write(capped(entries + [entry]))
     }
 
+    /// A food was logged whose macros are unknown (`RecentFoodsSnapshot.Item
+    /// .watchFood` is nil), so it was dropped rather than appended here.
+    /// Recorded so the export screen can tell the user "nothing exportable"
+    /// apart from "nothing logged" -- see `ExportFoodsView`'s empty state.
+    public var skippedCount: Int {
+        defaults.integer(forKey: skippedCountKey)
+    }
+
+    public func recordSkipped() {
+        defaults.set(skippedCount + 1, forKey: skippedCountKey)
+    }
+
     public func clear() {
         defaults.removeObject(forKey: key)
+        defaults.removeObject(forKey: skippedCountKey)
     }
 
     /// 200 entries or just under 60 days, whichever bites first, oldest

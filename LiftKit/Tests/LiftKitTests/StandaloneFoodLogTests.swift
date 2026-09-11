@@ -73,4 +73,24 @@ final class StandaloneFoodLogTests: XCTestCase {
         defaults.set(Data([0x00, 0x01, 0x02]), forKey: "com.dugcanlift.lift.standaloneFoodLog")
         XCTAssertTrue(StandaloneFoodLog(defaults: defaults).entries.isEmpty)
     }
+
+    func testSkippedCountStartsAtZero() {
+        XCTAssertEqual(StandaloneFoodLog(defaults: defaults).skippedCount, 0)
+    }
+
+    func testRecordSkippedIncrementsAndSurvivesANewInstance() {
+        let log = StandaloneFoodLog(defaults: defaults)
+        log.recordSkipped()
+        log.recordSkipped()
+        XCTAssertEqual(log.skippedCount, 2)
+        XCTAssertEqual(StandaloneFoodLog(defaults: defaults).skippedCount, 2)
+    }
+
+    func testClearResetsSkippedCountAlongsideEntries() {
+        let log = StandaloneFoodLog(defaults: defaults)
+        log.append(entry())
+        log.recordSkipped()
+        log.clear()
+        XCTAssertEqual(log.skippedCount, 0)
+    }
 }

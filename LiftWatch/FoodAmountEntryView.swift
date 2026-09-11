@@ -53,8 +53,13 @@ struct FoodAmountEntryView: View {
                     // Also retain it locally. An item cached before macros
                     // were added has none, and an entry with unknown macros
                     // is skipped rather than exported as a zero-calorie meal.
+                    // The skip is still counted, so Export Foods can tell the
+                    // user "nothing exportable yet" apart from "nothing
+                    // logged" -- see `StandaloneFoodLog.skippedCount`.
                     if let food = item.watchFood {
                         session.recordLocally(food: food, grams: unit.toGrams(amount), meal: meal)
+                    } else {
+                        session.foodLog.recordSkipped()
                     }
                     dismiss()
                 }

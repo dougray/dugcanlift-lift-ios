@@ -11,7 +11,7 @@ struct RecentFoodsListView: View {
     var body: some View {
         Group {
             if let items = session.recentFoodsSnapshot?.items, !items.isEmpty {
-                List(items, id: \.foodRefID) { item in
+                List(items, id: \.self) { item in
                     NavigationLink(item.displayName) {
                         FoodAmountEntryView(item: item)
                     }

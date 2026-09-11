@@ -8,7 +8,19 @@ import Foundation
 /// `lift-ios`'s `food.db` are independent derivations of USDA sharing no
 /// identifiers, and `recipe:` ids point into the phone's private store.
 ///
-/// Shape (`v`, `z`, `fd`, `e`, `p` are a wire contract):
+/// Each emitted code is `<formatVersion><codec><base64url>` -- the same
+/// envelope `SHARE-FORMAT` and `PLAN-FORMAT` already use, decoded by the
+/// PWA's `frag.match(/^(\d+)([zu])([A-Za-z0-9_-]+)$/)`
+/// (`lift/app.js`'s `decodeIncomingPlan`). `codec` is `z` for raw DEFLATE or
+/// `u` when `CompactEncoding.deflateRaw` reports compression would have
+/// grown the payload, in which case `base64url` wraps the *raw* JSON bytes
+/// instead -- this is what makes that fallback path decodable by the reader
+/// rather than poison. `formatVersion` (`1`) is deliberately redundant with
+/// the payload's own `v` field below: `SHARE-FORMAT` carries the same
+/// redundancy, and matching that existing convention wins over deduplicating
+/// it away.
+///
+/// Payload shape (`v`, `z`, `fd`, `e`, `p` are a wire contract):
 /// ```
 /// { "v": 1, "z": 1757500800,
 ///   "fd": [["Chicken breast, roasted", 165, 31, 3.6, 0, 0]],
@@ -17,7 +29,9 @@ import Foundation
 /// ```
 public enum StandaloneExport {
 
-    /// The spec's scannable ceiling for a single QR code.
+    /// The spec's scannable ceiling for a single QR code -- measured on the
+    /// full emitted string, envelope prefix (`1z`/`1u`) included, since
+    /// that's what actually has to fit in the code.
     ///
     /// A fixed *entry* count cannot honor this: the payload's cost is
     /// dominated by the food dictionary (`fd`), not the entry list (`e`), and
@@ -28,6 +42,11 @@ public enum StandaloneExport {
     /// actually fit. `codes(for:)` therefore chunks by measuring the real
     /// encoded size of each candidate chunk, not by counting entries.
     public static let maxCodeBytes = 800
+
+    /// `SHARE-FORMAT`/`PLAN-FORMAT`'s envelope version. Shared as the single
+    /// source for both the envelope prefix and the payload's `v` field so
+    /// the two intentionally-redundant copies can never drift apart.
+    private static let envelopeVersion = 1
 
     /// `SHARE-FORMAT`'s integer convention. `FoodLogMeal` is a string enum on
     /// the wire this repo already speaks, so the two have to be mapped.
@@ -104,7 +123,7 @@ public enum StandaloneExport {
 
         let dictionary = order.map { [$0.name, $0.kcal, $0.protein, $0.fat, $0.carbs, $0.fibre] as [Any] }
         let payload: [String: Any] = [
-            "v": 1,
+            "v": envelopeVersion,
             "z": Int(exportedAt.timeIntervalSince1970),
             "fd": dictionary,
             "e": tuples,
@@ -121,20 +140,38 @@ public enum StandaloneExport {
         let json = (try? JSONSerialization.data(withJSONObject: payload,
                                                  options: [.sortedKeys])) ?? Data()
 
-        // `CompactEncoding.deflateRaw` documents its `nil` return as "the
-        // caller sends the payload uncompressed in that case" -- it only
-        // happens when compressing would make the payload *larger* than it
-        // started. The previous implementation instead dropped the whole
-        // chunk here via `compactMap`, which silently deleted a code out of
-        // the middle of a numbered sequence while every other code in that
-        // sequence kept advertising the pre-drop `p` total (e.g. codes
-        // "1 of 3" and "3 of 3" with no scannable "2 of 3" ever produced).
-        // Falling back to the raw JSON bytes instead keeps every entry on
-        // the wire and keeps every `p` truthful. This does not add a
-        // compressed/uncompressed flag to the wire envelope -- there isn't
-        // one today -- see the task report for why that's a deliberate
-        // choice, not an oversight.
-        let body = CompactEncoding.deflateRaw(json) ?? json
-        return CompactEncoding.base64URL(body)
+        return envelope(for: json)
+    }
+
+    /// Wraps `json` in the `<formatVersion><codec><base64url>` envelope.
+    ///
+    /// `CompactEncoding.deflateRaw` documents its `nil` return as "the
+    /// caller sends the payload uncompressed in that case" -- it only
+    /// happens when compressing would make the payload *larger* than it
+    /// started. An earlier version of this encoder dropped the whole chunk
+    /// in that case, which silently deleted a code out of the middle of a
+    /// numbered sequence while every other code in that sequence kept
+    /// advertising the pre-drop `p` total (e.g. codes "1 of 3" and "3 of 3"
+    /// with no scannable "2 of 3" ever produced). Falling back to the raw
+    /// JSON bytes under the `u` codec instead keeps every entry on the wire,
+    /// keeps every `p` truthful, *and* stays decodable -- unlike silently
+    /// sending compressed-looking bytes that were never actually
+    /// compressed, which the reader's `deflate-raw` decompressor would
+    /// simply fail on.
+    ///
+    /// `deflate` is injectable (default `CompactEncoding.deflateRaw`) purely
+    /// so `StandaloneExportTests` can force the `u` branch: no JSON shape
+    /// this encoder actually produces was found to make the real
+    /// `deflateRaw` return nil (only large, uniformly-random full-byte-range
+    /// data reliably does), so exercising that branch through the public API
+    /// alone isn't possible. `internal` rather than `private` so
+    /// `@testable import` can reach it; production callers never pass this
+    /// argument and always get the real codec.
+    static func envelope(for json: Data,
+                         deflate: (Data) -> Data? = CompactEncoding.deflateRaw) -> String {
+        let deflated = deflate(json)
+        let codec: Character = deflated != nil ? "z" : "u"
+        let body = deflated ?? json
+        return "\(envelopeVersion)\(codec)\(CompactEncoding.base64URL(body))"
     }
 }

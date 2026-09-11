@@ -19,6 +19,19 @@
           },
           "lastAmountGrams": {
             "type": ["number", "null"]
+          },
+          "nutritionPer100g": {
+            "type": "object",
+            "description": "Per-100g macros, so a watch-logged entry can be exported standalone. Absent on snapshots produced before this field existed.",
+            "properties": {
+              "name":    { "type": "string" },
+              "kcal":    { "type": "number" },
+              "protein": { "type": "number" },
+              "fat":     { "type": "number" },
+              "carbs":   { "type": "number" },
+              "fibre":   { "type": "number" }
+            },
+            "required": ["name", "kcal", "protein", "fat", "carbs", "fibre"]
           }
         }
       }

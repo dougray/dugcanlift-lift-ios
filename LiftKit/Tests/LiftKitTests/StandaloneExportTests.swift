@@ -17,6 +17,50 @@ final class StandaloneExportTests: XCTestCase {
         }
     }
 
+    /// Eight real rows pulled from the bundled `foods.json` (USDA SR
+    /// Legacy), not the synthetic `food0`/`food1` fixture above. Median USDA
+    /// name length is 51 characters -- e.g. "Fish, tuna, white, canned in
+    /// oil, without salt, drained solids" -- and the export payload's cost is
+    /// dominated by these names in the food dictionary, not by the entry
+    /// count. A fixture built from short synthetic names cannot exercise
+    /// that, which is exactly how the original fixed 50-entry cap shipped
+    /// 30% over the scannable ceiling without any test catching it.
+    private let realFoods: [WatchFood] = [
+        WatchFood(name: "Fish, tuna, white, canned in oil, without salt, drained solids",
+                  kcal: 186, protein: 26.5, fat: 8.1, carbs: 0, fibre: 0),
+        WatchFood(name: "Pork, fresh, loin, tenderloin, separable lean and fat, raw",
+                  kcal: 120, protein: 20.6, fat: 3.5, carbs: 0, fibre: 0),
+        WatchFood(name: "Beef, rib, shortribs, separable lean only, choice, raw",
+                  kcal: 175, protein: 19, fat: 10.2, carbs: 0.4, fibre: 0),
+        WatchFood(name: "Archway Home Style Cookies, Chocolate Chip Ice Box",
+                  kcal: 497, protein: 4.3, fat: 24.4, carbs: 65, fibre: 2),
+        WatchFood(name: "Seeds, sunflower seed kernels, dry roasted, without salt",
+                  kcal: 582, protein: 19.3, fat: 49.8, carbs: 24.1, fibre: 11.1),
+        WatchFood(name: "Chicken breast tenders, breaded, cooked, microwaved",
+                  kcal: 252, protein: 16.4, fat: 12.9, carbs: 17.6, fibre: 0),
+        WatchFood(name: "Cereals ready-to-eat, QUAKER, QUAKER Puffed Rice",
+                  kcal: 383, protein: 7, fat: 0.9, carbs: 87.8, fibre: 1.4),
+        WatchFood(name: "Cereals ready-to-eat, BARBARA'S PUFFINS, original",
+                  kcal: 333, protein: 7.4, fat: 3.7, carbs: 84, fibre: 18.5),
+    ]
+
+    /// Cycles through `realFoods` with varying grams, meals, and timestamps
+    /// -- never the same amount or instant twice in a row -- so this can't
+    /// accidentally compress better than a real log would.
+    private func realisticEntries(_ count: Int) -> [LoggedFood] {
+        var result: [LoggedFood] = []
+        for i in 0..<count {
+            let grams: Double = Double(50 + (i * 37) % 250)
+            let timestamp: Double = 1_757_486_400 + Double(i) * 3600
+            let entry = LoggedFood(food: realFoods[i % realFoods.count],
+                                   grams: grams,
+                                   meal: FoodLogMeal.allCases[i % FoodLogMeal.allCases.count],
+                                   loggedAt: Date(timeIntervalSince1970: timestamp))
+            result.append(entry)
+        }
+        return result
+    }
+
     /// Reverses one code back into its JSON object, the way the PWA will.
     private func decode(_ code: String) throws -> [String: Any] {
         var padded = code.replacingOccurrences(of: "-", with: "+")
@@ -81,11 +125,18 @@ final class StandaloneExportTests: XCTestCase {
     }
 
     func testLogsLongerThanTheCapSplitAcrossNumberedCodes() throws {
-        let codes = StandaloneExport.codes(for: entries(120))
-        XCTAssertEqual(codes.count, 3)   // 50 + 50 + 20
+        // Realistic names, not the synthetic `food0`/`food1` fixture: with
+        // short synthetic names and only 3 distinct foods, 120 entries
+        // DEFLATE down to a single ~650-byte code and this test would
+        // exercise no splitting at all. Chunking is now size-based rather
+        // than a fixed entry count, so the resulting number of codes is
+        // whatever the data demands -- assert the invariant (every code
+        // numbered against the true final total), not a specific count.
+        let codes = StandaloneExport.codes(for: realisticEntries(120))
+        XCTAssertGreaterThan(codes.count, 1, "120 realistic entries should not fit in a single code")
         for (i, code) in codes.enumerated() {
             let position = try XCTUnwrap(decode(code)["p"] as? [Int])
-            XCTAssertEqual(position, [i + 1, 3])
+            XCTAssertEqual(position, [i + 1, codes.count])
         }
     }
 
@@ -95,17 +146,61 @@ final class StandaloneExportTests: XCTestCase {
         XCTAssertEqual(total, 120)
     }
 
+    func testEveryEntrySurvivesTheSplitWithRealisticNames() throws {
+        // Same guarantee as above, but with data that actually forces
+        // multiple codes (see testLogsLongerThanTheCapSplitAcrossNumberedCodes) --
+        // no entry may be dropped, duplicated, or reordered across a real
+        // multi-code split.
+        let codes = StandaloneExport.codes(for: realisticEntries(120))
+        let total = try codes.reduce(0) { $0 + ((try decode($1)["e"] as? [[Any]])?.count ?? 0) }
+        XCTAssertEqual(total, 120)
+    }
+
     func testAllCodesInASequenceShareAnExportTimestamp() throws {
-        let codes = StandaloneExport.codes(for: entries(120))
+        // Realistic data so this sequence is actually more than one code --
+        // with the old fixture this assertion could pass trivially against a
+        // single-element set from a single code.
+        let codes = StandaloneExport.codes(for: realisticEntries(120))
+        XCTAssertGreaterThan(codes.count, 1)
         let stamps = try codes.map { try decode($0)["z"] as? Int }
         XCTAssertEqual(Set(stamps.compactMap { $0 }).count, 1)
     }
 
-    func testASingleCodeStaysUnderTheScannableCeiling() {
-        // 50 entries DEFLATEd measured at 744 base64url bytes. 800 is the
-        // ceiling the spec sets for a watch display; this is the test that
-        // catches a payload-shape change blowing through it.
-        let code = StandaloneExport.codes(for: entries(50, distinctFoods: 8)).first ?? ""
-        XCTAssertLessThanOrEqual(code.count, 800)
+    func testASingleCodeStaysUnderTheScannableCeiling() throws {
+        // Real USDA names, not the synthetic fixture: as originally written
+        // with `food0`-style names this passed at 419 bytes and guarded
+        // nothing. With 8 real names (median 51 characters) and varying
+        // grams, 50 entries no longer fit in one code at all -- every code
+        // the split produces must still respect the ceiling.
+        let codes = StandaloneExport.codes(for: realisticEntries(50))
+        XCTAssertFalse(codes.isEmpty)
+        for code in codes {
+            XCTAssertLessThanOrEqual(code.count, StandaloneExport.maxCodeBytes)
+        }
+    }
+
+    func testSingleOversizedEntryProducesExactlyOneCodeRatherThanHangingOrVanishing() throws {
+        // A pathological single entry whose encoded payload alone exceeds
+        // the byte budget (a very long food name -- digits of consecutive
+        // integers concatenated, so DEFLATE's LZ77 matching can't crush it
+        // down to nothing the way a literal repeated pattern would). This
+        // must still produce exactly one code: chunking can never emit a
+        // zero-entry chunk, loop forever trying to shrink below budget, or
+        // silently drop the entry because it doesn't fit.
+        var longName = ""
+        var i = 0
+        while longName.count < 1600 { longName += String(i); i += 1 }
+        let entry = LoggedFood(food: food(longName), grams: 100, meal: .lunch,
+                               loggedAt: Date(timeIntervalSince1970: 1))
+        let codes = StandaloneExport.codes(for: [entry])
+        XCTAssertEqual(codes.count, 1)
+        let payload = try decode(codes[0])
+        XCTAssertEqual((payload["e"] as? [[Any]])?.count, 1)
+        XCTAssertEqual(payload["p"] as? [Int], [1, 1])
+        // The whole point of the fixture: this one code is allowed to be
+        // over the ceiling, because a single entry can never be split
+        // further -- the guarantee is that it still arrives, not that it's
+        // scannable.
+        XCTAssertGreaterThan(codes[0].count, StandaloneExport.maxCodeBytes)
     }
 }

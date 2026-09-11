@@ -26,9 +26,12 @@ struct FoodAmountEntryView: View {
                 .digitalCrownRotation($amount, from: 0, through: maxAmount, by: step)
 
                 Button(unit == .grams ? "Switch to oz" : "Switch to g") {
+                    // `2000 g` and `70 oz` aren't exact equivalents (2000 g is
+                    // ~70.55 oz) — clamp so a value near either cap can't land
+                    // outside the Stepper/crown range for the new unit.
                     let grams = unit.toGrams(amount)
                     session.servingUnit = unit == .grams ? .ounces : .grams
-                    amount = session.servingUnit.fromGrams(grams)
+                    amount = min(session.servingUnit.fromGrams(grams), maxAmount)
                 }
             }
 
@@ -64,6 +67,9 @@ struct FoodAmountEntryView: View {
 
     private func seedFromLastAmount() {
         guard let lastGrams = item.lastAmountGrams else { return }
-        amount = unit.fromGrams(lastGrams)
+        // The wire contract doesn't bound `lastAmountGrams` — clamp the same
+        // way the unit-switch button does, so a large phone-side value can't
+        // seed the Stepper/crown outside its own range.
+        amount = min(unit.fromGrams(lastGrams), maxAmount)
     }
 }

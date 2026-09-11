@@ -238,6 +238,40 @@ final class WatchSyncReceiverTests: XCTestCase {
         XCTAssertEqual(snapshot.items.first?.foodRefID, "usda:24")
     }
 
+    /// A legacy/migrated `FoodEntry` with no `foodRefID` (the field defaults
+    /// to `""`, see `NutritionModels.swift`) must never reach the watch: the
+    /// watch has no way to distinguish it from a real, resolvable ref, so it
+    /// renders as a normal tappable row — tapping it and logging silently
+    /// does nothing, because `FoodRefResolver.nutrition(for: "", ...)`
+    /// resolves to `nil` and `handleFoodLogged` drops the request with no
+    /// user-visible feedback. Filtering it out here is cheaper and more
+    /// honest than letting the watch offer something it can't act on.
+    func testMakeSnapshotExcludesEntriesWithEmptyFoodRefID() throws {
+        let resolvable = FoodEntry(
+            foodRefID: "usda:174608",
+            name: "Chicken breast, roll, oven-roasted",
+            quantity: 1,
+            servingUnit: "serving",
+            amountGrams: 140,
+            nutrition: NutritionFacts(calories: 201, proteinG: 21.885, carbsG: 2.685, fatG: 11.475),
+            mealType: .lunch
+        )
+        let legacyWithNoRef = FoodEntry(
+            foodRefID: "",
+            name: "Homemade Soup",
+            quantity: 1,
+            servingUnit: "bowl",
+            amountGrams: nil,
+            nutrition: NutritionFacts(calories: 150, proteinG: 5, carbsG: 20, fatG: 4),
+            mealType: .dinner
+        )
+
+        let snapshot = WatchSyncReceiver.makeSnapshot(from: [resolvable, legacyWithNoRef])
+
+        XCTAssertEqual(snapshot.items.count, 1)
+        XCTAssertEqual(snapshot.items.first?.foodRefID, "usda:174608")
+    }
+
     // MARK: - Message-dictionary decoding path (deliver's own responsibility)
 
     /// Exercises the same `SyncEnvelope(messageBody:)` decode that

@@ -8,6 +8,7 @@ final class PhoneSyncTransport: NSObject {
 
     var onEnvelope: ((SyncEnvelope) -> Void)?
     var onReachabilityChange: ((Bool) -> Void)?
+    var onApplicationContext: (([String: Any]) -> Void)?
 
     private let session: WCSession?
 
@@ -21,6 +22,16 @@ final class PhoneSyncTransport: NSObject {
 
     func activate() {
         session?.activate()
+    }
+
+    /// `WCSession.receivedApplicationContext` holds the last context the
+    /// phone pushed even if it arrived while this delegate wasn't yet set
+    /// (e.g. before `activate()`'s callback fires) — Apple's API returns an
+    /// **empty dictionary**, not `nil`, when nothing has ever been received,
+    /// so that case is normalized to `nil` here.
+    func latestApplicationContext() -> [String: Any]? {
+        guard let context = session?.receivedApplicationContext, !context.isEmpty else { return nil }
+        return context
     }
 
     func send(_ envelope: SyncEnvelope) {
@@ -50,6 +61,10 @@ extension PhoneSyncTransport: WCSessionDelegate {
 
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         deliver(message)
+    }
+
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        onApplicationContext?(applicationContext)
     }
 
     private func deliver(_ body: [String: Any]) {

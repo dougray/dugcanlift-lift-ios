@@ -61,6 +61,23 @@ final class RecentFoodsSnapshotTests: XCTestCase {
         XCTAssertTrue(snapshot.items.isEmpty)
     }
 
+    func testItemsWithSameFoodRefIDButDifferentNameAreDistinctForHashing() throws {
+        // The phone's recent-foods query dedups by displayName, not
+        // foodRefID, and legacy entries can share an empty-string
+        // foodRefID — so `RecentFoodsListView` uses `id: \.self` rather than
+        // `id: \.foodRefID`. That's only safe if two items sharing a
+        // foodRefID still hash/compare as different when their other fields
+        // differ, which is what this test pins.
+        let first = RecentFoodsSnapshot.Item(foodRefID: "", displayName: "Homemade Soup", lastAmountGrams: 250)
+        let second = RecentFoodsSnapshot.Item(foodRefID: "", displayName: "Leftover Pasta", lastAmountGrams: 300)
+
+        XCTAssertNotEqual(first, second)
+        // A `Set` relies on `Hashable` (not just `Equatable`) to tell the two
+        // apart; if they collapsed to one entry, `List(items, id: \.self)`
+        // would drop a row the same way `id: \.foodRefID` did.
+        XCTAssertEqual(Set([first, second]).count, 2)
+    }
+
     func testUnknownFieldsAreTolerated() throws {
         // The schema sets additionalProperties: true.
         let context: [String: Any] = [

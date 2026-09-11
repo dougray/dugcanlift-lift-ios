@@ -8,7 +8,7 @@ import Foundation
 /// `RecentFoodsSnapshot` (a separate repo, `lift-ios`) is the counterpart
 /// this type must stay byte-for-byte compatible with.
 public struct RecentFoodsSnapshot: Codable, Equatable, Sendable {
-    public struct Item: Codable, Equatable, Sendable {
+    public struct Item: Codable, Equatable, Hashable, Sendable {
         public var foodRefID: String
         public var displayName: String
         public var lastAmountGrams: Double?

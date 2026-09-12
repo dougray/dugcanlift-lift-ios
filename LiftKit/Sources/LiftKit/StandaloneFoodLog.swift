@@ -77,10 +77,35 @@ public final class StandaloneFoodLog {
     /// `ExportFoodsView` uses this instead of `clear()` so its confirm
     /// action deletes only the entries it actually encoded and displayed,
     /// not whatever the log happens to hold at confirm time.
+    /// Removes one stored entry per element of `entriesToRemove`, not every
+    /// entry that happens to equal one.
+    ///
+    /// The distinction is not academic here: `LoggedFood` is a value type
+    /// with no identity, so logging 50 g of the same food twice in the same
+    /// second produces two entries that compare equal. A set-membership
+    /// filter would delete both when asked to delete one, silently
+    /// destroying a log entry the user never exported — the exact failure
+    /// this whole store exists to prevent.
+    ///
+    /// Pass entries obtained from `entries`, not ones you built yourself:
+    /// `Date` loses sub-second precision through the JSON round trip, so a
+    /// `LoggedFood` constructed in memory never compares equal to the one
+    /// that comes back out. `ExportFoodsView` captures `foodLog.entries` for
+    /// exactly this reason.
     public func remove(_ entriesToRemove: [LoggedFood]) {
         guard !entriesToRemove.isEmpty else { return }
-        let removing = Set(entriesToRemove)
-        write(entries.filter { !removing.contains($0) })
+
+        var remaining: [LoggedFood: Int] = [:]
+        for entry in entriesToRemove {
+            remaining[entry, default: 0] += 1
+        }
+
+        let kept = entries.filter { entry in
+            guard let count = remaining[entry], count > 0 else { return true }
+            remaining[entry] = count - 1
+            return false
+        }
+        write(kept)
     }
 
     /// 200 entries or just under 60 days, whichever bites first, oldest

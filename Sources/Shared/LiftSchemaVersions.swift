@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import LiftCore
 
 /// Versioned schemas and the migration between them.
 ///

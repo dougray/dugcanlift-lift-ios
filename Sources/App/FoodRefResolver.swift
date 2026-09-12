@@ -1,5 +1,7 @@
 import Foundation
 import SwiftData
+import LiftCore
+import LiftReference
 
 /// Resolves an arbitrary `foodRefID` (whatever its source — a reference-
 /// database food or a recipe) into a name and gram-scaled nutrition.

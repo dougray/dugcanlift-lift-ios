@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 import WidgetKit
+import LiftCore
+import LiftReference
 
 /// Day-based training log. Previous / Next walks calendar days; a day record
 /// is created lazily on first edit so browsing empty dates costs nothing.

@@ -1,4 +1,5 @@
 import Foundation
+import LiftCore
 
 /// Wire format shared with LIFT watchOS (ported, not shared source — the two
 /// apps are separate Xcode projects with no shared source, only an agreed

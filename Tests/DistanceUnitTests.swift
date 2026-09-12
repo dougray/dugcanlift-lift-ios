@@ -1,4 +1,5 @@
 import XCTest
+import LiftCore
 @testable import Lift
 
 final class DistanceUnitTests: XCTestCase {

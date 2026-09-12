@@ -1,5 +1,6 @@
 import Foundation
 import Compression
+import LiftCore
 
 /// Turns a stretch of this phone's log into one link, ready to email to a coach.
 ///

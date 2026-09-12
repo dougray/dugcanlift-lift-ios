@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import LiftCore
 
 /// Full outdoor-activity history. Reached via "See all" from Train's Outdoor
 /// section, which is also where starting a new run/hike lives — pushed onto

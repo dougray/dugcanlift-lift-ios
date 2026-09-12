@@ -13,6 +13,14 @@ struct ExportFoodsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var codes: [String] = []
+    // Captured alongside `codes` in `onAppear`: `clear()` used to wipe the
+    // whole log even though only these were shown and scanned. Nothing can
+    // append while this screen is up today, so that was latent rather than
+    // live -- but it was true only by accident of the navigation graph, in a
+    // screen whose whole purpose is not losing data. Removing exactly this
+    // set (via `StandaloneFoodLog.remove(_:)`) keeps the guarantee true even
+    // if that accident stops holding.
+    @State private var capturedEntries: [LoggedFood] = []
     // Computed once, alongside `codes`, in `onAppear` -- not inside the
     // `ForEach` page body. `QRCodeImage.make` was being called there, and
     // `index`/`confirmingClear` are `@State` on this view, so every swipe
@@ -70,13 +78,15 @@ struct ExportFoodsView: View {
         }
         .navigationTitle("Export")
         .onAppear {
-            let generated = StandaloneExport.codes(for: session.foodLog.entries)
+            let entries = session.foodLog.entries
+            capturedEntries = entries
+            let generated = StandaloneExport.codes(for: entries)
             codes = generated
             images = generated.map { QRCodeImage.make(from: $0) }
         }
         .confirmationDialog("Clear the log?", isPresented: $confirmingClear) {
             Button("Clear", role: .destructive) {
-                session.foodLog.clear()
+                session.foodLog.remove(capturedEntries)
                 dismiss()
             }
             Button("Keep", role: .cancel) {}

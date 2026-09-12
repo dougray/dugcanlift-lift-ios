@@ -72,6 +72,17 @@ public final class StandaloneFoodLog {
         defaults.removeObject(forKey: skippedCountKey)
     }
 
+    /// Removes exactly `entriesToRemove`, leaving everything else -- in
+    /// particular anything appended since they were captured -- intact.
+    /// `ExportFoodsView` uses this instead of `clear()` so its confirm
+    /// action deletes only the entries it actually encoded and displayed,
+    /// not whatever the log happens to hold at confirm time.
+    public func remove(_ entriesToRemove: [LoggedFood]) {
+        guard !entriesToRemove.isEmpty else { return }
+        let removing = Set(entriesToRemove)
+        write(entries.filter { !removing.contains($0) })
+    }
+
     /// 200 entries or just under 60 days, whichever bites first, oldest
     /// dropped.
     ///

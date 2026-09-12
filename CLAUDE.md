@@ -24,8 +24,9 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
   the app and widget targets. Anything added here must not import GRDB or any
   app-only dependency.
 - **`Sources/App/`** — SwiftUI views, view models, HealthKit, notifications.
-- **`Sources/Reference/`** — GRDB access to the bundled read-only SQLite
-  reference database. App target only.
+  GRDB access to the bundled reference database now lives in `LiftKit`'s
+  `LiftReference` product (see "Shared code lives in LiftKit" below), not a
+  local `Sources/Reference/` — that directory no longer exists here.
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
 
 The SwiftData store lives in the App Group container

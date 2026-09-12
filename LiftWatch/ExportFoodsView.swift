@@ -42,7 +42,14 @@ struct ExportFoodsView: View {
             } else {
                 TabView(selection: $index) {
                     ForEach(Array(codes.enumerated()), id: \.offset) { position, _ in
-                        VStack(spacing: 4) {
+                        // A ZStack, not a VStack with the caption as a
+                        // sibling row: module size is what decides whether a
+                        // phone can focus on the code (measured versions
+                        // 21-23 -> 0.308-0.330 mm/module in the old chrome,
+                        // against a ~0.3 mm practical floor), so the caption
+                        // overlays the code instead of taking its own row
+                        // and shrinking it.
+                        ZStack(alignment: .bottom) {
                             if let image = images[position] {
                                 Image(uiImage: image)
                                     .interpolation(.none)
@@ -53,6 +60,7 @@ struct ExportFoodsView: View {
                                 Text("\(position + 1) of \(codes.count)")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
+                                    .padding(.bottom, 2)
                             }
                         }
                         .tag(position)
@@ -77,6 +85,11 @@ struct ExportFoodsView: View {
             }
         }
         .navigationTitle("Export")
+        // Hidden only once there are codes to show: the spec requires the QR
+        // use the whole screen, because module size decides whether a phone
+        // can focus on it. The empty state keeps its nav bar since there's
+        // nothing there competing for the space.
+        .toolbar(codes.isEmpty ? .visible : .hidden, for: .navigationBar)
         .onAppear {
             let entries = session.foodLog.entries
             capturedEntries = entries

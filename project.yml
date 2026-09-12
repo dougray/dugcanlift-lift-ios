@@ -31,8 +31,13 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"   # iPhone only
 
 packages:
+  # Pinned to an exact tag, not a range: a change here reaches two shipped
+  # apps at once, and `@Model` types are shared, so a property change in the
+  # package is a schema change for both. Upgrading is a deliberate edit to
+  # this line, never something that happens on a `swift package update`.
   LiftKit:
-    path: ../dugcanlift-kit
+    url: https://github.com/dougray/dugcanlift-kit
+    exactVersion: 1.0.0
 
 targets:
 

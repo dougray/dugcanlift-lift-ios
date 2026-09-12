@@ -93,4 +93,26 @@ final class StandaloneFoodLogTests: XCTestCase {
         log.clear()
         XCTAssertEqual(log.skippedCount, 0)
     }
+
+    func testRemoveOnlyDeletesTheGivenEntriesLeavingLaterAppendsIntact() {
+        // Mirrors ExportFoodsView: capture what was encoded, then something
+        // else lands in the log before the user confirms clearing. Only the
+        // captured entries should go.
+        let log = StandaloneFoodLog(defaults: defaults)
+        let now = Date()
+        log.append(entry("Encoded", at: now))
+        let captured = log.entries
+        log.append(entry("AppendedAfterEncoding", at: now.addingTimeInterval(60)))
+
+        log.remove(captured)
+
+        XCTAssertEqual(log.entries.map(\.food.name), ["AppendedAfterEncoding"])
+    }
+
+    func testRemoveOfEverythingLeavesTheLogEmpty() {
+        let log = StandaloneFoodLog(defaults: defaults)
+        log.append(entry())
+        log.remove(log.entries)
+        XCTAssertTrue(log.entries.isEmpty)
+    }
 }

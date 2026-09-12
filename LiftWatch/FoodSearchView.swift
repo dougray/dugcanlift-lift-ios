@@ -8,13 +8,11 @@ struct FoodSearchView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
     @State private var query = ""
 
-    private let library = WatchFoodLibrary()
-
     var body: some View {
         List {
             TextField("Search foods", text: $query)
 
-            ForEach(library.search(query), id: \.self) { food in
+            ForEach(WatchFoodLibrary.shared.search(query), id: \.self) { food in
                 NavigationLink(food.name) {
                     LibraryFoodAmountView(food: food)
                 }

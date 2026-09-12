@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import LiftCore
+import LiftReference
 
 /// Search over the bundled exercises.db. Everything here is local — no network,
 /// so results are effectively instant and work offline by construction.

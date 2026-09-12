@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LiftCore
 
 /// Wraps a decoded plan in its own identity for `.sheet(item:)`.
 ///

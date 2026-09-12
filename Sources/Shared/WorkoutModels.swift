@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import LiftCore
 
 enum TrainingFocus: String, Codable, CaseIterable, Identifiable {
     case bodybuilding, powerlifting, crossfit, conditioning
@@ -177,20 +178,6 @@ final class SetEntry {
     var estimatedOneRepMaxKg: Double? {
         guard reps > 0, weightKg > 0, !isWarmup else { return nil }
         return weightKg * (1 + Double(reps) / 30.0)
-    }
-}
-
-enum WeightUnit: String, Codable, CaseIterable {
-    case pounds, kilograms
-
-    var abbreviation: String { self == .kilograms ? "kg" : "lb" }
-
-    func fromKilograms(_ kg: Double) -> Double {
-        self == .kilograms ? kg : kg * 2.2046226218
-    }
-
-    func toKilograms(_ value: Double) -> Double {
-        self == .kilograms ? value : value / 2.2046226218
     }
 }
 

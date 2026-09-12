@@ -1,5 +1,7 @@
 import XCTest
 import SwiftData
+import LiftCore
+import LiftReference
 @testable import Lift
 
 /// `FoodRefResolver` is the one genuinely new piece of shared logic in the

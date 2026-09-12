@@ -1,6 +1,7 @@
 import WidgetKit
 import SwiftUI
 import SwiftData
+import LiftCore
 
 @main
 struct LiftWidgetBundle: WidgetBundle {

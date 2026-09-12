@@ -1,6 +1,7 @@
 import MapKit
 import SwiftData
 import SwiftUI
+import LiftCore
 
 /// Live recording: elapsed time, distance, pace, and a live-updating map
 /// trace. `LocationTracker` is the source of truth for points while

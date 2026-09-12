@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import WidgetKit
+import LiftCore
 
 /// COOK — recipes, the week's plan, and the shopping list that falls out of it.
 ///

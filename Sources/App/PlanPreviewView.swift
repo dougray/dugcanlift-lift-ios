@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LiftCore
 
 /// Shown when a coach's plan link opens. Nothing is written until the user
 /// taps Accept — per the design spec, there is no partial accept in this

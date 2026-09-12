@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LiftCore
 
 enum LiftTab: String, CaseIterable, Identifiable, Hashable {
     case home = "Home"

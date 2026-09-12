@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import WidgetKit
+import LiftCore
 
 /// Meal-grouped food log. `food.db` ships (see SETUP.md) and
 /// `FoodSearchView` — presented here as a sheet — is the search-and-log UI,

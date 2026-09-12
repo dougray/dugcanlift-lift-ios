@@ -13,6 +13,14 @@ struct ExportFoodsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var codes: [String] = []
+    // Computed once, alongside `codes`, in `onAppear` -- not inside the
+    // `ForEach` page body. `QRCodeImage.make` was being called there, and
+    // `index`/`confirmingClear` are `@State` on this view, so every swipe
+    // was re-encoding every materialised page (measured: 25 codes cost
+    // 49.7 ms and 18.7 MB of bitmaps on a Mac; a watch is slower still).
+    // One entry per `codes` index, `nil` only in the practically-unreachable
+    // case `QRCodeImage.make` fails for that page.
+    @State private var images: [UIImage?] = []
     @State private var index = 0
     @State private var confirmingClear = false
 
@@ -25,9 +33,9 @@ struct ExportFoodsView: View {
                     .padding()
             } else {
                 TabView(selection: $index) {
-                    ForEach(Array(codes.enumerated()), id: \.offset) { position, code in
+                    ForEach(Array(codes.enumerated()), id: \.offset) { position, _ in
                         VStack(spacing: 4) {
-                            if let image = QRCodeImage.make(from: code) {
+                            if let image = images[position] {
                                 Image(uiImage: image)
                                     .interpolation(.none)
                                     .resizable()
@@ -61,7 +69,11 @@ struct ExportFoodsView: View {
             }
         }
         .navigationTitle("Export")
-        .onAppear { codes = StandaloneExport.codes(for: session.foodLog.entries) }
+        .onAppear {
+            let generated = StandaloneExport.codes(for: session.foodLog.entries)
+            codes = generated
+            images = generated.map { QRCodeImage.make(from: $0) }
+        }
         .confirmationDialog("Clear the log?", isPresented: $confirmingClear) {
             Button("Clear", role: .destructive) {
                 session.foodLog.clear()

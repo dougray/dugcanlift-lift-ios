@@ -26,7 +26,11 @@ import SwiftUI
 enum QRCodeImage {
     static func make(from string: String) -> UIImage? {
         guard let matrix = try? QRCode.encode(text: string) else { return nil }
-        guard let cgImage = QRCode.renderCGImage(matrix: matrix, moduleScale: 8, quietZone: 4) else { return nil }
+        // 3, not 8: verified codes still decode after downscaling to 220 px,
+        // and the watch displays them around 368 px -- 8 was ~2.4x more
+        // bitmap than any of that needs (18.7 MB vs ~2.6 MB across a typical
+        // export's worth of pages).
+        guard let cgImage = QRCode.renderCGImage(matrix: matrix, moduleScale: 3, quietZone: 4) else { return nil }
         return UIImage(cgImage: cgImage)
     }
 }

@@ -31,9 +31,6 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"   # iPhone only
 
 packages:
-  GRDB:
-    url: https://github.com/groue/GRDB.swift
-    from: "6.29.0"
   LiftKit:
     path: ../dugcanlift-kit
 
@@ -49,7 +46,6 @@ targets:
       - path: Resources
         buildPhase: resources
     dependencies:
-      - package: GRDB
       - package: LiftKit
         product: LiftCore
       - package: LiftKit

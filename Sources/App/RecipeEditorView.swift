@@ -46,7 +46,7 @@ struct RecipeEditorView: View {
 
                     field("Servings") {
                         Stepper(value: $servings, in: 1...24, step: 1) {
-                            Text(servingsLabel(servings))
+                            Text(CookFormat.servingsLabel(servings))
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -176,14 +176,14 @@ struct RecipeEditorView: View {
         stepText = recipe.steps.joined(separator: "\n")
 
         if let totalWeightGrams = recipe.totalWeightGrams {
-            totalWeightText = trimmed(servingUnit.fromGrams(totalWeightGrams))
+            totalWeightText = CookFormat.trimmed(servingUnit.fromGrams(totalWeightGrams))
         }
 
         if let nutrition = recipe.nutritionPerServing {
-            calories = trimmed(nutrition.calories)
-            protein = trimmed(nutrition.proteinG)
-            carbs = trimmed(nutrition.carbsG)
-            fat = trimmed(nutrition.fatG)
+            calories = CookFormat.trimmed(nutrition.calories)
+            protein = CookFormat.trimmed(nutrition.proteinG)
+            carbs = CookFormat.trimmed(nutrition.carbsG)
+            fat = CookFormat.trimmed(nutrition.fatG)
         }
     }
 
@@ -254,103 +254,5 @@ struct RecipeEditorView: View {
         text.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-    }
-}
-
-// MARK: - Parsing
-
-/// Pulls a quantity and unit off the front of an ingredient line.
-///
-/// Deliberately small. It handles the shapes people actually type and gives up
-/// cleanly on everything else, leaving `item` nil so the shopping list shows
-/// the raw line instead. Guessing harder here would produce confident wrong
-/// quantities, which is worse than an unparsed line the reader can see.
-enum IngredientParser {
-
-    /// Grouping key for an ingredient with no unit — "2 eggs", "1 banana".
-    ///
-    /// A sentinel, not a unit. It keeps counts in their own bucket during
-    /// aggregation, and the shopping list drops it when printing, because
-    /// "2 x banana" is not how anyone writes a shopping list.
-    static let countUnit = "\u{0000}count"
-
-    private static let units: Set<String> = [
-        "g", "kg", "mg", "ml", "l",
-        "tsp", "tbsp", "cup", "cups", "oz", "lb", "lbs",
-        "clove", "cloves", "slice", "slices", "scoop", "scoops",
-        "can", "cans", "pinch", "handful"
-    ]
-
-    static func parse(_ raw: String, sortOrder: Int) -> RecipeIngredient {
-        var rest = raw[...]
-        let quantity = takeQuantity(&rest)
-
-        guard let quantity else {
-            return RecipeIngredient(rawText: raw, sortOrder: sortOrder)
-        }
-
-        var unit: String?
-        let words = rest.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-        if let first = words.first {
-            let candidate = String(first).lowercased().trimmingCharacters(in: .punctuationCharacters)
-            if units.contains(candidate) {
-                unit = candidate
-                rest = words.count > 1 ? words[1] : ""[...]
-            }
-        }
-
-        let item = rest.trimmingCharacters(in: .whitespaces)
-        guard !item.isEmpty else {
-            return RecipeIngredient(rawText: raw, sortOrder: sortOrder)
-        }
-
-        return RecipeIngredient(
-            rawText: raw,
-            item: item,
-            qty: quantity,
-            // No unit means a count — "2 eggs". It still needs a key, so that
-            // two eggs are never added to two cups of anything, but it is not
-            // a unit and must never be printed as one. See `countUnit`.
-            unit: unit ?? countUnit,
-            grams: unit == "g" ? quantity : nil,
-            sortOrder: sortOrder
-        )
-    }
-
-    /// Reads a leading number, including "1/2" and "1 1/2".
-    private static func takeQuantity(_ text: inout Substring) -> Double? {
-        text = text.drop(while: { $0 == " " })[...]
-
-        func takeNumber() -> Double? {
-            let digits = text.prefix { $0.isNumber || $0 == "." }
-            guard !digits.isEmpty, let value = Double(digits) else { return nil }
-            text = text.dropFirst(digits.count)
-            return value
-        }
-
-        guard var value = takeNumber() else { return nil }
-
-        if text.first == "/" {
-            text = text.dropFirst()
-            guard let denominator = takeNumber(), denominator != 0 else { return nil }
-            value /= denominator
-        } else if text.first == " " {
-            // "1 1/2" — a whole number followed by a fraction.
-            let save = text
-            text = text.dropFirst()
-            if let whole = takeNumber(), text.first == "/" {
-                text = text.dropFirst()
-                if let denominator = takeNumber(), denominator != 0 {
-                    value += whole / denominator
-                } else {
-                    text = save
-                }
-            } else {
-                text = save
-            }
-        }
-
-        text = text.drop(while: { $0 == " " })[...]
-        return value
     }
 }

@@ -108,7 +108,7 @@ struct RecipeListView: View {
                     .font(Theme.cardTitle)
                     .foregroundStyle(Theme.accent)
                 Spacer()
-                Text(servingsLabel(recipe.servings))
+                Text(CookFormat.servingsLabel(recipe.servings))
                     .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -202,7 +202,7 @@ struct MealPlanView: View {
         let forDay = planned.filter { $0.dayKey == key }
 
         return VStack(alignment: .leading, spacing: 10) {
-            Text(dayLabel(day))
+            Text(CookFormat.dayLabel(day))
                 .font(Theme.cardTitle)
                 .foregroundStyle(Theme.accent)
 
@@ -352,7 +352,7 @@ struct RecipePickerView: View {
                         in: 0.5...12,
                         step: 0.5
                     ) {
-                        Text(servingsLabel(servings))
+                        Text(CookFormat.servingsLabel(servings))
                             .font(Theme.body)
                             .foregroundStyle(Theme.textSecondary)
                     }
@@ -553,7 +553,7 @@ struct ShoppingListView: View {
                         .strikethrough(isChecked, color: Theme.textSecondary)
 
                     if !line.amounts.isEmpty {
-                        Text(amountsLabel(line.amounts))
+                        Text(CookFormat.amountsLabel(line.amounts))
                             .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }
@@ -587,35 +587,4 @@ struct ShoppingListView: View {
         for check in checks { context.delete(check) }
         try? context.save()
     }
-
-    /// Counts print bare — "2", not "2 x banana".
-    private func amountsLabel(_ amounts: [String: Double]) -> String {
-        amounts
-            .sorted { $0.key < $1.key }
-            .map { unit, value in
-                unit == IngredientParser.countUnit
-                    ? trimmed(value)
-                    : "\(trimmed(value)) \(unit)"
-            }
-            .joined(separator: " + ")
-    }
-}
-
-// MARK: - Shared formatting
-
-func servingsLabel(_ value: Double) -> String {
-    let n = trimmed(value)
-    return value == 1 ? "1 serving" : "\(n) servings"
-}
-
-func trimmed(_ value: Double) -> String {
-    value == value.rounded() ? String(Int(value)) : String(format: "%g", value)
-}
-
-func dayLabel(_ date: Date) -> String {
-    if Calendar.current.isDateInToday(date) { return "Today" }
-    if Calendar.current.isDateInTomorrow(date) { return "Tomorrow" }
-    let f = DateFormatter()
-    f.dateFormat = "EEEE"
-    return f.string(from: date)
 }

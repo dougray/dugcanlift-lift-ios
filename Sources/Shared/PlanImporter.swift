@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import SwiftData
+import LiftCore
 
 /// Tracks which plan links have already been accepted, by a hash of their
 /// decoded content — not by any id from the wire format, because

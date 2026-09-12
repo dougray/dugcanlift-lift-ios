@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import LiftCore
 
 /// Shown once a recording finishes. The activity is already saved locally
 /// (OutdoorActivityRecordingView inserted it) — this screen's job is

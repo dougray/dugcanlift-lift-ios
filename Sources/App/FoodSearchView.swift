@@ -1,6 +1,8 @@
 import SwiftData
 import SwiftUI
 import WidgetKit
+import LiftCore
+import LiftReference
 
 /// Search the bundled food.db and log a chosen amount straight onto today's
 /// log — the actual "log a new food" flow, built for the first time here.

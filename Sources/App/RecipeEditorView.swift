@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LiftCore
 
 /// Create or edit a recipe by hand.
 ///

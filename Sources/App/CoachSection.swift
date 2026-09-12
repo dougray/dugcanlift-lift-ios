@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import MessageUI
+import LiftCore
 
 /// "Send to Coach" — one tap opens Mail with the whole thing written.
 ///

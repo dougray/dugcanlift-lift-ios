@@ -34,6 +34,8 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "6.29.0"
+  LiftKit:
+    path: ../dugcanlift-kit
 
 targets:
 
@@ -44,11 +46,14 @@ targets:
     sources:
       - path: Sources/App
       - path: Sources/Shared      # compiled into BOTH targets
-      - path: Sources/Reference   # app only — widgets never open SQLite
       - path: Resources
         buildPhase: resources
     dependencies:
       - package: GRDB
+      - package: LiftKit
+        product: LiftCore
+      - package: LiftKit
+        product: LiftReference
       - target: LiftWidgets
         embed: true
     settings:
@@ -107,6 +112,9 @@ targets:
     sources:
       - path: Sources/Widgets
       - path: Sources/Shared      # same models, second compilation
+    dependencies:
+      - package: LiftKit
+        product: LiftCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.widgets

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import LiftCore
 
 enum OutdoorActivityType: String, Codable, CaseIterable, Identifiable {
     case run, hike

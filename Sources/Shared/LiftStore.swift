@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import LiftCore
 
 /// Central SwiftData configuration.
 ///
@@ -126,27 +127,4 @@ enum LiftStore {
         context.autosaveEnabled = false
         return context
     }
-}
-
-/// Stable day bucketing for "today's totals" queries.
-///
-/// Storing a normalised string key alongside the real timestamp means a
-/// day-scoped fetch is an indexed string comparison instead of a date-range
-/// predicate, and — more importantly — a workout logged in Austin stays on the
-/// day it was logged even if the user opens the app in Tokyo.
-enum DayKey {
-    private static let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    static func make(from date: Date, timeZone: TimeZone = .current) -> String {
-        formatter.timeZone = timeZone
-        return formatter.string(from: date)
-    }
-
-    static var today: String { make(from: .now) }
 }

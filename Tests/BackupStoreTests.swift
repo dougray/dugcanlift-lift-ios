@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import LiftCore
 @testable import Lift
 
 /// `amountGrams` travels through the backup file's common `food[]` shape,

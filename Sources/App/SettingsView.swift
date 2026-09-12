@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import HealthKit
+import LiftCore
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context

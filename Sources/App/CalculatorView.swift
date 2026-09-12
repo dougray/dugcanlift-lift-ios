@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import LiftCore
 
 enum BiologicalSex: String, CaseIterable, Identifiable {
     case male = "Male"

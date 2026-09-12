@@ -1,5 +1,4 @@
 import Foundation
-import Compression
 import LiftCore
 
 /// Turns a stretch of this phone's log into one link, ready to email to a coach.
@@ -81,10 +80,10 @@ enum CoachShare {
             itemised: itemised ?? Settings.itemisedFood
         )
         let json = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        guard let packed = deflateRaw(json) else {
-            return coachURL + "#1u" + base64URL(json)
+        guard let packed = CompactEncoding.deflateRaw(json) else {
+            return coachURL + "#1u" + CompactEncoding.base64URL(json)
         }
-        return coachURL + "#1z" + base64URL(packed)
+        return coachURL + "#1z" + CompactEncoding.base64URL(packed)
     }
 
     static func linkIsRisky(_ link: String) -> Bool { link.count > riskyLinkLength }
@@ -315,34 +314,13 @@ enum CoachShare {
     }
 
     // MARK: - Encoding
-
-    /// Raw DEFLATE, no zlib wrapper. `COMPRESSION_ZLIB` is Apple's name for
-    /// RFC 1951, which is the same bytes as the browser's
-    /// CompressionStream('deflate-raw') and Android's Deflater(nowrap: true).
-    /// That equivalence is the only reason one decoder can read all three.
-    private static func deflateRaw(_ data: Data) -> Data? {
-        guard !data.isEmpty else { return nil }
-        let capacity = max(data.count, 128)
-        let destination = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
-        defer { destination.deallocate() }
-
-        let written = data.withUnsafeBytes { raw -> Int in
-            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return 0 }
-            return compression_encode_buffer(destination, capacity, base, data.count,
-                                             nil, COMPRESSION_ZLIB)
-        }
-        // Zero means it did not fit, which for a log this size means something
-        // is wrong. The caller falls back to sending it uncompressed.
-        guard written > 0 else { return nil }
-        return Data(bytes: destination, count: written)
-    }
-
-    private static func base64URL(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
+    //
+    // Raw DEFLATE plus base64url now come from `CompactEncoding` (LiftCore),
+    // not a private copy here — the encoder that actually produces the links
+    // a JavaScript app reads is this file, so it must go through the same
+    // plumbing `CompactEncoding`'s decoder-side callers rely on, or the
+    // "can never drift" guarantee in `CompactEncoding`'s doc comment is
+    // hollow.
 
     private static func escape(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;")

@@ -69,6 +69,42 @@ final class StandaloneFoodLogTests: XCTestCase {
         XCTAssertTrue(StandaloneFoodLog(defaults: defaults).entries.isEmpty)
     }
 
+    func testRemoveTakesOneOccurrencePerRequestNotEveryEqualEntry() throws {
+        // `LoggedFood` is a value type with no identity, so the same food at
+        // the same amount and the same second is two equal entries. Asking to
+        // remove one must not delete both -- that would destroy a log entry
+        // the user never exported.
+        let log = StandaloneFoodLog(defaults: defaults)
+        // Inside the retention window, not a fixed epoch: a hard-coded date
+        // ages past the 60-day cap and the entries vanish before `remove`
+        // is ever reached, leaving the test green against an empty log.
+        let duplicate = entry("Oats, rolled, dry", at: .now)
+        log.append(duplicate)
+        log.append(duplicate)
+        XCTAssertEqual(log.entries.count, 2)
+
+        // Remove a STORED entry, not the in-memory one: `Date` loses
+        // sub-second precision through the JSON round trip, so the object
+        // that went in never equals the one that comes back. That is how the
+        // only caller uses it -- `ExportFoodsView` captures `foodLog.entries`
+        // -- and `remove`'s doc comment says so.
+        let stored = try XCTUnwrap(log.entries.first)
+        log.remove([stored])
+        XCTAssertEqual(log.entries.count, 1)
+        XCTAssertEqual(log.entries.first, stored)
+    }
+
+    func testRemoveOfBothDuplicatesEmptiesThem() {
+        let log = StandaloneFoodLog(defaults: defaults)
+        let duplicate = entry("Oats, rolled, dry", at: .now)
+        log.append(duplicate)
+        log.append(duplicate)
+        XCTAssertEqual(log.entries.count, 2)
+
+        log.remove(log.entries)
+        XCTAssertTrue(log.entries.isEmpty)
+    }
+
     func testCorruptStoredDataReadsAsEmptyRatherThanCrashing() {
         defaults.set(Data([0x00, 0x01, 0x02]), forKey: "com.dugcanlift.lift.standaloneFoodLog")
         XCTAssertTrue(StandaloneFoodLog(defaults: defaults).entries.isEmpty)

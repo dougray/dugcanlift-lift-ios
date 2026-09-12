@@ -78,6 +78,14 @@ struct ExportFoodsView: View {
                         Button("Done — clear log", role: .destructive) {
                             confirmingClear = true
                         }
+                        // Hiding the navigation bar to give the code the whole
+                        // screen also took away the back chevron, leaving the
+                        // destructive clear as the only way off this screen.
+                        // On a screen whose entire job is not losing data,
+                        // making "get me out of here" mean "delete the log"
+                        // is precisely backwards -- a user whose camera won't
+                        // focus would have had to destroy the log to escape.
+                        Button("Not now") { dismiss() }
                     }
                     .tag(codes.count)
                 }

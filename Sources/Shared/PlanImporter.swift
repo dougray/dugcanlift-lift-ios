@@ -66,10 +66,13 @@ enum PlanImporter {
 
     /// SHA-256 over the exact JSON the payload decoded from is not available
     /// here (only the parsed struct is), so this hashes a canonical
-    /// re-encoding instead. `PlanPayload` and its children are all
-    /// `Encodable`-free by design (decode-only) — add `Encodable` conformance
-    /// via this local mirror rather than widening the wire-format structs'
-    /// purpose.
+    /// re-encoding instead.
+    ///
+    /// `.sortedKeys` is what makes it canonical, and it is load-bearing: the
+    /// payload types are `Codable` in `LiftCore` now, and a synthesised
+    /// `encode(to:)` does not promise the key order a hand-written one
+    /// produced. Sorting normalises that away, so a plan already imported
+    /// still hashes the same and is not re-imported as if it were new.
     static func hash(of payload: PlanPayload) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -239,44 +242,3 @@ private struct HashableMirror: Encodable {
     }
 }
 
-extension PlanRecipe: Encodable {
-    enum CodingKeys: String, CodingKey { case n, s, u, i, t }
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(n, forKey: .n); try c.encode(s, forKey: .s)
-        try c.encodeIfPresent(u, forKey: .u); try c.encodeIfPresent(i, forKey: .i)
-        try c.encodeIfPresent(t, forKey: .t)
-    }
-}
-extension PlanMeal: Encodable {
-    enum CodingKeys: String, CodingKey { case d, s, x, q }
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(d, forKey: .d); try c.encode(s, forKey: .s)
-        try c.encode(x, forKey: .x); try c.encode(q, forKey: .q)
-    }
-}
-extension PlanWorkout: Encodable {
-    enum CodingKeys: String, CodingKey { case n, e }
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(n, forKey: .n); try c.encode(e, forKey: .e)
-    }
-}
-extension PlanWorkoutExercise: Encodable {
-    enum CodingKeys: String, CodingKey { case n, q, c, s }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(n, forKey: .n)
-        try container.encodeIfPresent(q, forKey: .q)
-        try container.encodeIfPresent(c, forKey: .c)
-        try container.encode(s, forKey: .s)
-    }
-}
-extension PlanSession: Encodable {
-    enum CodingKeys: String, CodingKey { case d, x }
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(d, forKey: .d); try c.encode(x, forKey: .x)
-    }
-}

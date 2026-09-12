@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LiftCore
 
 /// Goals live in AppStorage rather than SwiftData — they're single-valued
 /// preferences, not history, and the widget can read them via the shared suite.

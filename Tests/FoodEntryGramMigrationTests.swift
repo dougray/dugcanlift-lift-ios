@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import LiftCore
 @testable import Lift
 
 /// `FoodEntryGramMigration` is best-effort by design: a row with a known

@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import SwiftData
+import LiftCore
 
 /// Realistic COOK data for screenshots and manual testing.
 ///

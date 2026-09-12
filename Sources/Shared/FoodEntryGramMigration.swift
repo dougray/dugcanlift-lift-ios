@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import LiftCore
 
 /// One-time (idempotent) backfill of `FoodEntry.amountGrams` for rows
 /// logged before that field existed. Best-effort per the design spec: a row

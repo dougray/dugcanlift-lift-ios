@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import LiftCore
 
 /// Extracted from `FoodView`'s original `recent` computed property so the
 /// same "recently logged foods" logic can be reused outside a View — the

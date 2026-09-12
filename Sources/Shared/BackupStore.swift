@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import LiftCore
 
 /// Reads and writes the backup file the user saves from Settings.
 ///

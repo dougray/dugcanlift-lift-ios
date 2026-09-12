@@ -1,5 +1,7 @@
 import Foundation
 import SwiftData
+import LiftCore
+import LiftReference
 
 /// Resolves an arbitrary `foodRefID` (whatever its source — a reference-
 /// database food or a recipe) into a name and gram-scaled nutrition.
@@ -12,11 +14,11 @@ import SwiftData
 /// Lives in `Sources/App`, not `Sources/Shared`, even though everything
 /// else touched by the watch-sync feature sits in `Shared`: this type
 /// depends on `ReferenceDatabase`, which is GRDB-backed and app-target
-/// only (see `Sources/Reference/ReferenceDatabase.swift` and the
-/// `Sources/Reference` comment in the project's `CLAUDE.md`). `Shared` is
-/// compiled into the widget extension too, which links neither GRDB nor
-/// `Sources/Reference`, so putting this file there would break
-/// `LiftWidgets` with an undefined `ReferenceDatabase` symbol.
+/// only (see `dugcanlift-kit/Sources/LiftReference/ReferenceDatabase.swift`
+/// and this project's `CLAUDE.md`, "Shared code lives in LiftKit"). `Shared`
+/// is compiled into the widget extension too, which links neither GRDB nor
+/// `LiftReference`, so putting this file there would break `LiftWidgets`
+/// with an undefined `ReferenceDatabase` symbol.
 enum FoodRefResolver {
     /// `@MainActor`, not `nonisolated` (the SE-0338 default for a free
     /// static function): the `recipe:` branch below calls

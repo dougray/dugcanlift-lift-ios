@@ -1,5 +1,6 @@
 import XCTest
 import Compression
+import LiftCore
 @testable import Lift
 
 /// Builds a valid `1z<payload>` / `1u<payload>` fragment the way Coach's web

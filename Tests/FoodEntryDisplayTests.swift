@@ -1,4 +1,5 @@
 import XCTest
+import LiftCore
 @testable import Lift
 
 /// `FoodEntryDisplay.amountText` is the one behavioral branch the whole

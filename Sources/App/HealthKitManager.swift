@@ -2,6 +2,7 @@ import CoreLocation
 import Foundation
 import HealthKit
 import SwiftData
+import LiftCore
 
 /// HealthKit integration.
 ///

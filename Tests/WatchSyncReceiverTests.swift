@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import LiftCore
 @testable import Lift
 
 /// `WatchSyncReceiver` is the phone's landing point for every

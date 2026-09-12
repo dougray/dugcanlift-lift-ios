@@ -12,6 +12,17 @@ import Foundation
 ///   [name, categoryIndex, kcal, protein, fat, carbs, fibre]
 public final class WatchFoodLibrary {
 
+    /// A single parsed copy of the bundled library, shared by every call
+    /// site. `FoodSearchView` used to construct its own `WatchFoodLibrary()`
+    /// as a stored `let`, but `NavigationLink(_:destination:)` builds its
+    /// destination view eagerly, so that `let` re-ran on every enclosing
+    /// `StartWorkoutView.body` evaluation -- every Focus-picker change, every
+    /// `@Published` change on `WorkoutSessionModel` -- re-parsing the 634 KB
+    /// library each time (measured: 40.8 ms and 7,793 allocations per
+    /// construction, on the main thread, discarded immediately). Parsing
+    /// once, lazily, on first access removes that cost entirely.
+    public static let shared = WatchFoodLibrary()
+
     private let foods: [WatchFood]
 
     // `public init(bundle: Bundle = .module)` as specified does not compile:

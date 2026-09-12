@@ -17,7 +17,12 @@ struct RecentFoodsListView: View {
                     }
                 }
             } else {
-                Text("Log a food on your phone to see it here.")
+                // Not just "log it on your phone" -- that's a dead end for
+                // the exact user the bundled library (`FoodSearchView`,
+                // "All Foods") was added for: someone with no paired iPhone
+                // at all. Point at the row that actually works for them,
+                // while still mentioning the phone for those who have one.
+                Text("No recent foods from your phone yet. Try All Foods to search the built-in library.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding()

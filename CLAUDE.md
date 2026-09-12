@@ -61,3 +61,21 @@ that changes widget content.
   `UNUserNotificationCenter`.
 - Everything must work fully offline, including food and exercise search.
 - Widgets cannot open SQLite. They render from SwiftData snapshot fields only.
+
+## Shared code lives in LiftKit
+
+Domain models, wire codecs, the theme and day keys live in
+`dugcanlift-kit`, not here. Two products, and the split matters:
+
+- **`LiftCore`** — no SQLite dependency, so LIFT's widget extension can
+  link it.
+- **`LiftReference`** — GRDB and the 2.3 MB of reference databases. Apps
+  only. Adding this to a widget target would hand it a SQLite dependency
+  and data it never opens.
+
+A change there reaches two shipped apps. `@Model` types are shared, so a
+property change is a schema change for both — and `lift-ios`'s
+`LiftSchemaVersions.swift` explains what that costs.
+
+Day keys are **local**, and day arithmetic goes through `Calendar`. Never
+`now - days * 86400`: it repeats a day across a DST fall-back.

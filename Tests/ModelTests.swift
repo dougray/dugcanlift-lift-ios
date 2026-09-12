@@ -285,6 +285,15 @@ final class MealForHourTests: XCTestCase {
 /// shopping list is worse than a line the reader can see and check.
 final class IngredientParserTests: XCTestCase {
 
+    func testTheParserComesFromThePackageNotThisTarget() {
+        // Deleting this app's own copy is the point of the 1.1.0 move: the
+        // two iOS apps and the two web clients must not drift. Every other
+        // case here still compiles if someone reintroduces a local
+        // IngredientParser -- the fully-qualified name below does not.
+        XCTAssertEqual(LiftCore.IngredientParser.countUnit.unicodeScalars.first?.value, 0)
+        XCTAssertTrue(LiftCore.IngredientParser.countUnit.hasSuffix("count"))
+    }
+
     func testParsesQuantityUnitAndItem() {
         let parsed = IngredientParser.parse("2 tbsp olive oil", sortOrder: 0)
         XCTAssertEqual(parsed.qty, 2)

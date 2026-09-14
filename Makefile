@@ -78,24 +78,31 @@ watch: watch-build ## Build and install on a real Apple Watch
 	@echo "Installing on $(WATCH)..."
 	@xcrun devicectl device install app --device $(WATCH) "$(WATCH_APP)" || { \
 		echo ""; \
-		echo "Install failed. In order of likelihood:"; \
+		echo "Install failed. Check the PAIRED IPHONE first, not the watch:"; \
 		echo ""; \
-		echo "  1. Developer Mode is off ON THE WATCH. Settings > Privacy &"; \
-		echo "     Security > Developer Mode, then restart it when asked. A"; \
-		echo "     watch only ever paired to a phone will not have this on, and"; \
-		echo "     nothing on the Mac can turn it on."; \
-		echo "  2. The watch is locked, off the wrist, or not on this Mac's"; \
-		echo "     Wi-Fi. Watch installs go over the network, not a cable."; \
-		echo "  3. It failed preparation earlier and will not retry on its own."; \
-		echo "     Xcode > Window > Devices and Simulators, select the watch,"; \
-		echo "     let it finish. That step has no command-line equivalent, and"; \
-		echo "     it is where the real error message appears."; \
+		echo "    xcrun devicectl list devices"; \
 		echo ""; \
-		echo "Symptoms that mean this rather than a build problem: devicectl"; \
-		echo "says 'The device rejected the connection request', or xcodebuild"; \
-		echo "says 'may need to be unlocked to recover from previously reported"; \
-		echo "preparation errors'. The build above already succeeded — nothing"; \
-		echo "needs rebuilding once the watch is reachable."; \
+		echo "The watch has no independent link to this Mac -- deployment rides"; \
+		echo "the phone's connection. When the phone drops, the watch goes with"; \
+		echo "it, and every error still describes the watch. The whole diagnosis"; \
+		echo "is one device to the left of where the message points."; \
+		echo ""; \
+		echo "  * iPhone must read 'connected'. If it reads 'unavailable', nothing"; \
+		echo "    done to the watch will help. Plug it in, unlock it, trust this"; \
+		echo "    Mac. 'xcrun xctrace list devices' shows both devices under"; \
+		echo "    'Devices Offline' when the link is down, which devicectl does"; \
+		echo "    not make obvious."; \
+		echo ""; \
+		echo "  * A reachable watch also reads 'connected'. 'available (paired)'"; \
+		echo "    means paired to the phone but not reachable from here."; \
+		echo ""; \
+		echo "  * Still stuck: Xcode > Window > Devices and Simulators shows the"; \
+		echo "    real error, which devicectl never does. If the phone is absent"; \
+		echo "    there too, CoreDevice is stale and a Mac restart clears it."; \
+		echo ""; \
+		echo "  * Developer Mode on the watch matters but is rarely the cause."; \
+		echo ""; \
+		echo "The build above already succeeded -- nothing needs rebuilding."; \
 		exit 1; }
 
 clean: ## Remove build artifacts and the generated project

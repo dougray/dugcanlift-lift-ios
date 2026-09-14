@@ -36,7 +36,10 @@ struct LibraryFoodAmountView: View {
     var body: some View {
         List {
             Section {
-                Stepper(value: $grams, in: 5...1000, step: 5) {
+                // 2000 g, the same ceiling the recents screen has always used —
+                // see `AmountLimits`. This stopped at 1000 g, so a 1.5 kg cook-up
+                // was loggable only if the food happened to come from the phone.
+                Stepper(value: $grams, in: AmountLimits.minGrams...AmountLimits.maxGrams, step: 5) {
                     Text("\(Int(grams)) g")
                 }
             }

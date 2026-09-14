@@ -14,7 +14,10 @@ struct FoodAmountEntryView: View {
 
     private var unit: ServingUnit { session.servingUnit }
     private var step: Double { unit == .grams ? 5 : 0.5 }
-    private var maxAmount: Double { unit == .grams ? 2000 : 70 }
+    /// Derived from the one gram ceiling rather than a rounded ounce literal:
+    /// `70` was worth 1984.5 g, so a portion set near the cap in grams lost
+    /// ~15 g on the way into ounces. See `AmountLimits`.
+    private var maxAmount: Double { AmountLimits.maximum(in: unit) }
 
     var body: some View {
         List {
@@ -26,9 +29,10 @@ struct FoodAmountEntryView: View {
                 .digitalCrownRotation($amount, from: 0, through: maxAmount, by: step)
 
                 Button(unit == .grams ? "Switch to oz" : "Switch to g") {
-                    // `2000 g` and `70 oz` aren't exact equivalents (2000 g is
-                    // ~70.55 oz) — clamp so a value near either cap can't land
-                    // outside the Stepper/crown range for the new unit.
+                    // Both bounds now convert from the same gram figures, so the
+                    // two units describe the same range rather than two ranges
+                    // ~15 g apart. The clamp stays: conversion is exact, but a
+                    // value seeded from the phone still has to land inside it.
                     let grams = unit.toGrams(amount)
                     session.servingUnit = unit == .grams ? .ounces : .grams
                     amount = min(session.servingUnit.fromGrams(grams), maxAmount)

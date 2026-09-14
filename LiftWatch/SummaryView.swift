@@ -25,7 +25,7 @@ struct SummaryView: View {
                 if !session.outbox.isEmpty {
                     Text("\(session.outbox.pending.count) pending")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DclTheme.muted)
                 }
             }
 

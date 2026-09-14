@@ -13,14 +13,14 @@ struct RestTimerView: View {
         VStack(spacing: 8) {
             Text("REST")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DclTheme.muted)
 
             Text(RestTimer.format(session.restTimer.remaining(at: now) ?? session.restTimer.interval))
                 .font(.system(size: 44, weight: .semibold, design: .rounded))
                 .monospacedDigit()
 
             ProgressView(value: session.restTimer.progress(at: now))
-                .tint(.orange)
+                .tint(DclTheme.accent)
 
             if session.restTimer.isRunning {
                 Button("Skip") { session.restTimer.stop() }

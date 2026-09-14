@@ -25,14 +25,14 @@ struct OutdoorActivityView: View {
             if recorder.authorizationStatus == .denied || recorder.authorizationStatus == .restricted {
                 Section {
                     Text("Location access is off — grant it in Settings to record a route.")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DclTheme.accent)
                 }
             }
 
             if library.lastExportError != nil {
                 Section {
                     Text("Couldn't save to Health — will keep local data but won't retry automatically.")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DclTheme.accent)
                 }
             }
 

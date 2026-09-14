@@ -148,8 +148,16 @@ targets:
     platform: iOS
     sources:
       - path: Tests
+      # splits.json is checked against the shipped exercise database, so the
+      # test bundle needs the same copy the app ships rather than a fixture.
+      - path: Resources
+        buildPhase: resources
     dependencies:
       - target: Lift
+      - package: LiftKit
+        product: LiftCore
+      - package: LiftKit
+        product: LiftReference
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.tests

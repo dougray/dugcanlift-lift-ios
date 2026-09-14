@@ -9,6 +9,13 @@ struct RoutinesView: View {
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
     @State private var isCreatingRoutine = false
 
+    /// Six routines off a bundled file, for someone who hasn't written any.
+    private let starters = StarterSplits.bundled()
+
+    private var unclaimedStarters: [StarterSplit] {
+        starters.filter { !StarterSplits.isAlreadySaved($0, in: routines) }
+    }
+
     private var groupedByFolder: [(folder: String, routines: [Routine])] {
         Dictionary(grouping: routines, by: \.folder)
             .sorted { $0.key < $1.key }
@@ -29,6 +36,22 @@ struct RoutinesView: View {
                         }
                     }
                 }
+
+                if !unclaimedStarters.isEmpty {
+                    Section {
+                        ForEach(unclaimedStarters) { split in
+                            StarterSplitRow(split: split) {
+                                StarterSplits.insert(split, into: context)
+                            }
+                        }
+                    } header: {
+                        Text("Ready-made")
+                    } footer: {
+                        Text(routines.isEmpty
+                             ? "Splits to start from, until you have written your own."
+                             : "Splits you have not added yet.")
+                    }
+                }
             }
             .navigationTitle("Routines")
             .toolbar {
@@ -40,7 +63,10 @@ struct RoutinesView: View {
                 NewRoutineView()
             }
             .overlay {
-                if routines.isEmpty {
+                // Only when there is genuinely nothing to look at. With
+                // starters on screen the list is not empty, and an overlay
+                // saying otherwise would cover them.
+                if routines.isEmpty && unclaimedStarters.isEmpty {
                     ContentUnavailableView(
                         "No Routines Yet",
                         systemImage: "list.bullet.rectangle",
@@ -126,5 +152,32 @@ private struct NewRoutineView: View {
         context.insert(routine)
         try? context.save()
         dismiss()
+    }
+}
+
+/// A ready-made split, before it is yours.
+///
+/// Deliberately not a `RoutineRow`: there is no Start and no swipe-to-delete,
+/// because neither means anything yet. Adding copies it into the store, where
+/// the real row takes over — so there is exactly one place that starts a
+/// workout and one that deletes one.
+private struct StarterSplitRow: View {
+    let split: StarterSplit
+    let onAdd: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(split.name).font(.headline)
+            Text("\(split.exercises.count) exercises · \(split.setCount) sets")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(split.preview)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Button("Add to my routines", action: onAdd)
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.borderless)
+        }
     }
 }

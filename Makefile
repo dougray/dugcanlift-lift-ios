@@ -78,7 +78,8 @@ watch: watch-build ## Build and install on a real Apple Watch
 	@echo "Installing on $(WATCH)..."
 	@xcrun devicectl device install app --device $(WATCH) "$(WATCH_APP)" || { \
 		echo ""; \
-		echo "Install failed. Check the PAIRED IPHONE first, not the watch:"; \
+		echo "Install failed. Try it again first -- then check the PAIRED IPHONE,"; \
+		echo "not the watch:"; \
 		echo ""; \
 		echo "    xcrun devicectl list devices"; \
 		echo ""; \
@@ -87,14 +88,13 @@ watch: watch-build ## Build and install on a real Apple Watch
 		echo "it, and every error still describes the watch. The whole diagnosis"; \
 		echo "is one device to the left of where the message points."; \
 		echo ""; \
-		echo "  * iPhone must read 'connected'. If it reads 'unavailable', nothing"; \
-		echo "    done to the watch will help. Plug it in, unlock it, trust this"; \
-		echo "    Mac. 'xcrun xctrace list devices' shows both devices under"; \
-		echo "    'Devices Offline' when the link is down, which devicectl does"; \
-		echo "    not make obvious."; \
+		echo "  * Reconnect the iPhone: plug it in, unlock it, trust this Mac."; \
+		echo "    A watch install rides that link, so a phone xctrace calls"; \
+		echo "    offline takes the watch with it."; \
 		echo ""; \
-		echo "  * A reachable watch also reads 'connected'. 'available (paired)'"; \
-		echo "    means paired to the phone but not reachable from here."; \
+		echo "  * Do not trust the State column. 'available (paired)' does NOT"; \
+		echo "    mean unreachable -- installs succeed in that state routinely."; \
+		echo "    'xcrun xctrace list devices' is the reliable view."; \
 		echo ""; \
 		echo "  * Still stuck: Xcode > Window > Devices and Simulators shows the"; \
 		echo "    real error, which devicectl never does. If the phone is absent"; \

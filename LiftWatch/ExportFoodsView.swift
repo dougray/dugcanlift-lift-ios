@@ -36,7 +36,7 @@ struct ExportFoodsView: View {
         Group {
             if codes.isEmpty {
                 Text(emptyStateMessage)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DclTheme.muted)
                     .multilineTextAlignment(.center)
                     .padding()
             } else {
@@ -59,7 +59,7 @@ struct ExportFoodsView: View {
                             if codes.count > 1 {
                                 Text("\(position + 1) of \(codes.count)")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(DclTheme.muted)
                                     .padding(.bottom, 2)
                             }
                         }

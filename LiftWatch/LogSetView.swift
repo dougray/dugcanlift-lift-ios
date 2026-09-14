@@ -19,7 +19,7 @@ struct LogSetView: View {
             if let previous = exercise?.sets.last {
                 Section("Previous") {
                     Text(previous.display(unit: session.unit))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DclTheme.muted)
                 }
             }
 
@@ -74,7 +74,7 @@ struct LabeledValue: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DclTheme.muted)
             Text(value)
                 .font(.title3)
         }

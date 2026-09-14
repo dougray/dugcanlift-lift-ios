@@ -23,7 +23,7 @@ struct RecentFoodsListView: View {
                 // at all. Point at the row that actually works for them,
                 // while still mentioning the phone for those who have one.
                 Text("No recent foods from your phone yet. Try All Foods to search the built-in library.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DclTheme.muted)
                     .multilineTextAlignment(.center)
                     .padding()
             }

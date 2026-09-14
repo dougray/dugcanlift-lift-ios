@@ -29,6 +29,10 @@ struct LiftWatchApp: App {
                 .environmentObject(session)
                 .environmentObject(outdoorRecorder)
                 .environmentObject(outdoorLibrary)
+                // Applied once at the root rather than per screen: every view
+                // below inherits the palette, so a new screen is themed by
+                // default instead of by remembering to be.
+                .liftWatchTheme()
         }
     }
 }

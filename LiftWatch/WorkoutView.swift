@@ -46,11 +46,11 @@ struct ExerciseRow: View {
             if let last = exercise.sets.last {
                 Text(last.display(unit: unit))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DclTheme.muted)
             } else {
                 Text("No sets yet")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DclTheme.muted)
             }
         }
     }

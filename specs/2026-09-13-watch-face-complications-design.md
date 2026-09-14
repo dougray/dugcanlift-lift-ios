@@ -180,10 +180,13 @@ spec does not invent one.
 - Each timeline carries a backstop entry at the next **local** midnight, so
   the face rolls over to a new day even if the app is never opened. This
   mirrors the existing iOS `TodayWidget`.
-- Steps refresh on a coarse periodic cadence: entries every 30 minutes
-  across the next 8 hours, rebuilt whenever the app runs. The lag is a
-  property of the platform's budget, not a bug to fix later. Tune only
-  against a measured budget exhaustion on device, never by guessing.
+- Steps refresh on a coarse periodic cadence: **one** entry holding the
+  current count, with the timeline asking to be refreshed again in 30
+  minutes. Not a run of pre-built future entries — a step count cannot be
+  predicted, so entries stamped ahead of time would render a stale number as
+  though it were current. The lag is a property of the platform's budget, not
+  a bug to fix later. Tune the interval only against measured budget
+  exhaustion on device, never by guessing.
 
 ## States
 

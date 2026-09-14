@@ -13,11 +13,17 @@ DEST        := platform=iOS Simulator,name=$(SIM)
 DEVICE_DERIVED := .build/DerivedData-device
 DEVICE_APP     := $(DEVICE_DERIVED)/Build/Products/Debug-iphoneos/Lift.app
 
-# The first connected iPhone or iPad. Override for a specific one:
+# The first iPhone or iPad devicectl knows about. Override for a specific one:
 #   make device DEVICE=901D197D-95D6-5FA6-B188-6C827D7B0109
-# A paired-but-not-connected device (a watch, or a phone off Wi-Fi) is skipped:
-# its State reads "available (paired)" rather than "connected".
-DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ connected / && /iPhone|iPad/ {print $$3; exit}')
+#
+# Deliberately NOT filtered on State. This used to require "connected", on the
+# assumption that "available (paired)" meant unreachable. It does not: installs
+# succeed against a device in that state routinely, and the stricter filter
+# refused to even try -- so every install had to pass DEVICE= by hand, which
+# defeats the target. A device that really is unreachable fails at the install
+# with a clear CoreDevice error, which is better than a build that declines to
+# start.
+DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/iPhone|iPad/ {print $$3; exit}')
 
 # Signing on a free Apple Personal Team cannot include Associated Domains, and
 # the app declares it for Universal Links. Building for a device with the
@@ -77,7 +83,7 @@ devices: ## List connected iPhones and iPads
 	@xcrun devicectl list devices
 
 device-build: project ## Build for a connected device (no install)
-	@test -n "$(DEVICE)" || { echo "No connected iPhone or iPad. Plug one in, unlock it, and trust this Mac. 'make devices' lists what is visible."; exit 1; }
+	@test -n "$(DEVICE)" || { echo "No iPhone or iPad visible at all. Plug one in, unlock it, and trust this Mac. 'make devices' lists what devicectl can see."; exit 1; }
 	@set -o pipefail && xcodebuild \
 		-project Lift.xcodeproj \
 		-scheme $(SCHEME) \

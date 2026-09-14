@@ -256,7 +256,7 @@ final class SchemaMigrationTests: XCTestCase {
     func testCurrentSchemaIsTheNewestVersion() {
         XCTAssertEqual(
             LiftStore.schema.entities.count,
-            LiftSchemaV5.models.count,
+            LiftSchemaV6.models.count,
             "LiftStore.schema must track the newest VersionedSchema"
         )
     }

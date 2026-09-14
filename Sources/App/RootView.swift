@@ -52,14 +52,23 @@ struct RootView: View {
                 Button {
                     withAnimation(.easeOut(duration: 0.18)) { tab = item }
                 } label: {
-                    Text(item.rawValue)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .foregroundStyle(tab == item ? Theme.textPrimary : Theme.textSecondary)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(tab == item ? Theme.accent : Color.clear)
+                    // The browser build underlines the selected tab and turns
+                    // its text accent; it does not fill the tab. A solid accent
+                    // rectangle reads as a button, and was the most visible
+                    // difference between this app and the web.
+                    VStack(spacing: 0) {
+                        Text(item.rawValue)
+                            .font(.system(size: 13, weight: .semibold))
+                            .tracking(1.0)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .foregroundStyle(tab == item ? Theme.accent : Theme.textSecondary)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                        Rectangle()
+                            .fill(tab == item ? Theme.accent : Color.clear)
+                            .frame(height: 2)
+                    }
                 }
                 .buttonStyle(.plain)
             }

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch supersedes the run in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test on the iOS Simulator
+    # GitHub's macOS runners, not a machine of ours; free on a public repo.
+    # macos-26 ships Xcode 26.6, the same version the Makefile is used with
+    # locally. No signing identity exists here, which is fine: a simulator
+    # build needs none, and the free Personal Team could not sign for a
+    # device from CI anyway.
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - name: Install xcodegen and xcbeautify
+        run: brew install xcodegen xcbeautify
+
+      # Regenerates the .xcodeproj from project.yml, then xcodebuild test on
+      # the simulator named in the Makefile.
+      - name: Unit tests
+        run: make test
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lift-xcresult
+          path: .build/DerivedData/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

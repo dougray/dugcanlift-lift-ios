@@ -75,6 +75,15 @@ targets:
     info:
       path: Config/Lift-Info.plist
       properties:
+        # An empty UILaunchScreen is what tells iOS this app is built for
+        # modern screens. Without the key, iOS runs it in compatibility mode
+        # -- letterboxed, with black bands above and below, using neither the
+        # full height of the display nor the safe areas around the notch.
+        #
+        # INFOPLIST_KEY_UILaunchScreen_Generation: YES was already set in
+        # `settings` and did nothing: that build setting only applies when
+        # Xcode generates the Info.plist, and this target supplies its own.
+        UILaunchScreen: {}
         CFBundleDisplayName: Lift
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

@@ -90,10 +90,11 @@ struct HomeView: View {
                             Text("Work out your daily calories and macros to start tracking against them.")
                                 .font(Theme.body)
                                 .foregroundStyle(Theme.textSecondary)
-                            Button("Set my goal") { showingCalculator = true }
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(Theme.accent)
-                                .padding(.top, 4)
+                            // A filled pill, as the browser build renders a
+                            // primary action. Bare accent text reads as a link
+                            // and is easy to miss next to the web's button.
+                            LiftButton("Set my goal") { showingCalculator = true }
+                                .padding(.top, 8)
                         }
                     }
                 }

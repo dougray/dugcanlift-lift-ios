@@ -214,7 +214,8 @@ private struct DayEditor: View {
 
                 if let day {
                     ForEach(day.orderedExercises) { exercise in
-                        ExerciseBlock(exercise: exercise, unit: unit)
+                        ExerciseBlock(exercise: exercise, unit: unit,
+                                      focus: day.focus)
                         Divider().overlay(Theme.hairline)
                     }
                 }
@@ -277,6 +278,7 @@ private struct ExerciseBlock: View {
     @Environment(\.modelContext) private var context
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
+    let focus: TrainingFocus
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -291,7 +293,7 @@ private struct ExerciseBlock: View {
             }
 
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
-                SetRow(index: index + 1, set: set, unit: unit) {
+                SetRow(index: index + 1, set: set, unit: unit, focus: focus) {
                     delete(set)
                 }
             }
@@ -303,11 +305,16 @@ private struct ExerciseBlock: View {
     }
 
     private func addSet() {
+        // The set before is the best guess there is; the focus only has to
+        // answer for the first one, where 5 and 10 are different training
+        // decisions. Time and distance are never carried forward — a second
+        // interval is rarely the same length as the first, and a wrong number
+        // that looks deliberate is worse than an empty field.
         let previous = exercise.orderedSets.last
         exercise.sets.append(SetEntry(
             orderIndex: exercise.sets.count,
             weightKg: previous?.weightKg ?? 0,
-            reps: previous?.reps ?? 0,
+            reps: previous?.reps ?? focus.defaultReps ?? 0,
             rpe: previous?.rpe
         ))
         save()
@@ -336,6 +343,7 @@ private struct SetRow: View {
     let index: Int
     @Bindable var set: SetEntry
     let unit: WeightUnit
+    let focus: TrainingFocus
     let onDelete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -382,30 +390,78 @@ private struct SetRow: View {
         }
     }
 
+    /// Only the fields the focus asks for. Nothing already stored is dropped:
+    /// a set logged under Hyrox keeps its distance when the day is switched to
+    /// Bodybuilding, the editor just stops offering it, and `display` still
+    /// shows it.
     private var editor: some View {
-        HStack(spacing: 8) {
-            field(unit.abbreviation, value: weightBinding, width: 78, decimal: true)
-            Text("x").foregroundStyle(Theme.textSecondary)
-            field("reps", value: Binding(
-                get: { Double(set.reps) },
-                set: { set.reps = Int($0); save() }
-            ), width: 62, decimal: false)
-            Text("@").foregroundStyle(Theme.textSecondary)
-            field("RPE", value: Binding(
-                get: { set.rpe ?? 0 },
-                set: { set.rpe = $0 == 0 ? nil : $0; save() }
-            ), width: 62, decimal: true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if focus.showsWeight {
+                    field(unit.abbreviation, value: weightBinding, width: 78, decimal: true)
+                }
+                if focus.showsWeight && focus.showsReps {
+                    Text("x").foregroundStyle(Theme.textSecondary)
+                }
+                if focus.showsReps {
+                    field("reps", value: Binding(
+                        get: { Double(set.reps) },
+                        set: { set.reps = Int($0); save() }
+                    ), width: 62, decimal: false)
+                }
+                if focus.showsRPE {
+                    Text("@").foregroundStyle(Theme.textSecondary)
+                    field("RPE", value: Binding(
+                        get: { set.rpe ?? 0 },
+                        set: { set.rpe = $0 == 0 ? nil : $0; save() }
+                    ), width: 62, decimal: true)
+                }
 
-            Spacer()
+                Spacer()
 
-            Button(set.isWarmup ? "Working" : "Warmup") {
-                set.isWarmup.toggle()
-                save()
+                Button(set.isWarmup ? "Working" : "Warmup") {
+                    set.isWarmup.toggle()
+                    save()
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
             }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Theme.textSecondary)
+
+            if focus.showsTime || focus.showsDistance {
+                HStack(spacing: 8) {
+                    if focus.showsTime {
+                        TextField("mm:ss", text: durationBinding)
+                            .keyboardType(.numbersAndPunctuation)
+                            .multilineTextAlignment(.center)
+                            .font(.system(size: 15))
+                            .foregroundStyle(Theme.textPrimary)
+                            .frame(width: 78)
+                            .padding(.vertical, 7)
+                            .background {
+                                RoundedRectangle(cornerRadius: 7).stroke(Theme.hairline, lineWidth: 1)
+                            }
+                    }
+                    if focus.showsDistance {
+                        field("metres", value: Binding(
+                            get: { set.distanceMeters ?? 0 },
+                            set: { set.distanceMeters = $0 == 0 ? nil : $0; save() }
+                        ), width: 86, decimal: true)
+                    }
+                    Spacer()
+                }
+            }
         }
         .padding(.leading, 32)
+    }
+
+    /// Text rather than a number, because "1:30" is how a ninety-second
+    /// interval is written. An unparseable string clears the field instead of
+    /// storing a zero — a set that was never timed is not a zero-second set.
+    private var durationBinding: Binding<String> {
+        Binding(
+            get: { set.durationSec.map { SetMetrics.clock($0) } ?? "" },
+            set: { set.durationSec = SetMetrics.parseDuration($0); save() }
+        )
     }
 
     private var weightBinding: Binding<Double> {

@@ -16,12 +16,16 @@
 
 ```sh
 cd apple
-xcodegen generate                      # regenerate LiftWatch.xcodeproj after editing project.yml
-swift test --package-path LiftKit      # domain logic, no simulator needed
-
-xcodebuild -project LiftWatch.xcodeproj -scheme LiftWatch \
-  -destination 'generic/platform=watchOS' build          # real hardware, no signing
+make help           # every target
+make project        # regenerate LiftWatch.xcodeproj after editing project.yml
+make test           # LiftKit domain logic, no simulator needed
+make run            # build, install and launch on the watch simulator
+make watch          # build and install on a real paired Apple Watch
+make doctor         # check tooling, simulator and watch in one line each
 ```
+
+The product is `LIFT.app`, not `LiftWatch.app` — the scheme name and the bundle
+name differ, which is worth knowing before hand-writing an install path.
 
 The app is built as `WKWatchOnly` (no bundled iPhone companion in this repo —
 LIFT's iPhone app lives in the separate `lift-ios` repository). It still

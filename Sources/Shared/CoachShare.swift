@@ -206,14 +206,21 @@ enum CoachShare {
 
     /// `[weight, reps, rpe, seconds, metres, flags]` with trailing blanks
     /// dropped, so an ordinary set costs eleven characters instead of sixty.
-    /// iOS records no time or distance, so those two are always null here —
-    /// the positions stay because the Android app fills them.
-    private static func setTuple(_ set: SetEntry) -> [Any] {
+    ///
+    /// Positions 4 and 5 were hard-coded null while this app had no way to
+    /// record a time or a distance. It has since schema V6, so they carry the
+    /// real values — otherwise a coach would silently lose every interval and
+    /// sled push an iPhone client logged, while seeing the Android ones.
+    /// Internal rather than private so a test can assert the tuple directly;
+    /// the link it ends up in is deflated, and round-tripping that would test
+    /// the codec rather than this.
+    static func setTuple(_ set: SetEntry) -> [Any] {
         let weight = set.weightKg > 0 ? round(set.weightKg * lbPerKg * 10) / 10 : nil
         let flags = set.isWarmup ? 1 : 0
 
         var values: [Any?] = [
-            weight, set.reps > 0 ? set.reps : nil, set.rpe, nil, nil, flags,
+            weight, set.reps > 0 ? set.reps : nil, set.rpe,
+            set.durationSec, set.distanceMeters, flags,
         ]
         while let last = values.last, last == nil || (last as? Int) == 0 {
             values.removeLast()

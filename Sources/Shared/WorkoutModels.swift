@@ -365,12 +365,24 @@ final class SetEntry {
     func display(unit: WeightUnit) -> String {
         var parts: [String] = []
 
-        if weightKg > 0 || reps > 0 {
-            let weight = unit.fromKilograms(weightKg)
-            let weightText = weight == weight.rounded()
-                ? String(Int(weight))
-                : String(format: "%.1f", weight)
+        // Weight and reps only pair up when there is a weight. A set with
+        // reps and no load reads "6 reps", not "0 x 6" — a zero nobody
+        // entered is worse than no number at all, and every set in a
+        // ready-made split arrives exactly this way.
+        //
+        // Android distinguishes these because its weight is nullable; here 0
+        // is the absence, so the branch is on the value rather than on nil.
+        let weight = unit.fromKilograms(weightKg)
+        let weightText = weight == weight.rounded()
+            ? String(Int(weight))
+            : String(format: "%.1f", weight)
+
+        if weightKg > 0 && reps > 0 {
             parts.append("\(weightText) x \(reps)")
+        } else if weightKg > 0 {
+            parts.append("\(weightText) \(unit.abbreviation)")
+        } else if reps > 0 {
+            parts.append("\(reps) reps")
         }
         if let rpe {
             let rpeText = rpe == rpe.rounded() ? String(Int(rpe)) : String(format: "%.1f", rpe)

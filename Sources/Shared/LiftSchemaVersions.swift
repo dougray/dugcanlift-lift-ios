@@ -183,6 +183,103 @@ enum LiftPreGramServingShapes {
     }
 }
 
+// MARK: - Frozen pre-V6 shapes of WorkoutDay / ExerciseEntry / SetEntry
+//
+// V6 adds `durationSec` and `distanceMeters` to the live `SetEntry` — a set
+// can now be 90 seconds or 400 metres, not only a weight for reps, which is
+// what CrossFit, Hyrox and endurance focuses need in order to record anything
+// at all.
+//
+// Same drift problem this file's V5 note describes: V1-V5 all listed the live
+// `SetEntry` by `.self`, so the moment those two properties land, V5's
+// declared shape silently becomes V6's and SwiftData refuses to open any
+// store — `Duplicate version checksums detected`. These frozen copies pin
+// what V1-V5 actually shipped as.
+//
+// All three classes are frozen together, not just `SetEntry`. The freeze has
+// to close over the relationship graph: `SetEntry.exercise` is typed to
+// whichever `ExerciseEntry` it points at, `ExerciseEntry.sets` to whichever
+// `SetEntry`, and `ExerciseEntry.day` to whichever `WorkoutDay` — so all
+// three have to be the frozen ones to stay inside the same (V1-V5) schema
+// graph. This is the same reason `RecipeIngredient` was frozen alongside
+// `Recipe` above despite having no property changes of its own.
+//
+// Per the V5 note's warning about shared value types: none of the three
+// reference a shared struct the way FoodEntry references `NutritionFacts`.
+// `WorkoutDay.focusRaw` is a plain `String`, so the V6 change to
+// `TrainingFocus`'s cases — four to six, matching Android and the browser —
+// is not a schema change at all and needs nothing frozen.
+enum LiftPreSetMetricsShapes {
+
+    @Model
+    final class WorkoutDay {
+        var id: UUID = UUID()
+        var dayKey: String = ""
+        var date: Date = Date.now
+        var name: String = ""
+        private var focusRaw: String = "bodybuilding"
+        var liveStartedAt: Date?
+        var liveEndedAt: Date?
+        var healthKitUUID: UUID?
+
+        @Relationship(deleteRule: .cascade, inverse: \ExerciseEntry.day)
+        var exercises: [ExerciseEntry] = []
+
+        init(date: Date = .now, name: String = "", focusRaw: String = "bodybuilding") {
+            self.id = UUID()
+            self.date = date
+            self.name = name
+            self.focusRaw = focusRaw
+        }
+    }
+
+    @Model
+    final class ExerciseEntry {
+        var id: UUID = UUID()
+        var exerciseRefID: String = ""
+        var name: String = ""
+        var primaryMuscle: String?
+        var equipment: String?
+        var orderIndex: Int = 0
+        var day: WorkoutDay?
+
+        @Relationship(deleteRule: .cascade, inverse: \SetEntry.exercise)
+        var sets: [SetEntry] = []
+
+        init(exerciseRefID: String, name: String, orderIndex: Int,
+             primaryMuscle: String? = nil, equipment: String? = nil) {
+            self.id = UUID()
+            self.exerciseRefID = exerciseRefID
+            self.name = name
+            self.orderIndex = orderIndex
+            self.primaryMuscle = primaryMuscle
+            self.equipment = equipment
+        }
+    }
+
+    @Model
+    final class SetEntry {
+        var id: UUID = UUID()
+        var orderIndex: Int = 0
+        var weightKg: Double = 0
+        var reps: Int = 0
+        var rpe: Double?
+        var isWarmup: Bool = false
+        var completedAt: Date?
+        var exercise: ExerciseEntry?
+
+        init(orderIndex: Int, weightKg: Double = 0, reps: Int = 0,
+             rpe: Double? = nil, isWarmup: Bool = false) {
+            self.id = UUID()
+            self.orderIndex = orderIndex
+            self.weightKg = weightKg
+            self.reps = reps
+            self.rpe = rpe
+            self.isWarmup = isWarmup
+        }
+    }
+}
+
 // MARK: - V1 — everything before COOK
 
 enum LiftSchemaV1: VersionedSchema {
@@ -190,9 +287,9 @@ enum LiftSchemaV1: VersionedSchema {
 
     static var models: [any PersistentModel.Type] {
         [
-            WorkoutDay.self,
-            ExerciseEntry.self,
-            SetEntry.self,
+            LiftPreSetMetricsShapes.WorkoutDay.self,
+            LiftPreSetMetricsShapes.ExerciseEntry.self,
+            LiftPreSetMetricsShapes.SetEntry.self,
             LiftPreGramServingShapes.FoodEntry.self,
             BodyMeasurement.self
         ]
@@ -207,9 +304,9 @@ enum LiftSchemaV2: VersionedSchema {
     static var models: [any PersistentModel.Type] {
         [
             // V1, unchanged.
-            WorkoutDay.self,
-            ExerciseEntry.self,
-            SetEntry.self,
+            LiftPreSetMetricsShapes.WorkoutDay.self,
+            LiftPreSetMetricsShapes.ExerciseEntry.self,
+            LiftPreSetMetricsShapes.SetEntry.self,
             LiftPreGramServingShapes.FoodEntry.self,
             BodyMeasurement.self,
             // COOK.
@@ -229,9 +326,9 @@ enum LiftSchemaV3: VersionedSchema {
     static var models: [any PersistentModel.Type] {
         [
             // V1/V2, unchanged.
-            WorkoutDay.self,
-            ExerciseEntry.self,
-            SetEntry.self,
+            LiftPreSetMetricsShapes.WorkoutDay.self,
+            LiftPreSetMetricsShapes.ExerciseEntry.self,
+            LiftPreSetMetricsShapes.SetEntry.self,
             LiftPreGramServingShapes.FoodEntry.self,
             BodyMeasurement.self,
             LiftPreGramServingShapes.Recipe.self,
@@ -256,9 +353,9 @@ enum LiftSchemaV4: VersionedSchema {
     static var models: [any PersistentModel.Type] {
         [
             // V1/V2, unchanged.
-            WorkoutDay.self,
-            ExerciseEntry.self,
-            SetEntry.self,
+            LiftPreSetMetricsShapes.WorkoutDay.self,
+            LiftPreSetMetricsShapes.ExerciseEntry.self,
+            LiftPreSetMetricsShapes.SetEntry.self,
             LiftPreGramServingShapes.FoodEntry.self,
             BodyMeasurement.self,
             LiftPreGramServingShapes.Recipe.self,
@@ -285,9 +382,9 @@ enum LiftSchemaV5: VersionedSchema {
     static var models: [any PersistentModel.Type] {
         [
             // V1/V2, unchanged.
-            WorkoutDay.self,
-            ExerciseEntry.self,
-            SetEntry.self,
+            LiftPreSetMetricsShapes.WorkoutDay.self,
+            LiftPreSetMetricsShapes.ExerciseEntry.self,
+            LiftPreSetMetricsShapes.SetEntry.self,
             FoodEntry.self,
             BodyMeasurement.self,
             Recipe.self,
@@ -306,16 +403,46 @@ enum LiftSchemaV5: VersionedSchema {
     }
 }
 
+// MARK: - V6 — a set can be time or distance, not only weight for reps
+
+enum LiftSchemaV6: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(6, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            // The three that changed — live classes, with durationSec and
+            // distanceMeters on SetEntry.
+            WorkoutDay.self,
+            ExerciseEntry.self,
+            SetEntry.self,
+            // Unchanged since V5.
+            FoodEntry.self,
+            BodyMeasurement.self,
+            Recipe.self,
+            RecipeIngredient.self,
+            PlannedMeal.self,
+            ShoppingListCheck.self,
+            Routine.self,
+            RoutineExercise.self,
+            RoutinePrescribedSet.self,
+            ImportedPlan.self,
+            ScheduledSession.self,
+            OutdoorActivity.self
+        ]
+    }
+}
+
 // MARK: - Plan
 
 enum LiftMigrationPlan: SchemaMigrationPlan {
 
     static var schemas: [any VersionedSchema.Type] {
-        [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self, LiftSchemaV5.self]
+        [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self,
+         LiftSchemaV5.self, LiftSchemaV6.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -348,5 +475,20 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v4ToV5 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV4.self,
         toVersion: LiftSchemaV5.self
+    )
+
+    /// Two new optional properties on SetEntry (durationSec, distanceMeters) —
+    /// no new model types, no renames, no type changes, no optional-to-
+    /// non-optional changes. Lightweight per this file's own rule above, and
+    /// V1-V5 are pointed at LiftPreSetMetricsShapes so their checksums still
+    /// describe the store those builds actually wrote.
+    ///
+    /// TrainingFocus gaining `hyrox`, `endurance` and `everything` is not part
+    /// of this stage: `focusRaw` is a String column and an unrecognised value
+    /// already falls back rather than failing, which is how days written as
+    /// `conditioning` keep working.
+    static let v5ToV6 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV5.self,
+        toVersion: LiftSchemaV6.self
     )
 }

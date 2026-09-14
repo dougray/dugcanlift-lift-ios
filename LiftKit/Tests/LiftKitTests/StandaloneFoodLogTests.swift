@@ -48,17 +48,18 @@ final class StandaloneFoodLogTests: XCTestCase {
         XCTAssertEqual(log.entries.map(\.food.name), ["food2", "food3", "food4"])
     }
 
-    func testEntriesOlderThanTheAgeCapAreDropped() {
-        let log = StandaloneFoodLog(defaults: defaults, maxAgeDays: 60)
+    /// Was `testEntriesOlderThanTheAgeCapAreDropped`. There is no age cap now:
+    /// settled 2026-09-13, a watch out of contact for two months still exports
+    /// everything it recorded. Count is the only thing that retires an entry.
+    func testAgeAloneNeverRetiresAnEntry() {
+        let log = StandaloneFoodLog(defaults: defaults)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
-        // Calendar arithmetic, never 86400-second arithmetic: the latter
-        // repeats a day across a DST transition.
         let old = calendar.date(byAdding: .day, value: -61, to: .now)!
         let recent = calendar.date(byAdding: .day, value: -59, to: .now)!
-        log.append(entry("tooOld", at: old))
+        log.append(entry("sixtyOneDaysOld", at: old))
         log.append(entry("justInside", at: recent))
-        XCTAssertEqual(log.entries.map(\.food.name), ["justInside"])
+        XCTAssertEqual(log.entries.map(\.food.name), ["sixtyOneDaysOld", "justInside"])
     }
 
     func testClearEmptiesTheLog() {

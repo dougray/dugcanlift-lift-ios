@@ -50,18 +50,18 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
         // The watch came back from a flat battery believing it was 2016 and the
         // user logged twice before it corrected itself.
         let confused = Date(timeIntervalSince1970: 1_460_000_000)  // April 2016
-        let log = StandaloneFoodLog(defaults: defaults, now: { Date(timeIntervalSince1970: 1_460_000_100) })
+        let log = StandaloneFoodLog(defaults: defaults)
         log.append(entry("Banana", at: confused))
         log.append(entry("Milk", at: confused.addingTimeInterval(60)))
 
         // The clock corrects itself, and the next food is logged with a true date.
-        let corrected = StandaloneFoodLog(defaults: defaults, now: { .now })
+        let corrected = StandaloneFoodLog(defaults: defaults)
         corrected.append(entry("Eggs", at: .now))
 
-        XCTAssertEqual(corrected.allEntries.count, 3,
+        XCTAssertEqual(corrected.entries.count, 3,
                        "entries stamped by a confused clock must survive it being corrected")
-        XCTAssertTrue(corrected.allEntries.contains { $0.food.name == "Banana" })
-        XCTAssertTrue(corrected.allEntries.contains { $0.food.name == "Milk" })
+        XCTAssertTrue(corrected.entries.contains { $0.food.name == "Banana" })
+        XCTAssertTrue(corrected.entries.contains { $0.food.name == "Milk" })
     }
 
     func testAgeNeverRemovesAnythingFromStorage() {
@@ -71,38 +71,27 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
         log.append(entry("Fresh", at: .now))
 
         XCTAssertEqual(storedEntryCount(), 2, "the write path must not drop by date")
-        XCTAssertEqual(log.allEntries.count, 2)
+        XCTAssertEqual(log.entries.count, 2)
     }
 
-    func testTheSixtyDayWindowIsAViewNotADelete() {
-        let old = Date(timeIntervalSinceNow: -90 * 86_400)
+    func testAnEntryOlderThanSixtyDaysIsStillExported() {
+        // Settled 2026-09-13: age hides nothing. A watch out of contact for two
+        // months hands over everything it recorded.
         let log = StandaloneFoodLog(defaults: defaults)
-        log.append(entry("Old", at: old))
+        log.append(entry("Ninety days old", at: Date(timeIntervalSinceNow: -90 * 86_400)))
         log.append(entry("Recent", at: .now))
 
-        XCTAssertEqual(log.entries.count, 1, "the window hides the old entry")
-        XCTAssertEqual(log.entries.first?.food.name, "Recent")
-        XCTAssertEqual(log.allEntries.count, 2, "but storage still holds it")
-        XCTAssertEqual(log.expiredCount, 1)
+        XCTAssertEqual(log.entries.count, 2)
+        XCTAssertEqual(log.entries.map(\.food.name), ["Ninety days old", "Recent"],
+                       "oldest first, both present")
     }
 
-    func testAnEntryStampedInTheFutureIsNeverExpired() {
-        let ahead = Date(timeIntervalSinceNow: 5 * 86_400)
+    func testAnEntryStampedInTheFutureIsAlsoJustAnEntry() {
         let log = StandaloneFoodLog(defaults: defaults)
-        log.append(entry("Ahead", at: ahead))
+        log.append(entry("Ahead", at: Date(timeIntervalSinceNow: 5 * 86_400)))
+        log.append(entry("Now", at: .now))
 
-        XCTAssertEqual(log.entries.count, 1, "a clock that was ahead is not a reason to hide data")
-    }
-
-    func testAStoredEntryNewerThanNowSuspendsTheWindowEntirely() {
-        // The clock is behind the data: judge nothing until it catches up.
-        let log = StandaloneFoodLog(defaults: defaults)
-        log.append(entry("Old", at: Date(timeIntervalSinceNow: -90 * 86_400)))
-        log.append(entry("Future", at: Date(timeIntervalSinceNow: 86_400)))
-
-        XCTAssertEqual(log.entries.count, 2,
-                       "with the clock behind the data, no entry may be judged expired")
-        XCTAssertEqual(log.expiredCount, 0)
+        XCTAssertEqual(log.entries.count, 2, "no clock reading decides what may be seen")
     }
 
     // MARK: - Defect 2: one unreadable entry must not destroy the rest
@@ -119,7 +108,7 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
         """)
 
         let log = StandaloneFoodLog(defaults: defaults)
-        XCTAssertEqual(log.allEntries.count, 2, "the two readable entries still load")
+        XCTAssertEqual(log.entries.count, 2, "the two readable entries still load")
         XCTAssertEqual(log.unreadableCount, 1, "the third is counted, not silently gone")
 
         // Logging again must not overwrite what this build could not read.
@@ -127,7 +116,7 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
         XCTAssertEqual(log.unreadableCount, 1, "the unreadable entry survives a write")
 
         let reopened = StandaloneFoodLog(defaults: defaults)
-        XCTAssertEqual(reopened.allEntries.count, 3)
+        XCTAssertEqual(reopened.entries.count, 3)
         XCTAssertEqual(reopened.unreadableCount, 1)
     }
 
@@ -154,12 +143,12 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
         writeRaw("this is not json at all")
 
         let log = StandaloneFoodLog(defaults: defaults)
-        XCTAssertEqual(log.allEntries.count, 0)
+        XCTAssertEqual(log.entries.count, 0)
         log.append(entry("First after corruption", at: .now))
 
         XCTAssertNotNil(defaults.data(forKey: quarantineKey),
                         "the bytes that could not be read are kept, not overwritten")
-        XCTAssertEqual(log.allEntries.count, 1)
+        XCTAssertEqual(log.entries.count, 1)
     }
 
     // MARK: - The format change must not itself lose anything
@@ -172,8 +161,8 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
         ]
         """)
         let log = StandaloneFoodLog(defaults: defaults)
-        XCTAssertEqual(log.allEntries.count, 1)
-        XCTAssertEqual(log.allEntries.first?.food.name, "Legacy")
+        XCTAssertEqual(log.entries.count, 1)
+        XCTAssertEqual(log.entries.first?.food.name, "Legacy")
     }
 
     // MARK: - The count cap is the only thing that may drop an entry
@@ -183,8 +172,8 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
         for i in 0..<5 {
             log.append(entry("Food \(i)", at: Date(timeIntervalSince1970: 1_789_000_000 + Double(i))))
         }
-        XCTAssertEqual(log.allEntries.count, 3)
-        XCTAssertEqual(log.allEntries.map(\.food.name), ["Food 2", "Food 3", "Food 4"])
+        XCTAssertEqual(log.entries.count, 3)
+        XCTAssertEqual(log.entries.map(\.food.name), ["Food 2", "Food 3", "Food 4"])
     }
 }
 
@@ -193,19 +182,14 @@ final class StandaloneFoodLogDurabilityTests: XCTestCase {
 final class ExportEmptyMessageTests: XCTestCase {
 
     func testNothingEverLogged() {
-        XCTAssertEqual(exportEmptyMessage(skippedCount: 0, expiredCount: 0),
+        XCTAssertEqual(exportEmptyMessage(skippedCount: 0),
                        "Nothing logged yet.")
     }
 
-    func testEntriesExistButAreOutsideTheWindow() {
-        XCTAssertEqual(exportEmptyMessage(skippedCount: 0, expiredCount: 9),
-                       "Nothing left to export — 9 logged over 60 days ago.")
-    }
-
-    func testSkippedEntriesTakePrecedenceAndReadNaturallyAtOne() {
-        XCTAssertEqual(exportEmptyMessage(skippedCount: 1, expiredCount: 0),
+    func testSkippedEntriesReadNaturallyAtOne() {
+        XCTAssertEqual(exportEmptyMessage(skippedCount: 1),
                        "1 entry can't be exported yet. Update LIFT on your iPhone.")
-        XCTAssertEqual(exportEmptyMessage(skippedCount: 3, expiredCount: 2),
+        XCTAssertEqual(exportEmptyMessage(skippedCount: 3),
                        "3 entries can't be exported yet. Update LIFT on your iPhone.")
     }
 }

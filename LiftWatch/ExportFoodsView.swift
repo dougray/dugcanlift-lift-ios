@@ -121,7 +121,6 @@ struct ExportFoodsView: View {
     /// (LIFT iOS doesn't populate `nutritionPer100g` yet), and telling them
     /// their log is empty would contradict what they just did.
     private var emptyStateMessage: String {
-        exportEmptyMessage(skippedCount: session.foodLog.skippedCount,
-                           expiredCount: session.foodLog.expiredCount)
+        exportEmptyMessage(skippedCount: session.foodLog.skippedCount)
     }
 }

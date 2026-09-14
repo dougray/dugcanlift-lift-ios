@@ -15,23 +15,16 @@ public struct LoggedFood: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// Export's own empty state, which is not the same as Home's. Home means
-/// "nothing was ever logged"; here the log can also be non-empty with every
-/// entry outside the 60-day window, and telling someone their log is empty
-/// when the watch is still holding it would be its own small version of the
-/// data-loss bug this store exists to prevent.
+/// Export's empty state. Since 2026-09-13 an empty export really does mean an
+/// empty log — age hides nothing — so the only case left to distinguish is a
+/// food logged without macros, which cannot be encoded yet.
 ///
 /// Kept beside the store rather than in the view so it can be tested, and
 /// worded to match Wear's `exportEmptyMessage`.
-public func exportEmptyMessage(skippedCount: Int, expiredCount: Int) -> String {
-    if skippedCount > 0 {
-        let entryWord = skippedCount == 1 ? "entry" : "entries"
-        return "\(skippedCount) \(entryWord) can't be exported yet. Update LIFT on your iPhone."
-    }
-    if expiredCount > 0 {
-        return "Nothing left to export — \(expiredCount) logged over 60 days ago."
-    }
-    return "Nothing logged yet."
+public func exportEmptyMessage(skippedCount: Int) -> String {
+    guard skippedCount > 0 else { return "Nothing logged yet." }
+    let entryWord = skippedCount == 1 ? "entry" : "entries"
+    return "\(skippedCount) \(entryWord) can't be exported yet. Update LIFT on your iPhone."
 }
 
 /// Every food logged on this watch, retained until the user exports it.
@@ -51,11 +44,14 @@ public func exportEmptyMessage(skippedCount: Int, expiredCount: Int) -> String {
 /// overwrite is permanent. Two rules follow from that, and both were defects
 /// once (issue #4):
 ///
-/// - Retention is bounded by **count only** on the write path. The 60-day
-///   window is a read-side view (see `live`), so no entry is ever deleted
+/// - Retention is bounded by **count only**. Nothing is deleted or hidden
 ///   because of a date — a watch that came back from a flat battery believing
 ///   it was 2016 used to erase everything it had logged while confused, the
-///   first time it logged anything after the clock corrected itself.
+///   first time it logged anything after the clock corrected itself. There is
+///   no longer any code path that reads the clock to decide what a user may
+///   see or export, which is the strongest form of that guarantee.
+///   (Settled 2026-09-13: a watch out of contact for two months still hands
+///   over everything it recorded, rather than the window quietly stranding it.)
 /// - Decoding is **per entry**. An entry this build cannot read is carried
 ///   forward verbatim and retried on every load, rather than taken as proof
 ///   the whole log is gone. The previous all-or-nothing `try?` turned any
@@ -69,37 +65,21 @@ public final class StandaloneFoodLog {
     /// replacing it is never the same thing as destroying it.
     private let quarantineKey = "com.dugcanlift.lift.standaloneFoodLog.unreadable"
     private let maxEntries: Int
-    private let maxAgeDays: Int
-    private let now: () -> Date
 
     /// Bound on the carried-forward shadow list, matching `maxEntries`: it
     /// should never hold more dead weight than the live log itself could.
     private var maxUnreadableEntries: Int { maxEntries }
 
     public init(defaults: UserDefaults = .standard,
-                maxEntries: Int = 200,
-                maxAgeDays: Int = 60,
-                now: @escaping () -> Date = { Date() }) {
+                maxEntries: Int = 200) {
         self.defaults = defaults
         self.maxEntries = maxEntries
-        self.maxAgeDays = maxAgeDays
-        self.now = now
     }
 
-    /// What the app and the export see: oldest first, inside the 60-day window.
-    public var entries: [LoggedFood] { live(load().entries) }
-
-    /// Everything storage holds, window or no window. The export screen's
-    /// "nothing exportable" wording and the tests both need to tell an empty
-    /// log apart from one whose entries are merely out of view.
-    public var allEntries: [LoggedFood] {
+    /// Everything storage holds, oldest first — the order the export encodes.
+    /// No age filter: if it is retained, it is exportable.
+    public var entries: [LoggedFood] {
         load().entries.sorted { $0.loggedAt < $1.loggedAt }
-    }
-
-    /// How many stored entries the window is currently hiding.
-    public var expiredCount: Int {
-        let all = load().entries
-        return all.count - live(all).count
     }
 
     /// Entries this build could not decode, kept verbatim against a later one.
@@ -171,27 +151,6 @@ public final class StandaloneFoodLog {
     private func cappedByCount(_ all: [LoggedFood]) -> [LoggedFood] {
         let sorted = all.sorted { $0.loggedAt < $1.loggedAt }
         return sorted.count > maxEntries ? Array(sorted.suffix(maxEntries)) : sorted
-    }
-
-    /// The 60-day window, as a view over storage. Calendar days, not seconds:
-    /// seconds arithmetic repeats a day across a DST fall-back, which would
-    /// keep a 61-day-old entry in view for one extra day every autumn.
-    ///
-    /// Two clock disagreements are excluded by construction — an entry stamped
-    /// after `now` is never expired (the clock was ahead when it was logged),
-    /// and if any stored entry is newer than `now` the clock is behind the
-    /// data, so nothing is judged at all until it catches up.
-    private func live(_ all: [LoggedFood]) -> [LoggedFood] {
-        let sorted = all.sorted { $0.loggedAt < $1.loggedAt }
-        let reference = now()
-        if sorted.contains(where: { $0.loggedAt > reference }) { return sorted }
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        guard let cutoff = calendar.date(byAdding: .day, value: -maxAgeDays, to: reference) else {
-            return sorted
-        }
-        return sorted.filter { $0.loggedAt >= cutoff }
     }
 
     /// What one load recovered: the entries this build understands, plus the

@@ -11,7 +11,7 @@ import LiftCore
 extension Routine {
     /// Starts this routine on `date`: fetches or creates that day, appends one
     /// `ExerciseEntry` per routine exercise, and one `SetEntry` per prescribed
-    /// set that has something iOS can log (see `isLoggableToday`).
+    /// set that prescribes anything at all — weight, reps, time or distance.
     @MainActor
     @discardableResult
     func startSession(on date: Date, in context: ModelContext) -> WorkoutDay {
@@ -27,6 +27,13 @@ extension Routine {
         // below, rather than appending a second copy.
         let existingRefIDs = Set(day.exercises.map(\.exerciseRefID))
 
+        // A blank day takes the routine's name, as Android and the browser do.
+        // A day already named — by the person, or by a routine started first —
+        // keeps its name.
+        if day.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            day.name = name
+        }
+
         for exercise in orderedExercises {
             let refID = "routine:\(exercise.id.uuidString)"
             guard !existingRefIDs.contains(refID) else { continue }
@@ -36,15 +43,24 @@ extension Routine {
                 orderIndex: day.exercises.count,
                 equipment: exercise.equipment.isEmpty ? nil : exercise.equipment
             )
+            // `isLoggableToday` predates SetEntry's time and distance (schema
+            // V6) and dropped every timed set, so a mobility or running routine
+            // started with its exercises and no sets at all. Time and distance
+            // now land on the set like weight and reps do.
             entry.sets = exercise.orderedSets
-                .filter { $0.isLoggableToday }
+                .filter {
+                    $0.targetWeightKg != nil || $0.targetReps != nil
+                        || $0.targetDurationSec != nil || $0.targetDistanceMeters != nil
+                }
                 .enumerated()
                 .map { index, prescribed in
                     SetEntry(
                         orderIndex: index,
                         weightKg: prescribed.targetWeightKg ?? 0,
                         reps: prescribed.targetReps ?? 0,
-                        rpe: prescribed.targetRPE
+                        rpe: prescribed.targetRPE,
+                        durationSec: prescribed.targetDurationSec,
+                        distanceMeters: prescribed.targetDistanceMeters
                     )
                 }
             day.exercises.append(entry)

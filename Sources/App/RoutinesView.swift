@@ -9,7 +9,7 @@ struct RoutinesView: View {
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
     @State private var isCreatingRoutine = false
 
-    /// Six routines off a bundled file, for someone who hasn't written any.
+    /// Starter routines off a bundled file, for someone who hasn't written any.
     private let starters = StarterSplits.bundled()
 
     private var unclaimedStarters: [StarterSplit] {
@@ -53,7 +53,13 @@ struct RoutinesView: View {
                     }
                 }
             }
+            // The app's own background rather than the system's black, and an
+            // inline title: a large title here sat hard against the screen edge
+            // under the app's top tabs, which no other tab does.
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
             .navigationTitle("Routines")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("New", systemImage: "plus") { isCreatingRoutine = true }

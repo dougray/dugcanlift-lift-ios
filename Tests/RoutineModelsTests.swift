@@ -40,21 +40,42 @@ final class RoutineModelsTests: XCTestCase {
         XCTAssertEqual(entry.orderedSets[1].reps, 5)
     }
 
-    func testStartSessionSkipsDurationOnlyPrescribedSets() throws {
-        // Documented gap: iOS's SetEntry has no duration/distance fields yet.
-        // A conditioning-only prescription must not silently become a
-        // zero-weight, zero-rep strength set — it is skipped entirely.
+    func testStartSessionCarriesTimedAndDistanceSets() throws {
+        // SetEntry has held time and distance since schema V6. A mobility or
+        // running routine used to start with no sets at all, because the
+        // filter only counted weight and reps.
         let context = try makeContext()
         let routine = Routine(name: "Conditioning")
         let piece = RoutineExercise(name: "Row", orderIndex: 0)
         piece.prescribedSets = [
-            RoutinePrescribedSet(orderIndex: 0, targetDurationSec: 600, targetDistanceMeters: 1600)
+            RoutinePrescribedSet(orderIndex: 0, targetDurationSec: 600, targetDistanceMeters: 1600),
+            RoutinePrescribedSet(orderIndex: 1, targetDurationSec: 45),
+            RoutinePrescribedSet(orderIndex: 2)
         ]
         routine.exercises = [piece]
         context.insert(routine)
 
         let day = routine.startSession(on: .now, in: context)
-        XCTAssertEqual(day.orderedExercises.first?.orderedSets.count, 0)
+        let sets = try XCTUnwrap(day.orderedExercises.first).orderedSets
+        XCTAssertEqual(sets.count, 2, "a set prescribing nothing is still skipped")
+        XCTAssertEqual(sets[0].durationSec, 600)
+        XCTAssertEqual(sets[0].distanceMeters, 1600)
+        XCTAssertEqual(sets[1].durationSec, 45)
+        XCTAssertNil(sets[1].distanceMeters)
+    }
+
+    func testStartSessionNamesABlankDayButKeepsAnExistingName() throws {
+        let context = try makeContext()
+        let date = Date(timeIntervalSince1970: 1_757_000_000)
+        let mobility = Routine(name: "Mobility")
+        mobility.exercises = [RoutineExercise(name: "Cat Stretch", orderIndex: 0)]
+        context.insert(mobility)
+        XCTAssertEqual(mobility.startSession(on: date, in: context).name, "Mobility")
+
+        let other = Date(timeIntervalSince1970: 1_757_200_000)
+        let named = WorkoutQueries.fetchOrCreate(other, in: context)
+        named.name = "Saturday"
+        XCTAssertEqual(mobility.startSession(on: other, in: context).name, "Saturday")
     }
 
     func testStartSessionReusesExistingDayForTheSameDate() throws {

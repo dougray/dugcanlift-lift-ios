@@ -17,18 +17,20 @@ import LiftCore
 /// of computing it on log are linear in that amount — `FoodRecord.nutrition(grams:)`
 /// is per-100 g times grams, `PlannedMeal.scaledNutrition` per-gram or
 /// per-serving times the amount — so a new amount scales every stored value by
-/// new ÷ old. That includes sugar and sodium, which have no field here but must
-/// not be dropped, and it keeps a nil fibre nil.
+/// new ÷ old. That includes saturated fat, sugar and sodium, and it keeps a nil
+/// nil: a food whose source never recorded sodium has none to scale.
 ///
 /// **Macros.** Only editable for a *manual* entry — one whose `foodRefID` is
 /// empty, which is what a restore from LIFT web or Android produces, since
 /// those files carry no reference id. A food from the database or a recipe has
 /// a source its numbers came from; letting them drift from it would make the
 /// snapshot a lie about where it came from. The fields always show the totals
-/// for the amount currently typed. Typing a macro fixes all five at that amount;
-/// changing the amount afterwards scales them from there. Only the four macros
-/// `NutritionFacts` cannot hold as nil are required; fibre left blank stays nil
-/// rather than becoming a measured zero.
+/// for the amount currently typed. Typing a value fixes all eight at that
+/// amount; changing the amount afterwards scales them from there. Only the four
+/// macros `NutritionFacts` cannot hold as nil are required. Fibre, and the three
+/// under "More nutrients" (saturated fat, sugar, sodium), left blank stay nil
+/// rather than becoming a measured zero — they are tracked, never targeted, and
+/// an unknown is not a zero.
 ///
 /// **Numbers.** Written with a `.` decimal, and read back accepting `.` or `,`,
 /// because the decimal pad types a comma in many locales. Formatter and parser
@@ -37,23 +39,37 @@ struct FoodEntryEdit: Equatable {
 
     enum Macro: String, CaseIterable, Identifiable {
         case calories, protein, carbs, fat, fiber
+        case saturatedFat, sugar, sodium
 
         var id: String { rawValue }
 
         var label: String {
             switch self {
-            case .calories: return "Calories"
-            case .protein:  return "Protein"
-            case .carbs:    return "Carbs"
-            case .fat:      return "Fat"
-            case .fiber:    return "Fibre"
+            case .calories:     return "Calories"
+            case .protein:      return "Protein"
+            case .carbs:        return "Carbs"
+            case .fat:          return "Fat"
+            case .fiber:        return "Fibre"
+            case .saturatedFat: return "Saturated fat"
+            case .sugar:        return "Sugar"
+            case .sodium:       return "Sodium"
             }
         }
 
-        var unit: String { self == .calories ? "kcal" : "g" }
+        var unit: String {
+            switch self {
+            case .calories: return "kcal"
+            case .sodium:   return "mg"
+            default:        return "g"
+            }
+        }
 
-        /// Fibre is the one `NutritionFacts` can leave unknown.
-        var isRequired: Bool { self != .fiber }
+        /// The four `NutritionFacts` cannot leave unknown.
+        var isRequired: Bool { [.calories, .protein, .carbs, .fat].contains(self) }
+
+        /// Saturated fat, sugar and sodium: shown under "More nutrients", with
+        /// no goal anywhere in the app.
+        var isDetail: Bool { [.saturatedFat, .sugar, .sodium].contains(self) }
     }
 
     enum AmountMode: Equatable {
@@ -95,10 +111,8 @@ struct FoodEntryEdit: Equatable {
     private let originalAmountGrams: Double?
     private let originalName: String
 
-    /// Macro values that hold at `baseAmount`. A missing key is a blank.
+    /// Values that hold at `baseAmount`. A missing key is a blank.
     private var base: [Macro: Double]
-    private var baseSugar: Double?
-    private var baseSodium: Double?
     /// Grams or servings, per `mode`.
     private var baseAmount: Double
     private var typedText: [Macro: String] = [:]
@@ -146,9 +160,10 @@ struct FoodEntryEdit: Equatable {
             .fat: nutrition.fatG
         ]
         macros[.fiber] = nutrition.fiberG
+        macros[.saturatedFat] = nutrition.saturatedFatG
+        macros[.sugar] = nutrition.sugarG
+        macros[.sodium] = nutrition.sodiumMg
         base = macros
-        baseSugar = nutrition.sugarG
-        baseSodium = nutrition.sodiumMg
     }
 
     // MARK: - Amount
@@ -213,8 +228,6 @@ struct FoodEntryEdit: Equatable {
             // Re-base every value at the amount on screen, so what is typed and
             // what is not are totals for the same amount.
             base = base.mapValues { $0 * ratio }
-            baseSugar = baseSugar.map { $0 * ratio }
-            baseSodium = baseSodium.map { $0 * ratio }
             baseAmount = amount
         }
         typedText[macro] = text
@@ -233,8 +246,9 @@ struct FoodEntryEdit: Equatable {
             carbsG: carbs * r,
             fatG: fat * r,
             fiberG: base[.fiber].map { $0 * r },
-            sugarG: baseSugar.map { $0 * r },
-            sodiumMg: baseSodium.map { $0 * r }
+            sugarG: base[.sugar].map { $0 * r },
+            sodiumMg: base[.sodium].map { $0 * r },
+            saturatedFatG: base[.saturatedFat].map { $0 * r }
         )
     }
 
@@ -246,7 +260,7 @@ struct FoodEntryEdit: Equatable {
         if amount == nil { return "Enter an amount above zero." }
         if nutrition == nil {
             let blank = Macro.allCases.filter { $0.isRequired && base[$0] == nil }.map { $0.label.lowercased() }
-            return "Enter \(ListFormatter.localizedString(byJoining: blank)) — only fibre can be left blank."
+            return "Enter \(ListFormatter.localizedString(byJoining: blank)). Everything else can be left blank."
         }
         return nil
     }

@@ -217,6 +217,10 @@ struct RecipeImportView: View {
                     .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
 
+                    if let details = NutrientDetailsDisplay.entryLine(nutrition) {
+                        detail(details)
+                    }
+
                     detail("The site's own figures, not resolved against the food database. Saved as an estimate.")
                 }
             }

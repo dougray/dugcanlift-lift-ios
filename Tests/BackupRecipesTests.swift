@@ -130,7 +130,7 @@ final class BackupRecipesTests: XCTestCase {
         let restored = try XCTUnwrap(try target.fetch(FetchDescriptor<Recipe>()).first)
         XCTAssertEqual(restored.id, recipe.id)
         XCTAssertEqual(restored.totalWeightGrams, 1200)
-        XCTAssertEqual(restored.nutritionPerServing?.sugarG, 7, "sugar travels under ext.ios")
+        XCTAssertEqual(restored.nutritionPerServing?.sugarG, 7, "sugar travels in the common field, and under ext.ios for an older iPhone")
         XCTAssertEqual(restored.nutritionPerServing?.sodiumMg, 640)
         XCTAssertTrue(restored.nutritionIsEstimated)
         let lines = (restored.ingredients ?? []).sorted { $0.sortOrder < $1.sortOrder }

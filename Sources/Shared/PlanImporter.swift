@@ -100,10 +100,14 @@ enum PlanImporter {
                 steps: planRecipe.t ?? []
             )
             if let u = planRecipe.u, u.count >= 4 {
+                // `ux` — saturated fat, sugar and sodium, per serving like `u` —
+                // only rides on macros that exist. A plan recipe with `ux` and
+                // no `u` would otherwise become a zero-calorie dish carrying
+                // a sodium figure, which is worse than the unknown it was.
                 recipe.nutritionPerServing = NutritionFacts(
                     calories: u[0], proteinG: u[1], carbsG: u[2], fatG: u[3],
                     fiberG: u.count > 4 ? u[4] : nil
-                )
+                ).merging(planRecipe.ux)
             }
             recipe.ingredients = (planRecipe.i ?? []).enumerated().map { index, rawText in
                 RecipeIngredient(rawText: rawText, sortOrder: index)

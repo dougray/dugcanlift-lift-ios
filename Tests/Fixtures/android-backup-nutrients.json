@@ -1,0 +1,77 @@
+{
+ "v": 1,
+ "app": "lift",
+ "saved": "2026-09-16",
+ "data": {
+  "food": [
+   {
+    "id": "0b6d7a52-5f7e-4c47-9d0e-3f1c2a4b5d01",
+    "name": "Tomato soup",
+    "servings": 1,
+    "calories": 200,
+    "proteinG": 8,
+    "fatG": 6,
+    "carbsG": 25,
+    "fiberG": 3,
+    "saturatedFatG": 2.4,
+    "sugarG": 5,
+    "sodiumMg": 890,
+    "date": "2026-09-16",
+    "loggedAt": 1789567200000,
+    "meal": "LUNCH"
+   },
+   {
+    "id": "0b6d7a52-5f7e-4c47-9d0e-3f1c2a4b5d02",
+    "name": "Rolled oats",
+    "servings": 1,
+    "calories": 300,
+    "proteinG": 10,
+    "fatG": 5,
+    "carbsG": 50,
+    "fiberG": 8,
+    "amountGrams": 80,
+    "date": "2026-09-16",
+    "loggedAt": 1789552800000,
+    "meal": "BREAKFAST"
+   },
+   {
+    "id": "0b6d7a52-5f7e-4c47-9d0e-3f1c2a4b5d03",
+    "name": "Cola",
+    "servings": 1,
+    "calories": 140,
+    "proteinG": 0,
+    "fatG": 0,
+    "carbsG": 39,
+    "fiberG": 0,
+    "saturatedFatG": 0,
+    "sugarG": 39,
+    "sodiumMg": null,
+    "date": "2026-09-16",
+    "loggedAt": 1789581600000,
+    "meal": "SNACK"
+   }
+  ],
+  "recipes": [
+   {
+    "id": "5e1f0c3a-8b2d-4e6f-a7c9-1d3b5f7a9c01",
+    "name": "Chilli",
+    "servings": 4,
+    "ingredients": [
+     { "rawText": "500 g lean beef mince", "optional": false }
+    ],
+    "steps": ["Brown the mince", "Simmer"],
+    "nutritionPerServing": {
+     "calories": 450,
+     "proteinG": 36,
+     "carbsG": 30,
+     "fatG": 18,
+     "fiberG": 9,
+     "saturatedFatG": 6,
+     "sodiumMg": 800,
+     "estimated": false
+    },
+    "importedAt": 1789567200000
+   }
+  ]
+ }
+}

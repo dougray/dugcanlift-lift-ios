@@ -199,6 +199,14 @@ struct FoodSearchView: View {
             }
             .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
+            // Saturated fat, sugar and sodium when the database has them —
+            // `FoodRecord.nutrition(grams:)` fills all three, and the entry
+            // logged below snapshots them with the rest.
+            if let details = NutrientDetailsDisplay.entryLine(nutrition) {
+                Text(details)
+                    .font(Theme.detail)
+                    .foregroundStyle(Theme.textSecondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)

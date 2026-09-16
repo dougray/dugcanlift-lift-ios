@@ -51,6 +51,18 @@ string key, not date-range predicates. The two must stay consistent.
 set it after. Background sync retries, and duplicated Health entries are very
 visible to users.
 
+**A pasted recipe is edited, not reviewed.** `RecipeImportView` can review
+because a page's JSON-LD is labelled — the publisher said which strings are
+ingredients. A caption is prose, so `LiftCore.CaptionRecipe` only *proposes* a
+split and `RecipePasteImportView` is an editor. Keep it that way, and do not
+make the parser infer past what the text states: its title rule (the first line
+or none) and its yield rule (a line must open with a yield word and carry a
+number) are both pinned in the kit, and the looser versions silently removed a
+real line or halved every macro in a dish. Social video is out of reach by
+design — no site among TikTok, Instagram, Reels or YouTube publishes a
+schema.org `Recipe` — so pasting the caption is the supported path, not a
+workaround waiting on a better scraper.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

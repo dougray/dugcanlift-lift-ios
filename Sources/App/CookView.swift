@@ -51,6 +51,7 @@ struct RecipeListView: View {
     @State private var editing: Recipe?
     @State private var creatingNew = false
     @State private var importingFromLink = false
+    @State private var browsingCatalogue = false
 
     var body: some View {
         ScrollView {
@@ -59,6 +60,20 @@ struct RecipeListView: View {
                     creatingNew = true
                 } label: {
                     Label("New recipe", systemImage: "plus")
+                        .font(Theme.body.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Theme.cardPadding)
+                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                }
+                .buttonStyle(.plain)
+
+                // Third, and the only one that needs neither typing nor a
+                // network: 600+ recipes ship in the app.
+                Button {
+                    browsingCatalogue = true
+                } label: {
+                    Label("Browse the catalogue", systemImage: "books.vertical")
                         .font(Theme.body.weight(.semibold))
                         .foregroundStyle(Theme.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,6 +129,9 @@ struct RecipeListView: View {
         }
         .sheet(isPresented: $importingFromLink) {
             RecipeImportView().preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $browsingCatalogue) {
+            RecipeCatalogView().preferredColorScheme(.dark)
         }
         .sheet(item: $editing) { recipe in
             RecipeEditorView(recipe: recipe).preferredColorScheme(.dark)

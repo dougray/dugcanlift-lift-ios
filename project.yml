@@ -37,7 +37,7 @@ packages:
   # this line, never something that happens on a `swift package update`.
   LiftKit:
     url: https://github.com/dougray/dugcanlift-kit
-    exactVersion: 1.4.1
+    exactVersion: 1.5.0
 
 targets:
 

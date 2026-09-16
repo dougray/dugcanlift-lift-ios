@@ -117,12 +117,17 @@ struct RecipeEditorView: View {
                 .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
 
+            // Calories on its own row, the four gram figures under it. Five
+            // across one row crushes each to about 70pt at iPhone width, and
+            // "P / C / F" only fits because it says almost nothing -- a person
+            // reading their own recipe should not have to decode initials.
+            macroField("Calories", unit: "kcal", text: $calories)
+
             HStack(spacing: 10) {
-                macroField("kcal", text: $calories)
-                macroField("P", text: $protein)
-                macroField("C", text: $carbs)
-                macroField("F", text: $fat)
-                macroField("Fibre", text: $fiber)
+                macroField("Protein", unit: "g", text: $protein)
+                macroField("Carbs", unit: "g", text: $carbs)
+                macroField("Fat", unit: "g", text: $fat)
+                macroField("Fibre", unit: "g", text: $fiber)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -130,15 +135,24 @@ struct RecipeEditorView: View {
         .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
     }
 
-    private func macroField(_ label: String, text: Binding<String>) -> some View {
+    /// The label names the macro and the unit says what the number is in.
+    ///
+    /// Both are `Text` above the field rather than a placeholder, because a
+    /// placeholder vanishes the moment the field has a value -- which is
+    /// precisely when someone needs to know which number is fat and which is
+    /// fibre.
+    private func macroField(_ label: String, unit: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label)
+            Text("\(label) (\(unit))")
                 .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             TextField("—", text: text)
                 .keyboardType(.decimalPad)
                 .font(Theme.body)
                 .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
         }
     }

@@ -5,14 +5,16 @@ import LiftCore
 
 /// Meal-grouped food log. `food.db` ships (see SETUP.md) and
 /// `FoodSearchView` — presented here as a sheet — is the search-and-log UI,
-/// gram-based from the start. This view also supports re-logging a past
-/// entry or deleting one.
+/// gram-based from the start. This view also supports editing a logged entry
+/// (tap its row — `FoodEntryEditorView`), re-logging a past entry, or deleting
+/// one.
 struct FoodView: View {
     @Environment(\.modelContext) private var context
 
     @Query private var entries: [FoodEntry]
 
     @State private var showingSearch = false
+    @State private var editing: FoodEntry?
 
     /// Same pattern as `WeightUnit`/`DistanceUnit`/`FoodSearchView`: a live,
     /// current-device display preference, not part of any stored record.
@@ -76,6 +78,11 @@ struct FoodView: View {
         .liftScreen()
         .sheet(isPresented: $showingSearch) {
             FoodSearchView(mealType: MealType.forHour(Calendar.current.component(.hour, from: .now)))
+                .liftAppearance()
+        }
+        .sheet(item: $editing) { entry in
+            FoodEntryEditorView(entry: entry, preferredUnit: servingUnit)
+                .liftAppearance()
         }
     }
 
@@ -98,15 +105,24 @@ struct FoodView: View {
             } else {
                 ForEach(mealEntries) { entry in
                     HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.displayName)
-                                .font(Theme.body)
-                                .foregroundStyle(Theme.textPrimary)
-                            Text(macroLine(entry))
-                                .font(Theme.detail)
-                                .foregroundStyle(Theme.textSecondary)
+                        Button {
+                            editing = entry
+                        } label: {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(entry.displayName)
+                                        .font(Theme.body)
+                                        .foregroundStyle(Theme.textPrimary)
+                                    Text(macroLine(entry))
+                                        .font(Theme.detail)
+                                        .foregroundStyle(Theme.textSecondary)
+                                }
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
                         }
-                        Spacer()
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Edit the amount, meal or macros")
                         Button {
                             context.delete(entry)
                             try? context.save()

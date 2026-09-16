@@ -65,7 +65,7 @@ struct RecipeListView: View {
                         .foregroundStyle(Theme.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.cardPadding)
-                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                        .liftCardBackground()
                 }
                 .buttonStyle(.plain)
 
@@ -79,7 +79,7 @@ struct RecipeListView: View {
                         .foregroundStyle(Theme.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.cardPadding)
-                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                        .liftCardBackground()
                 }
                 .buttonStyle(.plain)
 
@@ -94,7 +94,7 @@ struct RecipeListView: View {
                         .foregroundStyle(Theme.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.cardPadding)
-                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                        .liftCardBackground()
                 }
                 .buttonStyle(.plain)
 
@@ -109,7 +109,7 @@ struct RecipeListView: View {
                         .foregroundStyle(Theme.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.cardPadding)
-                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                        .liftCardBackground()
                 }
                 .buttonStyle(.plain)
 
@@ -141,19 +141,19 @@ struct RecipeListView: View {
             .padding(.bottom, 40)
         }
         .sheet(isPresented: $creatingNew) {
-            RecipeEditorView(recipe: nil).preferredColorScheme(.dark)
+            RecipeEditorView(recipe: nil).liftAppearance()
         }
         .sheet(isPresented: $importingFromLink) {
-            RecipeImportView().preferredColorScheme(.dark)
+            RecipeImportView().liftAppearance()
         }
         .sheet(isPresented: $browsingCatalogue) {
-            RecipeCatalogView().preferredColorScheme(.dark)
+            RecipeCatalogView().liftAppearance()
         }
         .sheet(isPresented: $pasting) {
-            RecipePasteImportView().preferredColorScheme(.dark)
+            RecipePasteImportView().liftAppearance()
         }
         .sheet(item: $editing) { recipe in
-            RecipeEditorView(recipe: recipe).preferredColorScheme(.dark)
+            RecipeEditorView(recipe: recipe).liftAppearance()
         }
     }
 
@@ -199,7 +199,7 @@ struct RecipeListView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 }
 
@@ -243,7 +243,7 @@ struct MealPlanView: View {
                 add(recipe, servings: servings, amountGrams: amountGrams, to: target.day, meal: target.meal)
                 picking = nil
             }
-            .preferredColorScheme(.dark)
+            .liftAppearance()
         }
     }
 
@@ -292,7 +292,7 @@ struct MealPlanView: View {
             }
         }
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 
     /// Remove is a trailing "x", matching how FoodView already deletes a
@@ -415,7 +415,7 @@ struct RecipePickerView: View {
                     .fixedSize()
                 }
                 .padding(Theme.cardPadding)
-                .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                .liftCardBackground()
 
                 ForEach(recipes) { recipe in
                     Button {
@@ -438,7 +438,7 @@ struct RecipePickerView: View {
                             }
                         }
                         .padding(Theme.cardPadding)
-                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                        .liftCardBackground()
                     }
                     .buttonStyle(.plain)
                 }
@@ -492,7 +492,7 @@ struct RecipePickerView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.cardPadding)
-                .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                .liftCardBackground()
 
                 if let preview {
                     previewCard(preview)
@@ -541,7 +541,7 @@ struct RecipePickerView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 }
 
@@ -625,7 +625,7 @@ struct ShoppingListView: View {
                 Spacer()
             }
             .padding(Theme.cardPadding)
-            .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+            .liftCardBackground()
         }
         .buttonStyle(.plain)
     }

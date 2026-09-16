@@ -38,10 +38,10 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Theme.background)
-        .preferredColorScheme(.dark)
+        .liftAppearance()
         .sheet(isPresented: $showingSettings) {
             SettingsView()
-                .preferredColorScheme(.dark)
+                .liftAppearance()
         }
         .task { FoodEntryGramMigration.run(context: context) }
     }

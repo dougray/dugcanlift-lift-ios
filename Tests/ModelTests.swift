@@ -125,7 +125,7 @@ final class SchemaMigrationTests: XCTestCase {
                 name: "Oats",
                 quantity: 2,
                 servingUnit: "serving",
-                nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
+                nutrition: LiftPreGramServingShapes.NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
                 mealTypeRaw: MealType.breakfast.rawValue,
                 loggedAt: loggedAt
             ))
@@ -171,7 +171,7 @@ final class SchemaMigrationTests: XCTestCase {
                 name: "Oats",
                 quantity: 2,
                 servingUnit: "serving",
-                nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
+                nutrition: LiftPreGramServingShapes.NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
                 mealTypeRaw: MealType.breakfast.rawValue,
                 loggedAt: loggedAt
             ))
@@ -222,15 +222,15 @@ final class SchemaMigrationTests: XCTestCase {
                 name: "Oats",
                 quantity: 2,
                 servingUnit: "serving",
-                nutrition: NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
+                nutrition: LiftPreGramServingShapes.NutritionFacts(calories: 300, proteinG: 10, carbsG: 54, fatG: 5),
                 mealTypeRaw: MealType.breakfast.rawValue,
                 loggedAt: loggedAt
             ))
             try context.save()
         }
 
-        // Reopen it the way the app does. LiftSchemaV5 uses the live,
-        // gram-aware FoodEntry/Recipe.
+        // Reopen it the way the app does. LiftSchemaV5 uses the gram-aware
+        // FoodEntry/Recipe — frozen as LiftPreSaturatedFatShapes since V7.
         let v5 = try ModelContainer(
             for: Schema(versionedSchema: LiftSchemaV5.self),
             migrationPlan: LiftMigrationPlan.self,
@@ -238,7 +238,7 @@ final class SchemaMigrationTests: XCTestCase {
         )
         let context = ModelContext(v5)
 
-        let food = try context.fetch(FetchDescriptor<FoodEntry>())
+        let food = try context.fetch(FetchDescriptor<LiftPreSaturatedFatShapes.FoodEntry>())
         XCTAssertEqual(food.count, 1, "the V4 entry must survive the migration")
         XCTAssertEqual(food.first?.name, "Oats")
         XCTAssertEqual(food.first?.dayKey, dayKey)
@@ -246,17 +246,151 @@ final class SchemaMigrationTests: XCTestCase {
         XCTAssertNil(food.first?.amountGrams, "legacy entries have no gram amount until logged via the new flow")
 
         // And the new field must be usable in the migrated store.
-        let recipe = Recipe(name: "Chili", servings: 4)
+        let recipe = LiftPreSaturatedFatShapes.Recipe(name: "Chili", servings: 4)
         recipe.totalWeightGrams = 1200
         context.insert(recipe)
         try context.save()
         XCTAssertEqual(recipe.totalWeightGrams, 1200)
     }
 
+    func testV6StoreOpensAsV7WithNutritionIntact() throws {
+        let loggedAt = Date(timeIntervalSince1970: 1_756_000_000)
+        typealias Frozen = LiftPreSaturatedFatShapes
+        let recipeID: UUID
+
+        // V6 points FoodEntry, Recipe, RecipeIngredient and PlannedMeal at the
+        // seven-field frozen shapes, so this writes the columns a V6 build wrote.
+        do {
+            let v6 = try ModelContainer(
+                for: Schema(versionedSchema: LiftSchemaV6.self),
+                configurations: [ModelConfiguration(url: storeURL)]
+            )
+            let context = ModelContext(v6)
+            context.insert(Frozen.FoodEntry(
+                foodRefID: "usda:173944", name: "Bananas, raw",
+                quantity: 120, servingUnit: "g", amountGrams: 120,
+                nutrition: Frozen.NutritionFacts(calories: 106.8, proteinG: 1.3, carbsG: 27.4, fatG: 0.4,
+                                                 fiberG: 3.1, sugarG: 14.7, sodiumMg: 1.2),
+                mealTypeRaw: MealType.snack.rawValue, loggedAt: loggedAt))
+
+            let recipe = Frozen.Recipe(name: "Chili", servings: 4,
+                                       nutritionPerServing: Frozen.NutritionFacts(calories: 438, proteinG: 36, carbsG: 31, fatG: 19,
+                                                                                  sugarG: 8, sodiumMg: 640))
+            recipe.totalWeightGrams = 1600
+            context.insert(recipe)
+            let ingredient = Frozen.RecipeIngredient(rawText: "500 g lean beef mince")
+            ingredient.recipe = recipe
+            context.insert(ingredient)
+            recipeID = recipe.id
+
+            let meal = Frozen.PlannedMeal(recipeID: recipe.id, recipeName: "Chili", plannedFor: loggedAt,
+                                          snapshotNutrition: recipe.nutritionPerServing)
+            meal.amountGrams = 400
+            meal.snapshotNutritionPerGram = Frozen.NutritionFacts(calories: 1.095, proteinG: 0.09, carbsG: 0.0775,
+                                                                  fatG: 0.0475, sugarG: 0.02, sodiumMg: 1.6)
+            context.insert(meal)
+
+            context.insert(WorkoutDay(date: loggedAt, name: "Legs"))
+            try context.save()
+        }
+
+        let v7 = try ModelContainer(
+            for: Schema(versionedSchema: LiftSchemaV7.self),
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(v7)
+
+        let food = try XCTUnwrap(context.fetch(FetchDescriptor<FoodEntry>()).first)
+        XCTAssertEqual(food.name, "Bananas, raw")
+        XCTAssertEqual(food.amountGrams, 120)
+        XCTAssertEqual(food.nutrition.calories, 106.8)
+        XCTAssertEqual(food.nutrition.fiberG, 3.1)
+        XCTAssertEqual(food.nutrition.sugarG, 14.7)
+        XCTAssertEqual(food.nutrition.sodiumMg, 1.2)
+        XCTAssertNil(food.nutrition.saturatedFatG, "a column that did not exist is unknown, not zero")
+
+        let recipe = try XCTUnwrap(context.fetch(FetchDescriptor<Recipe>()).first)
+        XCTAssertEqual(recipe.id, recipeID)
+        XCTAssertEqual(recipe.totalWeightGrams, 1600)
+        XCTAssertEqual(recipe.nutritionPerServing?.calories, 438)
+        XCTAssertEqual(recipe.nutritionPerServing?.sodiumMg, 640)
+        XCTAssertNil(recipe.nutritionPerServing?.saturatedFatG)
+        XCTAssertEqual(recipe.ingredients?.map(\.rawText), ["500 g lean beef mince"])
+
+        let meal = try XCTUnwrap(context.fetch(FetchDescriptor<PlannedMeal>()).first)
+        XCTAssertEqual(meal.recipeID, recipeID)
+        XCTAssertEqual(meal.snapshotNutrition?.sugarG, 8)
+        XCTAssertEqual(meal.snapshotNutritionPerGram?.sodiumMg, 1.6)
+        XCTAssertNil(meal.snapshotNutrition?.saturatedFatG)
+        XCTAssertNil(meal.snapshotNutritionPerGram?.saturatedFatG)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutDay>()).first?.name, "Legs")
+
+        // And the new column takes a value.
+        food.nutrition.saturatedFatG = 0.1
+        try context.save()
+        XCTAssertEqual(try context.fetch(FetchDescriptor<FoodEntry>()).first?.nutrition.saturatedFatG, 0.1)
+    }
+
+    /// The test above writes its V6 store with this file's frozen shapes, so it
+    /// cannot tell whether those shapes are right. This one can:
+    /// `Fixtures/v6-simulator.store` was written by the V6 build itself
+    /// (LiftKit 1.8.0) running in a simulator — the sample recipes and their
+    /// plan, one planned meal logged, a banana from food search, a workout
+    /// with a set, and a recorded run. If a frozen shape drifts from what that
+    /// build wrote, staged migration cannot identify the store and this throws
+    /// 134504, exactly as an existing install would fail to launch.
+    func testRealV6StoreOpensAsV7() throws {
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "v6-simulator", withExtension: "store"))
+        try FileManager.default.copyItem(at: fixture, to: storeURL)
+
+        let container = try ModelContainer(
+            for: LiftStore.schema,
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(container)
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<FoodEntry>()), 2)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Recipe>()), 5)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<RecipeIngredient>()), 28)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PlannedMeal>()), 9)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<WorkoutDay>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ExerciseEntry>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SetEntry>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<OutdoorActivity>()), 1)
+
+        let foods = try context.fetch(FetchDescriptor<FoodEntry>())
+        let banana = try XCTUnwrap(foods.first { $0.foodRefID == "usda:173944" })
+        XCTAssertEqual(banana.amountGrams, 120)
+        XCTAssertEqual(banana.nutrition.calories, 106.8, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(banana.nutrition.sugarG), 14.676, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(banana.nutrition.sodiumMg), 1.2, accuracy: 0.0001)
+        XCTAssertNil(banana.nutrition.saturatedFatG)
+
+        let chilli = try XCTUnwrap(context.fetch(FetchDescriptor<Recipe>()).first { $0.name == "Beef Chilli" })
+        XCTAssertEqual(chilli.servings, 4)
+        XCTAssertEqual(chilli.nutritionPerServing?.calories, 438)
+        XCTAssertEqual(chilli.nutritionPerServing?.fiberG, 9)
+        XCTAssertNil(chilli.nutritionPerServing?.saturatedFatG)
+        XCTAssertEqual(chilli.ingredients?.count, 7)
+
+        let logged = try context.fetch(FetchDescriptor<PlannedMeal>()).filter { $0.loggedFoodEntryID != nil }
+        XCTAssertEqual(logged.count, 1)
+        XCTAssertEqual(logged.first?.snapshotNutrition?.calories, 342)
+        XCTAssertTrue(foods.contains { $0.id == logged.first?.loggedFoodEntryID })
+
+        let set = try XCTUnwrap(context.fetch(FetchDescriptor<SetEntry>()).first)
+        XCTAssertEqual(set.exercise?.name, "Alternate Hammer Curl")
+        XCTAssertEqual(set.exercise?.day?.name, "Arms")
+        let run = try XCTUnwrap(context.fetch(FetchDescriptor<OutdoorActivity>()).first)
+        XCTAssertEqual(run.distanceMeters, 96.6487438420433, accuracy: 0.0001)
+    }
+
     func testCurrentSchemaIsTheNewestVersion() {
         XCTAssertEqual(
             LiftStore.schema.entities.count,
-            LiftSchemaV6.models.count,
+            LiftSchemaV7.models.count,
             "LiftStore.schema must track the newest VersionedSchema"
         )
     }

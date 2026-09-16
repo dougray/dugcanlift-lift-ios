@@ -29,8 +29,10 @@ import LiftCore
 /// optional non-optional. Any of those needs a `.custom` stage with a real
 /// `willMigrate`/`didMigrate`, not another `.lightweight`.
 ///
-/// When the shape changes again: add a `V6`, add a stage from `V5` to `V6`,
-/// and point `LiftStore.schema` at the new version. Never edit a version that
+/// When the shape changes again: add a `V8`, add a stage from `V7` to `V8`,
+/// and point `LiftStore.schema` at the new version. That includes a change to
+/// a struct a model stores, such as `NutritionFacts` — see
+/// `LiftPreSaturatedFatShapes`. Never edit a version that
 /// has shipped — a store in the wild was written against it. (Freezing an
 /// older version's pre-change shape in a `LiftPreGramServingShapes`-style enum
 /// is not "editing" it in that sense: the version's meaning and
@@ -63,18 +65,15 @@ import LiftCore
 // at, and that type has to be the frozen one to stay inside the same
 // (V1-V4) schema graph.
 //
-// The same drift risk applies one level down: these frozen classes also
-// reference shared VALUE TYPES (`NutritionFacts`, used by FoodEntry, Recipe
-// and PlannedMeal alike) by the live, unversioned struct — not a frozen copy.
-// A future task that changes `NutritionFacts`'s own shape (a new field, a
-// removed one) will silently change what all four frozen shapes above
-// declare themselves to be, with nothing in this file touched to reveal it —
-// the same "duplicate version checksums" failure this whole enum exists to
-// prevent, just triggered from underneath it instead of from a change made
-// directly here. Whoever writes `LiftSchemaV6` should check any shared value
-// type these frozen models reference for that kind of change too, not just
-// the model classes themselves.
+// The same drift risk applies one level down, and in V7 it happened: these
+// classes originally referenced the live `NutritionFacts` struct, which
+// LiftKit 1.9.0 gave an eighth field. SwiftData flattens a struct into one
+// column per field, so that silently changed every frozen shape here. They
+// now use `LiftPreSaturatedFatShapes.NutritionFacts`, the seven-field copy,
+// through the typealias below — see that enum.
 enum LiftPreGramServingShapes {
+
+    typealias NutritionFacts = LiftPreSaturatedFatShapes.NutritionFacts
 
     @Model
     final class FoodEntry {
@@ -280,6 +279,181 @@ enum LiftPreSetMetricsShapes {
     }
 }
 
+// MARK: - Frozen pre-V7 NutritionFacts, and the V5/V6 classes that store it
+//
+// V7 is LiftKit 1.9.0's `NutritionFacts.saturatedFatG`. SwiftData does not
+// store `NutritionFacts` as a blob: it flattens the struct into one column per
+// field on the owning entity (`ZSUGARG`, `ZSODIUMMG`, ... and `ZSUGARG1`, ...
+// for PlannedMeal's second one), so a new field in the struct is a new column
+// on FoodEntry, Recipe and PlannedMeal, and a new checksum for each.
+//
+// Every version before V7 declared those entities through the live struct —
+// V5 and V6 through the live classes, V1-V4 through LiftPreGramServingShapes,
+// whose classes named the live struct too. With the bump alone, none of V1-V6
+// matches the store V6 wrote, and staged migration refuses every existing
+// install at launch: "Cannot use staged migration with an unknown model
+// version" (NSCocoaErrorDomain 134504). Reproduced in LiftKit before this
+// change was written; in a release build that is a fatalError on launch, and
+// in a DEBUG build LiftStore deletes the store.
+//
+// The fix is the one this file already uses, one level down. `NutritionFacts`
+// below is 1.8.0's struct exactly — seven fields, same names, same order. Its
+// type name does not enter the checksum; its fields do. The four classes are
+// V5/V6's FoodEntry, Recipe, RecipeIngredient and PlannedMeal as LiftKit 1.8.0
+// shipped them, pointed at the frozen struct. RecipeIngredient stores no
+// nutrition; it is frozen for the relationship-graph reason given above
+// LiftPreSetMetricsShapes.
+//
+// Never add `saturatedFatG` here or change a field: these must describe the
+// store a V6 build wrote. `Tests/Fixtures/v6-store` is such a store, written
+// by the V6 binary in a simulator, and `testRealV6StoreOpensAsV7` opens it.
+enum LiftPreSaturatedFatShapes {
+
+    /// LiftKit 1.8.0's `NutritionFacts`, field for field.
+    struct NutritionFacts: Codable, Hashable, Sendable {
+        var calories: Double = 0
+        var proteinG: Double = 0
+        var carbsG: Double = 0
+        var fatG: Double = 0
+        var fiberG: Double?
+        var sugarG: Double?
+        var sodiumMg: Double?
+
+        init(calories: Double = 0,
+             proteinG: Double = 0,
+             carbsG: Double = 0,
+             fatG: Double = 0,
+             fiberG: Double? = nil,
+             sugarG: Double? = nil,
+             sodiumMg: Double? = nil) {
+            self.calories = calories
+            self.proteinG = proteinG
+            self.carbsG = carbsG
+            self.fatG = fatG
+            self.fiberG = fiberG
+            self.sugarG = sugarG
+            self.sodiumMg = sodiumMg
+        }
+
+        static let zero = NutritionFacts()
+    }
+
+    @Model
+    final class FoodEntry {
+        var id: UUID = UUID()
+        var loggedAt: Date = Date.now
+        var dayKey: String = ""
+
+        private var mealTypeRaw: String = MealType.snack.rawValue
+
+        var foodRefID: String = ""
+        var name: String = ""
+        var brand: String?
+
+        var quantity: Double = 1
+        var servingUnit: String = "serving"
+        var servingGrams: Double?
+        var amountGrams: Double?
+
+        var nutrition: NutritionFacts = NutritionFacts.zero
+        var healthKitUUID: UUID?
+
+        init(foodRefID: String, name: String, brand: String? = nil,
+             quantity: Double, servingUnit: String, servingGrams: Double? = nil,
+             amountGrams: Double? = nil,
+             nutrition: NutritionFacts, mealTypeRaw: String, loggedAt: Date = .now) {
+            self.id = UUID()
+            self.foodRefID = foodRefID
+            self.name = name
+            self.brand = brand
+            self.quantity = quantity
+            self.servingUnit = servingUnit
+            self.servingGrams = servingGrams
+            self.amountGrams = amountGrams
+            self.nutrition = nutrition
+            self.mealTypeRaw = mealTypeRaw
+            self.loggedAt = loggedAt
+            self.dayKey = DayKey.make(from: loggedAt)
+        }
+    }
+
+    @Model
+    final class Recipe {
+        var id: UUID = UUID()
+        var name: String = ""
+        var createdAt: Date = Date.now
+        var sourceURL: URL?
+        var sourceAuthor: String?
+        var servings: Double = 1
+        var prepMinutes: Int?
+        var cookMinutes: Int?
+        var steps: [String] = []
+        var nutritionPerServing: NutritionFacts?
+        var nutritionIsEstimated: Bool = false
+        var totalWeightGrams: Double?
+        var sourceTranscript: String?
+
+        @Relationship(deleteRule: .cascade, inverse: \RecipeIngredient.recipe)
+        var ingredients: [RecipeIngredient]? = []
+
+        init(name: String, servings: Double = 1, nutritionPerServing: NutritionFacts? = nil) {
+            self.id = UUID()
+            self.name = name
+            self.servings = max(servings, 0.0001)
+            self.nutritionPerServing = nutritionPerServing
+            self.ingredients = []
+        }
+    }
+
+    @Model
+    final class RecipeIngredient {
+        var id: UUID = UUID()
+        var rawText: String = ""
+        var item: String?
+        var qty: Double?
+        var unit: String?
+        var grams: Double?
+        var foodRefID: String?
+        var isOptional: Bool = false
+        var note: String?
+        var sortOrder: Int = 0
+
+        var recipe: Recipe?
+
+        init(rawText: String) {
+            self.id = UUID()
+            self.rawText = rawText
+        }
+    }
+
+    @Model
+    final class PlannedMeal {
+        var id: UUID = UUID()
+        var dayKey: String = ""
+        var plannedFor: Date = Date.now
+
+        private var mealTypeRaw: String = MealType.dinner.rawValue
+
+        var recipeID: UUID = UUID()
+        var servings: Double = 1
+        var recipeName: String = ""
+        var snapshotNutrition: NutritionFacts?
+        var amountGrams: Double?
+        var snapshotNutritionPerGram: NutritionFacts?
+        var loggedFoodEntryID: UUID?
+
+        init(recipeID: UUID, recipeName: String, plannedFor: Date,
+             snapshotNutrition: NutritionFacts? = nil) {
+            self.id = UUID()
+            self.recipeID = recipeID
+            self.recipeName = recipeName
+            self.plannedFor = plannedFor
+            self.dayKey = DayKey.make(from: plannedFor)
+            self.snapshotNutrition = snapshotNutrition
+        }
+    }
+}
+
 // MARK: - V1 — everything before COOK
 
 enum LiftSchemaV1: VersionedSchema {
@@ -385,11 +559,11 @@ enum LiftSchemaV5: VersionedSchema {
             LiftPreSetMetricsShapes.WorkoutDay.self,
             LiftPreSetMetricsShapes.ExerciseEntry.self,
             LiftPreSetMetricsShapes.SetEntry.self,
-            FoodEntry.self,
+            LiftPreSaturatedFatShapes.FoodEntry.self,
             BodyMeasurement.self,
-            Recipe.self,
-            RecipeIngredient.self,
-            PlannedMeal.self,
+            LiftPreSaturatedFatShapes.Recipe.self,
+            LiftPreSaturatedFatShapes.RecipeIngredient.self,
+            LiftPreSaturatedFatShapes.PlannedMeal.self,
             ShoppingListCheck.self,
             // V3, unchanged.
             Routine.self,
@@ -415,7 +589,37 @@ enum LiftSchemaV6: VersionedSchema {
             WorkoutDay.self,
             ExerciseEntry.self,
             SetEntry.self,
-            // Unchanged since V5.
+            // Unchanged since V5 — frozen, because V7 changes the
+            // NutritionFacts they store.
+            LiftPreSaturatedFatShapes.FoodEntry.self,
+            BodyMeasurement.self,
+            LiftPreSaturatedFatShapes.Recipe.self,
+            LiftPreSaturatedFatShapes.RecipeIngredient.self,
+            LiftPreSaturatedFatShapes.PlannedMeal.self,
+            ShoppingListCheck.self,
+            Routine.self,
+            RoutineExercise.self,
+            RoutinePrescribedSet.self,
+            ImportedPlan.self,
+            ScheduledSession.self,
+            OutdoorActivity.self
+        ]
+    }
+}
+
+// MARK: - V7 — saturated fat (LiftKit 1.9.0's NutritionFacts.saturatedFatG)
+
+enum LiftSchemaV7: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(7, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            WorkoutDay.self,
+            ExerciseEntry.self,
+            SetEntry.self,
+            // The four that changed — live classes, whose NutritionFacts
+            // columns now include saturatedFatG. RecipeIngredient has none of
+            // its own; it follows Recipe through the relationship.
             FoodEntry.self,
             BodyMeasurement.self,
             Recipe.self,
@@ -438,11 +642,11 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
 
     static var schemas: [any VersionedSchema.Type] {
         [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self,
-         LiftSchemaV5.self, LiftSchemaV6.self]
+         LiftSchemaV5.self, LiftSchemaV6.self, LiftSchemaV7.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -490,5 +694,16 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v5ToV6 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV5.self,
         toVersion: LiftSchemaV6.self
+    )
+
+    /// One new optional column, `saturatedFatG`, wherever a `NutritionFacts`
+    /// is stored: FoodEntry, Recipe, and PlannedMeal twice. No new model
+    /// types, no renames, no type changes. Existing rows read nil, which means
+    /// "the source did not say" — never zero. V1-V6 are pointed at
+    /// LiftPreSaturatedFatShapes so their checksums still describe the stores
+    /// those builds wrote.
+    static let v6ToV7 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV6.self,
+        toVersion: LiftSchemaV7.self
     )
 }

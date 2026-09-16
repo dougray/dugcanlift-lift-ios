@@ -69,6 +69,8 @@ struct FoodView: View {
                     section(meal, entries: mealEntries)
                 }
 
+                NutrientTotalsSection(foods: entries)
+
                 recentSection
             }
             .padding(.horizontal, 16)
@@ -116,6 +118,11 @@ struct FoodView: View {
                                     Text(macroLine(entry))
                                         .font(Theme.detail)
                                         .foregroundStyle(Theme.textSecondary)
+                                    if let details = NutrientDetailsDisplay.entryLine(entry.nutrition) {
+                                        Text(details)
+                                            .font(Theme.detail)
+                                            .foregroundStyle(Theme.textSecondary)
+                                    }
                                 }
                                 Spacer()
                             }
@@ -249,5 +256,51 @@ enum FoodEntryDisplay {
             return String(Int(value))
         }
         return String(format: "%.1f", value)
+    }
+}
+
+/// Today's saturated fat, sugar and sodium, each over only the foods that
+/// recorded it — shown on Food and Home wherever fibre is. No bars and no
+/// goals: these are tracked, never targeted. A partial total says how many
+/// foods it covers, because it is a floor rather than a day. Nothing at all
+/// when no food today recorded any of the three.
+struct NutrientTotalsSection: View {
+    let foods: [FoodEntry]
+
+    var body: some View {
+        let totals = NutrientDetailsDisplay.dayTotals(foods.map(\.nutrition))
+        if !totals.isEmpty {
+            // Laid out like a meal section above it, not a card: Food's log is
+            // sections on the page, and a lone card here would read as a
+            // different kind of thing.
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Also tracked today")
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accent)
+                NutrientTotalRows(totals: totals)
+            }
+        }
+    }
+}
+
+/// The rows alone, for a card that already has a title.
+struct NutrientTotalRows: View {
+    let totals: [NutrientDetailsDisplay.Total]
+
+    var body: some View {
+        VStack(spacing: 9) {
+            ForEach(totals) { total in
+                VStack(alignment: .leading, spacing: 1) {
+                    StatRow(label: total.nutrient.label, value: total.value)
+                    if let coverage = total.coverage {
+                        Text(coverage)
+                            .font(Theme.detail)
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }

@@ -6,7 +6,7 @@ final class OutdoorActivityModelsTests: XCTestCase {
 
     private func makeContext() throws -> ModelContext {
         let container = try ModelContainer(
-            for: Schema(versionedSchema: LiftSchemaV6.self),
+            for: Schema(versionedSchema: LiftSchemaV7.self),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
         )
         return ModelContext(container)

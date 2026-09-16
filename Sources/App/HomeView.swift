@@ -136,6 +136,9 @@ struct HomeView: View {
                         StatRow(label: "Carbs", value: "\(Int(totals.carbsG)) g")
                         StatRow(label: "Fat", value: "\(Int(totals.fatG)) g")
                         StatRow(label: "Fiber", value: "\(Int(totals.fiberG ?? 0)) g")
+                        // Saturated fat, sugar and sodium, when any food today
+                        // recorded them. Totals only, never against a goal.
+                        NutrientTotalRows(totals: NutrientDetailsDisplay.dayTotals(todaysFood.map(\.nutrition)))
                     }
                 }
             }

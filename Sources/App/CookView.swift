@@ -52,6 +52,7 @@ struct RecipeListView: View {
     @State private var creatingNew = false
     @State private var importingFromLink = false
     @State private var browsingCatalogue = false
+    @State private var pasting = false
 
     var body: some View {
         ScrollView {
@@ -97,6 +98,21 @@ struct RecipeListView: View {
                 }
                 .buttonStyle(.plain)
 
+                // Last of the four: a link reads a page properly wherever one
+                // exists, so this is what is left when no page does -- a video
+                // caption, an email, a card off the fridge.
+                Button {
+                    pasting = true
+                } label: {
+                    Label("Paste a recipe", systemImage: "doc.on.clipboard")
+                        .font(Theme.body.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Theme.cardPadding)
+                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                }
+                .buttonStyle(.plain)
+
                 if recipes.isEmpty {
                     Text("No recipes yet. Add one you already cook — the plan and the shopping list build themselves from here.")
                         .font(Theme.detail)
@@ -132,6 +148,9 @@ struct RecipeListView: View {
         }
         .sheet(isPresented: $browsingCatalogue) {
             RecipeCatalogView().preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $pasting) {
+            RecipePasteImportView().preferredColorScheme(.dark)
         }
         .sheet(item: $editing) { recipe in
             RecipeEditorView(recipe: recipe).preferredColorScheme(.dark)

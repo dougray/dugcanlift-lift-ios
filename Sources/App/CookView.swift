@@ -50,6 +50,7 @@ struct RecipeListView: View {
 
     @State private var editing: Recipe?
     @State private var creatingNew = false
+    @State private var importingFromLink = false
 
     var body: some View {
         ScrollView {
@@ -58,6 +59,21 @@ struct RecipeListView: View {
                     creatingNew = true
                 } label: {
                     Label("New recipe", systemImage: "plus")
+                        .font(Theme.body.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Theme.cardPadding)
+                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                }
+                .buttonStyle(.plain)
+
+                // Second, not first: typing in a recipe you already cook is
+                // the normal way in, and an import always lands in the same
+                // editor afterwards anyway.
+                Button {
+                    importingFromLink = true
+                } label: {
+                    Label("Import from a link", systemImage: "link")
                         .font(Theme.body.weight(.semibold))
                         .foregroundStyle(Theme.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -95,6 +111,9 @@ struct RecipeListView: View {
         }
         .sheet(isPresented: $creatingNew) {
             RecipeEditorView(recipe: nil).preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $importingFromLink) {
+            RecipeImportView().preferredColorScheme(.dark)
         }
         .sheet(item: $editing) { recipe in
             RecipeEditorView(recipe: recipe).preferredColorScheme(.dark)

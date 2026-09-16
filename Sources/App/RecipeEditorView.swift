@@ -26,6 +26,10 @@ struct RecipeEditorView: View {
     @State private var protein = ""
     @State private var carbs = ""
     @State private var fat = ""
+    /// Optional on `NutritionFacts` where the other four are not, so a blank
+    /// here stays nil rather than becoming a measured zero: a dish whose
+    /// ingredients carry no fibre data must not claim to have none.
+    @State private var fiber = ""
 
     /// Displayed and entered in the person's preferred `ServingUnit`, not
     /// necessarily grams — converted to/from `Recipe.totalWeightGrams` at
@@ -113,11 +117,17 @@ struct RecipeEditorView: View {
                 .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
 
+            // Calories on its own row, the four gram figures under it. Five
+            // across one row crushes each to about 70pt at iPhone width, and
+            // "P / C / F" only fits because it says almost nothing -- a person
+            // reading their own recipe should not have to decode initials.
+            macroField("Calories", unit: "kcal", text: $calories)
+
             HStack(spacing: 10) {
-                macroField("kcal", text: $calories)
-                macroField("P", text: $protein)
-                macroField("C", text: $carbs)
-                macroField("F", text: $fat)
+                macroField("Protein", unit: "g", text: $protein)
+                macroField("Carbs", unit: "g", text: $carbs)
+                macroField("Fat", unit: "g", text: $fat)
+                macroField("Fibre", unit: "g", text: $fiber)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -125,15 +135,24 @@ struct RecipeEditorView: View {
         .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
     }
 
-    private func macroField(_ label: String, text: Binding<String>) -> some View {
+    /// The label names the macro and the unit says what the number is in.
+    ///
+    /// Both are `Text` above the field rather than a placeholder, because a
+    /// placeholder vanishes the moment the field has a value -- which is
+    /// precisely when someone needs to know which number is fat and which is
+    /// fibre.
+    private func macroField(_ label: String, unit: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label)
+            Text("\(label) (\(unit))")
                 .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             TextField("—", text: text)
                 .keyboardType(.decimalPad)
                 .font(Theme.body)
                 .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
         }
     }
@@ -184,6 +203,7 @@ struct RecipeEditorView: View {
             protein = CookFormat.trimmed(nutrition.proteinG)
             carbs = CookFormat.trimmed(nutrition.carbsG)
             fat = CookFormat.trimmed(nutrition.fatG)
+            fiber = nutrition.fiberG.map(CookFormat.trimmed) ?? ""
         }
     }
 
@@ -200,7 +220,7 @@ struct RecipeEditorView: View {
         target.name = trimmedName
         target.servings = servings
         target.steps = lines(from: stepText)
-        target.nutritionPerServing = enteredNutrition()
+        target.nutritionPerServing = enteredNutrition(merging: target.nutritionPerServing)
 
         // Empty/unparseable stays nil — a recipe without a total weight
         // simply keeps using the legacy servings-based path. Otherwise
@@ -235,19 +255,12 @@ struct RecipeEditorView: View {
         dismiss()
     }
 
-    /// nil unless something was actually typed — an untouched form must not
-    /// write zeros, which would later log as a zero-calorie meal.
-    private func enteredNutrition() -> NutritionFacts? {
-        let values = [calories, protein, carbs, fat].map {
-            Double($0.trimmingCharacters(in: .whitespaces))
-        }
-        guard values.contains(where: { $0 != nil }) else { return nil }
-        return NutritionFacts(
-            calories: values[0] ?? 0,
-            proteinG: values[1] ?? 0,
-            carbsG: values[2] ?? 0,
-            fatG: values[3] ?? 0
-        )
+    /// The rule itself lives in `RecipeMacroEntry`, not here: it decides
+    /// whether fibre, sugar and sodium survive a save, and a rule in a view's
+    /// `@State` cannot be tested.
+    private func enteredNutrition(merging existing: NutritionFacts?) -> NutritionFacts? {
+        RecipeMacroEntry.entered(calories: calories, protein: protein, carbs: carbs,
+                                 fat: fat, fiber: fiber, merging: existing)
     }
 
     private func lines(from text: String) -> [String] {

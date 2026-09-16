@@ -30,6 +30,12 @@ struct RecipeEditorView: View {
     /// here stays nil rather than becoming a measured zero: a dish whose
     /// ingredients carry no fibre data must not claim to have none.
     @State private var fiber = ""
+    /// Saturated fat, sugar and sodium, under "More nutrients". Tracked, never
+    /// targeted; blank stays nil for the same reason fibre does.
+    @State private var saturatedFat = ""
+    @State private var sugar = ""
+    @State private var sodium = ""
+    @State private var showingMoreNutrients = false
 
     /// Displayed and entered in the person's preferred `ServingUnit`, not
     /// necessarily grams — converted to/from `Recipe.totalWeightGrams` at
@@ -129,10 +135,48 @@ struct RecipeEditorView: View {
                 macroField("Fat", unit: "g", text: $fat)
                 macroField("Fibre", unit: "g", text: $fiber)
             }
+
+            moreNutrients
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
         .liftCardBackground()
+    }
+
+    /// Collapsed unless the recipe already has one of the three, so an
+    /// imported recipe shows what its page said without a tap.
+    private var moreNutrients: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { showingMoreNutrients.toggle() }
+            } label: {
+                HStack {
+                    Text("More nutrients")
+                        .font(Theme.body.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .rotationEffect(.degrees(showingMoreNutrients ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
+            .accessibilityValue(showingMoreNutrients ? "Expanded" : "Collapsed")
+
+            if showingMoreNutrients {
+                Text("Per serving. No goals — blank stays unknown.")
+                    .font(Theme.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                HStack(alignment: .top, spacing: 10) {
+                    macroField("Saturated fat", unit: "g", text: $saturatedFat)
+                    macroField("Sugar", unit: "g", text: $sugar)
+                    macroField("Sodium", unit: "mg", text: $sodium)
+                }
+            }
+        }
     }
 
     /// The label names the macro and the unit says what the number is in.
@@ -204,6 +248,11 @@ struct RecipeEditorView: View {
             carbs = CookFormat.trimmed(nutrition.carbsG)
             fat = CookFormat.trimmed(nutrition.fatG)
             fiber = nutrition.fiberG.map(CookFormat.trimmed) ?? ""
+            saturatedFat = nutrition.saturatedFatG.map(CookFormat.trimmed) ?? ""
+            sugar = nutrition.sugarG.map(CookFormat.trimmed) ?? ""
+            sodium = nutrition.sodiumMg.map(CookFormat.trimmed) ?? ""
+            showingMoreNutrients = nutrition.saturatedFatG != nil || nutrition.sugarG != nil
+                || nutrition.sodiumMg != nil
         }
     }
 
@@ -220,7 +269,9 @@ struct RecipeEditorView: View {
         target.name = trimmedName
         target.servings = servings
         target.steps = lines(from: stepText)
-        target.nutritionPerServing = enteredNutrition(merging: target.nutritionPerServing)
+        target.nutritionPerServing = RecipeMacroEntry.entered(
+            calories: calories, protein: protein, carbs: carbs, fat: fat, fiber: fiber,
+            saturatedFat: saturatedFat, sugar: sugar, sodium: sodium)
 
         // Empty/unparseable stays nil — a recipe without a total weight
         // simply keeps using the legacy servings-based path. Otherwise
@@ -253,14 +304,6 @@ struct RecipeEditorView: View {
         context.delete(recipe)
         try? context.save()
         dismiss()
-    }
-
-    /// The rule itself lives in `RecipeMacroEntry`, not here: it decides
-    /// whether fibre, sugar and sodium survive a save, and a rule in a view's
-    /// `@State` cannot be tested.
-    private func enteredNutrition(merging existing: NutritionFacts?) -> NutritionFacts? {
-        RecipeMacroEntry.entered(calories: calories, protein: protein, carbs: carbs,
-                                 fat: fat, fiber: fiber, merging: existing)
     }
 
     private func lines(from text: String) -> [String] {

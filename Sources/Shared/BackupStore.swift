@@ -56,6 +56,10 @@ enum BackupStore {
             ]
             entry.brand.map { extras["brand"] = $0 }
             entry.servingGrams.map { extras["servingGrams"] = $0 }
+            // Still written here as well as in the common shape below: a LIFT
+            // iOS build from before the common fields reads sugar and sodium
+            // only from ext.ios, and a backup is how someone moves to a phone
+            // that may not be updated yet.
             facts.sugarG.map { extras["sugarG"] = $0 }
             facts.sodiumMg.map { extras["sodiumMg"] = $0 }
             entry.healthKitUUID.map { extras["healthKitUUID"] = $0.uuidString }
@@ -82,6 +86,10 @@ enum BackupStore {
                 "meal": entry.mealType.rawValue.uppercased()
             ]
             entry.amountGrams.map { common["amountGrams"] = $0 }
+            // Saturated fat, sugar and sodium under the names every LIFT client
+            // reads (BACKUP-FORMAT food[]), on the same basis as the macros
+            // beside them. Unrounded, and absent when unknown — never 0.
+            addNutrientDetails(facts, to: &common)
             return common
         }
 
@@ -220,6 +228,7 @@ enum BackupStore {
                 // Recipe-level on iOS, nutrition-level everywhere else.
                 nutrition["estimated"] = recipe.nutritionIsEstimated
                 record["nutritionPerServing"] = nutrition
+                // Also under ext.ios, for an older LIFT iOS build — see food.
                 facts.sugarG.map { extras["sugarG"] = $0 }
                 facts.sodiumMg.map { extras["sodiumMg"] = $0 }
             }
@@ -369,8 +378,11 @@ enum BackupStore {
                     carbsG: double(raw["carbsG"]) ?? 0,
                     fatG: double(raw["fatG"]) ?? 0,
                     fiberG: double(raw["fiberG"]),
-                    sugarG: double(extras["sugarG"]),
-                    sodiumMg: double(extras["sodiumMg"])
+                    // The common field first; an iPhone file written before it
+                    // existed carried sugar and sodium only under ext.ios.
+                    sugarG: double(raw["sugarG"]) ?? double(extras["sugarG"]),
+                    sodiumMg: double(raw["sodiumMg"]) ?? double(extras["sodiumMg"]),
+                    saturatedFatG: double(raw["saturatedFatG"])
                 ),
                 mealType: MealType(rawValue: (raw["meal"] as? String ?? "snack").lowercased()) ?? .snack,
                 loggedAt: date(raw["loggedAt"]) ?? .now
@@ -767,8 +779,7 @@ enum BackupStore {
                            bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 
-    /// Macros in the file's shape. Sugar and sodium have no place in the common
-    /// shape, so a recipe's travel under ext.ios.
+    /// Macros in the file's shape, saturated fat, sugar and sodium included.
     private static func nutritionRecord(_ facts: NutritionFacts) -> [String: Any] {
         var out: [String: Any] = [
             "calories": facts.calories,
@@ -777,11 +788,29 @@ enum BackupStore {
             "fatG": facts.fatG
         ]
         facts.fiberG.map { out["fiberG"] = $0 }
+        addNutrientDetails(facts, to: &out)
         return out
+    }
+
+    /// `saturatedFatG`, `sugarG`, `sodiumMg` — each only when known, and only
+    /// when finite, since JSONSerialization cannot write NaN.
+    private static func addNutrientDetails(_ facts: NutritionFacts, to record: inout [String: Any]) {
+        let values: [(String, Double?)] = [
+            ("saturatedFatG", facts.saturatedFatG),
+            ("sugarG", facts.sugarG),
+            ("sodiumMg", facts.sodiumMg),
+        ]
+        for (key, value) in values {
+            if let value, value.isFinite { record[key] = value }
+        }
     }
 
     /// Macros from the file. nil when the file has none -- never zeros, which
     /// would log as a zero-calorie meal.
+    ///
+    /// Saturated fat, sugar and sodium are read from the common fields. `sugar`
+    /// and `sodium` are an older iPhone file's ext.ios values, used only for a
+    /// field the common shape does not have.
     private static func facts(_ raw: [String: Any]?, sugar: Any? = nil, sodium: Any? = nil) -> NutritionFacts? {
         guard let raw else { return nil }
         return NutritionFacts(
@@ -790,8 +819,9 @@ enum BackupStore {
             carbsG: double(raw["carbsG"]) ?? 0,
             fatG: double(raw["fatG"]) ?? 0,
             fiberG: double(raw["fiberG"]),
-            sugarG: double(sugar),
-            sodiumMg: double(sodium)
+            sugarG: double(raw["sugarG"]) ?? double(sugar),
+            sodiumMg: double(raw["sodiumMg"]) ?? double(sodium),
+            saturatedFatG: double(raw["saturatedFatG"])
         )
     }
 

@@ -208,4 +208,57 @@ final class PlanImporterTests: XCTestCase {
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.dayKey, "2026-09-08")
     }
+
+    // MARK: - ux: saturated fat, sugar and sodium
+
+    /// PLAN-FORMAT `ux`, decoded from a link rather than built in Swift, so the
+    /// kit's tuple reading and this merge are exercised together. Trailing
+    /// nulls are trimmed on the wire: `[3.5, null, 640]` is no sugar.
+    func testUxIsAppliedPerServingAndCarriedIntoThePlannedMeal() throws {
+        let json = """
+        {
+          "v": 1, "t": "plan", "l": "a1b2c3d4", "n": "Coach Dana",
+          "r": [{"n": "Beef Chilli", "s": 4, "u": [438, 36, 31, 19, 9], "ux": [3.5, null, 640],
+                 "i": ["500 g lean beef mince"]}],
+          "m": [{"d": "2026-08-26", "s": 2, "x": 0, "q": 2}]
+        }
+        """
+        let payload = try PlanLinkCodec.decode(fragment: PlanLinkFixtures.fragment(json: json),
+                                               expectedLifterID: "a1b2c3d4")
+        let context = try makeContext()
+        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context)
+
+        let facts = try XCTUnwrap(try context.fetch(FetchDescriptor<Recipe>()).first?.nutritionPerServing)
+        XCTAssertEqual(facts.calories, 438)
+        XCTAssertEqual(facts.fiberG, 9)
+        XCTAssertEqual(facts.saturatedFatG, 3.5)
+        XCTAssertNil(facts.sugarG, "a null slot is unknown, not zero")
+        XCTAssertEqual(facts.sodiumMg, 640)
+
+        let meal = try XCTUnwrap(try context.fetch(FetchDescriptor<PlannedMeal>()).first)
+        XCTAssertEqual(meal.snapshotNutrition?.sodiumMg, 640, "per serving, never pre-scaled")
+        XCTAssertEqual(try XCTUnwrap(meal.makeFoodEntry()?.nutrition.saturatedFatG), 7, accuracy: 1e-9,
+                       "logging two servings scales it with the macros")
+    }
+
+    func testUxWithoutMacrosDoesNotInventARecipesNutrition() throws {
+        let json = """
+        {"v": 1, "t": "plan", "l": "a1b2c3d4", "n": "Coach Dana",
+         "r": [{"n": "Salad", "s": 1, "ux": [1, 2, 300]}]}
+        """
+        let payload = try PlanLinkCodec.decode(fragment: PlanLinkFixtures.fragment(json: json),
+                                               expectedLifterID: "a1b2c3d4")
+        let context = try makeContext()
+        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context)
+        XCTAssertNil(try context.fetch(FetchDescriptor<Recipe>()).first?.nutritionPerServing)
+    }
+
+    func testNoUxLeavesTheThreeUnknown() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(examplePayload, hash: "ux-none", in: context)
+        let facts = try XCTUnwrap(try context.fetch(FetchDescriptor<Recipe>()).first?.nutritionPerServing)
+        XCTAssertNil(facts.saturatedFatG)
+        XCTAssertNil(facts.sugarG)
+        XCTAssertNil(facts.sodiumMg)
+    }
 }

@@ -3,13 +3,14 @@ import SwiftData
 import LiftCore
 
 enum OutdoorActivityType: String, Codable, CaseIterable, Identifiable {
-    case run, hike
+    case run, walk, hike
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .run:  return "Run"
+        case .walk: return "Walk"
         case .hike: return "Hike"
         }
     }

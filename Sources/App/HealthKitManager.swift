@@ -137,7 +137,11 @@ final class HealthKitManager {
               let endedAt = activity.endedAt else { return nil }
 
         let configuration = HKWorkoutConfiguration()
-        configuration.activityType = activity.activityType == .run ? .running : .hiking
+        switch activity.activityType {
+        case .run:  configuration.activityType = .running
+        case .walk: configuration.activityType = .walking
+        case .hike: configuration.activityType = .hiking
+        }
         configuration.locationType = .outdoor
 
         let builder = HKWorkoutBuilder(

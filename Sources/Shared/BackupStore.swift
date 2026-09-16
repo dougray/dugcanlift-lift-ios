@@ -186,7 +186,86 @@ enum BackupStore {
             "weightUnit": defaults.string(forKey: "weightUnit") ?? WeightUnit.pounds.rawValue
         ]
 
+        // ---- recipes and the meal plan ----
+        // The common shape is what LIFT web and Android already store, so the
+        // work here is spelling: recipeID -> recipeId, dayKey -> date,
+        // sourceURL -> sourceUrl, isOptional -> optional, lower-case meal types
+        // -> upper. What the common shape has no field for goes under ext.ios.
+        var iosRecipes: [String: Any] = [:]
+        var recipeRecords: [[String: Any]] = []
+        for recipe in try context.fetch(FetchDescriptor<Recipe>()) {
+            let key = recipe.id.uuidString
+            var record: [String: Any] = [
+                "id": key,
+                "name": recipe.name,
+                "servings": recipe.servings,
+                "steps": recipe.steps,
+                "importedAt": Int((recipe.createdAt.timeIntervalSince1970 * 1000).rounded())
+            ]
+            recipe.totalWeightGrams.map { record["totalWeightGrams"] = $0 }
+            recipe.sourceURL.map { record["sourceUrl"] = $0.absoluteString }
+            recipe.sourceAuthor.map { record["sourceAuthor"] = $0 }
+            recipe.sourceTranscript.map { record["sourceTranscript"] = $0 }
+            recipe.prepMinutes.map { record["prepMinutes"] = $0 }
+            recipe.cookMinutes.map { record["cookMinutes"] = $0 }
+
+            var extras: [String: Any] = [:]
+            if let facts = recipe.nutritionPerServing {
+                var nutrition = nutritionRecord(facts)
+                // Recipe-level on iOS, nutrition-level everywhere else.
+                nutrition["estimated"] = recipe.nutritionIsEstimated
+                record["nutritionPerServing"] = nutrition
+                facts.sugarG.map { extras["sugarG"] = $0 }
+                facts.sodiumMg.map { extras["sodiumMg"] = $0 }
+            }
+
+            var foodRefs: [String: Any] = [:]
+            let ingredients = (recipe.ingredients ?? []).sorted { $0.sortOrder < $1.sortOrder }
+            record["ingredients"] = ingredients.enumerated().map { index, ingredient -> [String: Any] in
+                var line: [String: Any] = ["rawText": ingredient.rawText, "optional": ingredient.isOptional]
+                ingredient.item.map { line["item"] = $0 }
+                ingredient.qty.map { line["qty"] = $0 }
+                ingredient.unit.map { line["unit"] = $0 }
+                ingredient.grams.map { line["grams"] = $0 }
+                ingredient.note.map { line["note"] = $0 }
+                ingredient.foodRefID.map { foodRefs[String(index)] = $0 }
+                return line
+            }
+            if !foodRefs.isEmpty { extras["ingredientFoodRefIDs"] = foodRefs }
+            if !extras.isEmpty { iosRecipes[key] = extras }
+            recipeRecords.append(record)
+        }
+        data["recipes"] = recipeRecords
+
+        var iosPlan: [String: Any] = [:]
+        data["plan"] = try context.fetch(FetchDescriptor<PlannedMeal>()).map { meal -> [String: Any] in
+            let key = meal.id.uuidString
+            var record: [String: Any] = [
+                "id": key,
+                "recipeId": meal.recipeID.uuidString,
+                "recipeName": meal.recipeName,
+                "date": meal.dayKey,
+                "meal": meal.mealType.rawValue.uppercased(),
+                "servings": meal.servings,
+                "loggedFoodEntryId": meal.loggedFoodEntryID.map { $0.uuidString as Any } ?? NSNull()
+            ]
+            meal.amountGrams.map { record["amountGrams"] = $0 }
+            meal.snapshotNutrition.map { record["snapshotNutrition"] = nutritionRecord($0) }
+            meal.snapshotNutritionPerGram.map { record["snapshotNutritionPerGram"] = nutritionRecord($0) }
+            iosPlan[key] = ["plannedFor": Int((meal.plannedFor.timeIntervalSince1970 * 1000).rounded())]
+            return record
+        }
+
+        // A section another client wrote that this app does not store goes back
+        // out as it came in. Added last-wins-never: it can only fill a key this
+        // app did not write, so a preserved copy cannot roll back real data.
+        for (section, value) in storedForeignData() where data[section] == nil && !neverBackedUp.contains(section) {
+            data[section] = value
+        }
+
         var ios: [String: Any] = [:]
+        if !iosRecipes.isEmpty { ios["recipes"] = iosRecipes }
+        if !iosPlan.isEmpty { ios["plan"] = iosPlan }
         if !iosFood.isEmpty { ios["food"] = iosFood }
         if !iosDays.isEmpty { ios["workouts"] = iosDays }
         if !iosExercises.isEmpty { ios["exercises"] = iosExercises }
@@ -233,7 +312,7 @@ enum BackupStore {
         let existingDays = Set((try? context.fetch(FetchDescriptor<WorkoutDay>()))?.map(\.id) ?? [])
 
         for raw in payload["food"] as? [[String: Any]] ?? [] {
-            guard let id = uuid(raw["id"]), !existingFood.contains(id) else { continue }
+            guard let id = recordID(raw["id"]), !existingFood.contains(id) else { continue }
             let extras = iosFood[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
 
             let entry = FoodEntry(
@@ -266,7 +345,7 @@ enum BackupStore {
         }
 
         for raw in payload["workouts"] as? [[String: Any]] ?? [] {
-            guard let id = uuid(raw["id"]), !existingDays.contains(id) else { continue }
+            guard let id = recordID(raw["id"]), !existingDays.contains(id) else { continue }
             let extras = iosDays[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
 
             let day = WorkoutDay(
@@ -339,6 +418,98 @@ enum BackupStore {
             }
         }
 
+        // Recipes, then the plan, so a meal whose recipe arrives in this same
+        // file can find it.
+        let iosRecipes = ios["recipes"] as? [String: Any] ?? [:]
+        let iosPlan = ios["plan"] as? [String: Any] ?? [:]
+        var recipesByID = Dictionary(
+            ((try? context.fetch(FetchDescriptor<Recipe>())) ?? []).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first })
+
+        for raw in payload["recipes"] as? [[String: Any]] ?? [] {
+            guard let id = recordID(raw["id"]), recipesByID[id] == nil else { continue }
+            let extras = iosRecipes[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
+            let nutrition = raw["nutritionPerServing"] as? [String: Any]
+
+            let recipe = Recipe(
+                name: raw["name"] as? String ?? "",
+                servings: double(raw["servings"]) ?? 1,
+                steps: raw["steps"] as? [String] ?? [],
+                sourceURL: (raw["sourceUrl"] as? String).flatMap(URL.init(string:)),
+                sourceAuthor: raw["sourceAuthor"] as? String,
+                nutritionPerServing: facts(nutrition, sugar: extras["sugarG"], sodium: extras["sodiumMg"]),
+                nutritionIsEstimated: nutrition?["estimated"] as? Bool ?? false,
+                sourceTranscript: raw["sourceTranscript"] as? String,
+                createdAt: date(raw["importedAt"]) ?? .now
+            )
+            recipe.id = id
+            recipe.totalWeightGrams = double(raw["totalWeightGrams"]).flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            recipe.prepMinutes = raw["prepMinutes"] as? Int
+            recipe.cookMinutes = raw["cookMinutes"] as? Int
+            context.insert(recipe)
+
+            // Reparsed from rawText, which is the contract: every client runs the
+            // same parser. Only the fields the parser does not own come from the
+            // file, so a cached quantity cannot outlive a line that no longer
+            // parses to it.
+            let foodRefs = extras["ingredientFoodRefIDs"] as? [String: Any] ?? [:]
+            for (index, rawLine) in (raw["ingredients"] as? [Any] ?? []).enumerated() {
+                let line = rawLine as? [String: Any]
+                let text = (rawLine as? String) ?? (line?["rawText"] as? String) ?? ""
+                let ingredient = IngredientParser.parse(text, sortOrder: index)
+                ingredient.isOptional = line?["optional"] as? Bool ?? false
+                ingredient.note = line?["note"] as? String
+                ingredient.foodRefID = foodRefs[String(index)] as? String
+                ingredient.recipe = recipe
+                context.insert(ingredient)
+            }
+            recipesByID[id] = recipe
+            added += 1
+        }
+
+        let existingMeals = Set((try? context.fetch(FetchDescriptor<PlannedMeal>()))?.map(\.id) ?? [])
+        for raw in payload["plan"] as? [[String: Any]] ?? [] {
+            guard let id = recordID(raw["id"]), !existingMeals.contains(id) else { continue }
+            // A meal whose recipe is in neither the file nor this phone would be
+            // a meal with nothing behind it.
+            guard let recipeID = recordID(raw["recipeId"]), let recipe = recipesByID[recipeID] else { continue }
+            let extras = iosPlan[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
+            let dayKey = raw["date"] as? String ?? ""
+
+            let meal = PlannedMeal(
+                recipe: recipe,
+                mealType: MealType(rawValue: (raw["meal"] as? String ?? "dinner").lowercased()) ?? .dinner,
+                plannedFor: date(extras["plannedFor"]) ?? DayKey.date(from: dayKey) ?? .now,
+                servings: double(raw["servings"]) ?? 1,
+                amountGrams: double(raw["amountGrams"]).flatMap { $0 > 0 ? $0 : nil }
+            )
+            meal.id = id
+            if !dayKey.isEmpty { meal.dayKey = dayKey }
+            // The file's snapshot is history: what the recipe said when the meal
+            // was planned. The init copied today's recipe, which may since have
+            // been edited, so the file wins -- including when it has no snapshot.
+            meal.recipeName = raw["recipeName"] as? String ?? recipe.name
+            meal.snapshotNutrition = facts(raw["snapshotNutrition"] as? [String: Any])
+            meal.snapshotNutritionPerGram = facts(raw["snapshotNutritionPerGram"] as? [String: Any])
+            meal.loggedFoodEntryID = recordID(raw["loggedFoodEntryId"])
+            context.insert(meal)
+            added += 1
+        }
+
+        // A data section this app does not store -- web's `steps` and `profile`,
+        // Android's `routines`, anything a newer client adds -- is kept and
+        // written back out, exactly like ext. Without it, restoring an Android
+        // backup here and saving again silently dropped every routine.
+        var foreignData = storedForeignData()
+        for (section, value) in payload where !storedSections.contains(section) && !neverBackedUp.contains(section) {
+            foreignData[section] = value
+        }
+        if foreignData.isEmpty {
+            UserDefaults.standard.removeObject(forKey: foreignDataKey)
+        } else if let encoded = try? JSONSerialization.data(withJSONObject: foreignData) {
+            UserDefaults.standard.set(encoded, forKey: foreignDataKey)
+        }
+
         // Single values only fill a gap, same rule as the records: restoring an
         // old file must not overwrite something already set up on this phone.
         let defaults = UserDefaults.standard
@@ -380,6 +551,27 @@ enum BackupStore {
     }
 
     static let foreignExtKey = "backupForeignExt"
+    static let foreignDataKey = "backupForeignData"
+
+    /// Sections this app writes from its own data. Anything else a file's `data`
+    /// carries is preserved rather than dropped. See BACKUP-FORMAT.md, "Unknown
+    /// sections".
+    static let storedSections: Set<String> = [
+        "food", "workouts", "weights", "coach", "goal", "settings", "recipes", "plan"
+    ]
+
+    /// Never written and never preserved, by the format: ticks mark one week's
+    /// shop, and restoring last month's would show this week's list as bought.
+    static let neverBackedUp: Set<String> = ["shopping"]
+
+    /// Sections a previous restore held on to because this app does not store them.
+    static func storedForeignData() -> [String: Any] {
+        guard
+            let raw = UserDefaults.standard.data(forKey: foreignDataKey),
+            let decoded = (try? JSONSerialization.jsonObject(with: raw)) as? [String: Any]
+        else { return [:] }
+        return decoded
+    }
 
     /// What a previous restore held on to from another platform.
     static func storedForeignExt() -> [String: Any] {
@@ -405,6 +597,61 @@ enum BackupStore {
 
     private static func uuid(_ value: Any?) -> UUID? {
         (value as? String).flatMap(UUID.init(uuidString:))
+    }
+
+    /// A record's id as this app stores it: the UUID when it is one, and a stable
+    /// UUID derived from the string when it is not.
+    ///
+    /// The browser falls back to a non-UUID id where `crypto.randomUUID` is
+    /// unavailable, and this used to skip any such record outright -- a food
+    /// entry lost, or, for a recipe, every planned meal pointing at it orphaned.
+    /// Stable, so restoring the same file twice recognises what it already has,
+    /// and so a planned meal's `recipeId` derives to the same UUID as its recipe.
+    /// Case is irrelevant here: two spellings of one UUID parse to one value.
+    static func recordID(_ value: Any?) -> UUID? {
+        guard let text = value as? String, !text.isEmpty else { return nil }
+        if let real = UUID(uuidString: text) { return real }
+        // FNV-1a over the bytes, spread across 128 bits. Not cryptographic; it
+        // only needs to be deterministic and to separate distinct strings.
+        var high: UInt64 = 0xcbf29ce484222325
+        var low: UInt64 = 0x84222325cbf29ce4
+        for byte in text.utf8 {
+            high = (high ^ UInt64(byte)) &* 0x100000001b3
+            low = (low &* 0x100000001b3) ^ UInt64(byte)
+        }
+        var bytes = withUnsafeBytes(of: high.bigEndian, Array.init)
+        bytes += withUnsafeBytes(of: low.bigEndian, Array.init)
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+                           bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+                           bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+
+    /// Macros in the file's shape. Sugar and sodium have no place in the common
+    /// shape, so a recipe's travel under ext.ios.
+    private static func nutritionRecord(_ facts: NutritionFacts) -> [String: Any] {
+        var out: [String: Any] = [
+            "calories": facts.calories,
+            "proteinG": facts.proteinG,
+            "carbsG": facts.carbsG,
+            "fatG": facts.fatG
+        ]
+        facts.fiberG.map { out["fiberG"] = $0 }
+        return out
+    }
+
+    /// Macros from the file. nil when the file has none -- never zeros, which
+    /// would log as a zero-calorie meal.
+    private static func facts(_ raw: [String: Any]?, sugar: Any? = nil, sodium: Any? = nil) -> NutritionFacts? {
+        guard let raw else { return nil }
+        return NutritionFacts(
+            calories: double(raw["calories"]) ?? 0,
+            proteinG: double(raw["proteinG"]) ?? 0,
+            carbsG: double(raw["carbsG"]) ?? 0,
+            fatG: double(raw["fatG"]) ?? 0,
+            fiberG: double(raw["fiberG"]),
+            sugarG: double(sugar),
+            sodiumMg: double(sodium)
+        )
     }
 
     private static func double(_ value: Any?) -> Double? {

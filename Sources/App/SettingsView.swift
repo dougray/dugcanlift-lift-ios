@@ -24,6 +24,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    AppearancePicker()
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("System follows your phone's light or dark setting.")
+                }
+
                 Section("Units") {
                     Picker("Weight", selection: $unitRaw) {
                         ForEach(WeightUnit.allCases, id: \.rawValue) { unit in

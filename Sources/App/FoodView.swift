@@ -58,7 +58,7 @@ struct FoodView: View {
                         .foregroundStyle(Theme.accent)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.cardPadding)
-                        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                        .liftCardBackground()
                 }
                 .buttonStyle(.plain)
 

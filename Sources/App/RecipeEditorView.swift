@@ -132,7 +132,7 @@ struct RecipeEditorView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 
     /// The label names the macro and the unit says what the number is in.
@@ -179,7 +179,7 @@ struct RecipeEditorView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 
     // MARK: - Load and save

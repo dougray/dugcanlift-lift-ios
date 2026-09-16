@@ -63,6 +63,14 @@ design — no site among TikTok, Instagram, Reels or YouTube publishes a
 schema.org `Recipe` — so pasting the caption is the supported path, not a
 workaround waiting on a better scraper.
 
+**Light and dark both exist, and System is the default.** `Theme`'s tokens
+resolve per interface style (LiftKit 1.7.0). Apply `.liftAppearance()` — never
+`.preferredColorScheme(.dark)` — on the root and on every sheet, since a sheet is
+its own presentation. Draw cards with `LiftCard` or `.liftCardBackground()`, not
+`.background(Theme.surface, ...)`, which leaves off the hairline light cards
+need. Widgets follow the phone's appearance, not this setting: iOS does not let
+an app choose a widget's colour scheme.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

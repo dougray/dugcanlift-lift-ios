@@ -157,7 +157,7 @@ struct FoodSearchView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.cardPadding)
-                .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+                .liftCardBackground()
 
                 if let preview {
                     previewCard(preview)
@@ -202,7 +202,7 @@ struct FoodSearchView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 
     private func log(_ record: FoodRecord) {

@@ -71,9 +71,16 @@ test: project ## Run unit tests
 		-derivedDataPath $(DERIVED) \
 		test | $(PRETTY)
 
-sim: ## Boot the simulator and open it
+sim: ## Boot the simulator and open its window
 	@xcrun simctl boot "$(SIM)" 2>/dev/null || true
-	@open -a Simulator
+# Xcode 27 removed Simulator.app and replaced it with DeviceHub.app
+# (com.apple.dt.Devices), which also moved to Contents/Applications. Try both
+# and never fail the target over it: `simctl install` and `launch` work against
+# a booted device whether or not any window is showing it, so a missing window
+# app must not stop `make run`.
+	@open -a Simulator 2>/dev/null \
+		|| open -b com.apple.dt.Devices 2>/dev/null \
+		|| echo "Booted $(SIM). No simulator window app found; the app still installs and launches."
 
 run: build sim ## Build, install and launch on the simulator
 	@xcrun simctl install booted "$(APP)"

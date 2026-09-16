@@ -55,12 +55,35 @@ final class StarterSplitsTests: XCTestCase {
 
     // MARK: - What shipped
 
-    func testTheSixSplitsAreThereInThreeFolders() {
-        XCTAssertEqual(splits.count, 6)
+    func testTheTenSplitsAreThereInFiveFolders() {
+        XCTAssertEqual(splits.count, 10)
         XCTAssertEqual(splits.map(\.name),
-                       ["Push", "Pull", "Legs", "Upper", "Lower", "Full Body"])
+                       ["Push", "Pull", "Legs", "Upper", "Lower", "Full Body",
+                        "Mobility", "Active Rest", "Short Run", "Long Run"])
         XCTAssertEqual(Array(NSOrderedSet(array: splits.map(\.folder))) as? [String],
-                       ["Push/Pull/Legs", "Upper/Lower", "Full Body"])
+                       ["Push/Pull/Legs", "Upper/Lower", "Full Body", "Mobility & Recovery", "Running"])
+    }
+
+    func testMobilityRecoveryAndRunningAreTimedNeverRepped() {
+        // A stretch held for 45 s and a 20 minute run have no rep count. A rep
+        // target here would open a set asking how many reps of a run.
+        let timed = splits.filter { $0.folder == "Mobility & Recovery" || $0.folder == "Running" }
+        XCTAssertEqual(timed.count, 4)
+        for split in timed {
+            for exercise in split.exercises {
+                XCTAssertNil(exercise.reps, "\(split.name)/\(exercise.name) has reps")
+                XCTAssertGreaterThan(exercise.durationSec ?? 0, 0, "\(split.name)/\(exercise.name) has no time")
+            }
+        }
+    }
+
+    func testTheLongRunIsLongerThanTheShortOne() {
+        func runSeconds(_ name: String) -> Int {
+            splits.first { $0.name == name }?.exercises
+                .filter { $0.name == "Trail Running/Walking" }
+                .reduce(0) { $0 + ($1.durationSec ?? 0) } ?? 0
+        }
+        XCTAssertGreaterThan(runSeconds("Long Run"), runSeconds("Short Run"))
     }
 
     func testEverySplitHoldsRealWork() {

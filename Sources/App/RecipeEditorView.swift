@@ -26,6 +26,10 @@ struct RecipeEditorView: View {
     @State private var protein = ""
     @State private var carbs = ""
     @State private var fat = ""
+    /// Optional on `NutritionFacts` where the other four are not, so a blank
+    /// here stays nil rather than becoming a measured zero: a dish whose
+    /// ingredients carry no fibre data must not claim to have none.
+    @State private var fiber = ""
 
     /// Displayed and entered in the person's preferred `ServingUnit`, not
     /// necessarily grams — converted to/from `Recipe.totalWeightGrams` at
@@ -118,6 +122,7 @@ struct RecipeEditorView: View {
                 macroField("P", text: $protein)
                 macroField("C", text: $carbs)
                 macroField("F", text: $fat)
+                macroField("Fibre", text: $fiber)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -184,6 +189,7 @@ struct RecipeEditorView: View {
             protein = CookFormat.trimmed(nutrition.proteinG)
             carbs = CookFormat.trimmed(nutrition.carbsG)
             fat = CookFormat.trimmed(nutrition.fatG)
+            fiber = nutrition.fiberG.map(CookFormat.trimmed) ?? ""
         }
     }
 
@@ -200,7 +206,7 @@ struct RecipeEditorView: View {
         target.name = trimmedName
         target.servings = servings
         target.steps = lines(from: stepText)
-        target.nutritionPerServing = enteredNutrition()
+        target.nutritionPerServing = enteredNutrition(merging: target.nutritionPerServing)
 
         // Empty/unparseable stays nil — a recipe without a total weight
         // simply keeps using the legacy servings-based path. Otherwise
@@ -235,19 +241,12 @@ struct RecipeEditorView: View {
         dismiss()
     }
 
-    /// nil unless something was actually typed — an untouched form must not
-    /// write zeros, which would later log as a zero-calorie meal.
-    private func enteredNutrition() -> NutritionFacts? {
-        let values = [calories, protein, carbs, fat].map {
-            Double($0.trimmingCharacters(in: .whitespaces))
-        }
-        guard values.contains(where: { $0 != nil }) else { return nil }
-        return NutritionFacts(
-            calories: values[0] ?? 0,
-            proteinG: values[1] ?? 0,
-            carbsG: values[2] ?? 0,
-            fatG: values[3] ?? 0
-        )
+    /// The rule itself lives in `RecipeMacroEntry`, not here: it decides
+    /// whether fibre, sugar and sodium survive a save, and a rule in a view's
+    /// `@State` cannot be tested.
+    private func enteredNutrition(merging existing: NutritionFacts?) -> NutritionFacts? {
+        RecipeMacroEntry.entered(calories: calories, protein: protein, carbs: carbs,
+                                 fat: fat, fiber: fiber, merging: existing)
     }
 
     private func lines(from text: String) -> [String] {

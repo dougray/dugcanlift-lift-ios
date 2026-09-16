@@ -272,7 +272,7 @@ struct RecipePasteImportView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 
     private func detail(_ text: String) -> some View {

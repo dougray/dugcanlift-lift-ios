@@ -141,7 +141,7 @@ struct RecipeCatalogView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+        .liftCardBackground()
     }
 
     // MARK: - Detail
@@ -303,7 +303,7 @@ struct RecipeCatalogView: View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Theme.cardPadding)
-            .background(Theme.surface, in: .rect(cornerRadius: Theme.cardRadius))
+            .liftCardBackground()
     }
 
     private func detailText(_ text: String) -> some View {

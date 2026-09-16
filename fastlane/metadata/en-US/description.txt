@@ -1,0 +1,39 @@
+LIFT is a food and training log that keeps your data on your phone. There are no accounts, no ads and no analytics, and food and exercise search work offline.
+
+TODAY
+- Calories, protein, carbs, fat and fibre against your goal
+- Today's steps from Apple Health, against a daily step goal
+- What you trained today
+
+CALCULATOR
+Work out a daily calorie and macro goal from your sex, age, weight, height, activity level and whether you want to lose, maintain or gain. Save it and everything else tracks against it.
+
+FOOD
+- Search a bundled food database (USDA FoodData Central and Open Food Facts) with no connection needed
+- Log by weight, in grams or ounces
+- Entries grouped by breakfast, lunch, dinner and snack, with calories for each meal
+- Tap an entry to change its amount or meal
+- Re-log anything you've eaten recently in one tap
+
+COOK
+- Write your own recipes, with macros per serving and the dish's total weight
+- Import a recipe from a web page link, paste a recipe's text, or add one from the built-in catalogue
+- Plan meals across the week and log a planned meal in one tap
+- A shopping list built from the week's plan
+
+TRAIN
+- Log sessions of exercises and sets, or run a live session
+- A training focus decides which set fields you see
+- Save workouts as routines, or start from ready-made ones
+- Record runs, walks and hikes with GPS, including while your phone is locked, and see your route and personal bests
+
+APPLE HEALTH
+LIFT can save your strength workouts, and your runs, walks and hikes with their route, to Apple Health. It reads your body weight and step count.
+
+WORKING WITH A COACH
+Send your recent log to a coach as a link, from your own email. A route is only included if you turn that on, and its start and end are trimmed off. A coach can send you a plan of workouts and meals to add.
+
+YOUR DATA
+Save a backup file and restore it on another phone, or in LIFT for Android or the web.
+
+A widget shows today's calories, protein and workouts on your Home Screen. LIFT follows your phone's light or dark setting, or you can pick one.

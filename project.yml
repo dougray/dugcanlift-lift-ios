@@ -88,26 +88,38 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
 
-        # HealthKit — both strings are required or the app is rejected
+        # The app uses only standard HTTPS (URLSession, fetching a recipe page
+        # the person pastes), which is exempt from export documentation.
+        ITSAppUsesNonExemptEncryption: false
+
+        # HealthKit — both strings are required or the app is rejected. Each
+        # must say exactly what HealthKitManager requests: App Review rejects
+        # a purpose string that claims more (or less) than the code does.
+        # Reads: body weight (Settings > Apple Health) and step count (Home,
+        # Send to Coach). Writes: strength workouts, and runs, walks and hikes
+        # with their route and distance.
         NSHealthShareUsageDescription: >-
-          Lift reads your workouts, body measurements, and step count so your
-          training history stays in sync with the Health app.
+          Lift reads your body weight and step count from Health to show your
+          latest weight and your daily steps.
         NSHealthUpdateUsageDescription: >-
-          Lift saves the workouts and meals you log to the Health app.
+          Lift saves your strength workouts, and your runs, walks and hikes
+          with their route and distance, to Health.
 
-        NSCameraUsageDescription: >-
-          Lift uses the camera to scan barcodes when you log food.
+        # No camera usage string: nothing in the app uses the camera.
 
+        # When In Use only. A recording is always started from the open
+        # recording screen, and a session started in the foreground keeps
+        # receiving updates when the phone locks because LocationTracker sets
+        # allowsBackgroundLocationUpdates under the `location` background mode
+        # below. Lift never needs location when a recording is not running,
+        # so it does not ask for Always.
         NSLocationWhenInUseUsageDescription: >-
-          Lift uses your location to record the route of a run or hike
-          while you're using the app.
-        NSLocationAlwaysAndWhenInUseUsageDescription: >-
-          Lift uses your location to record the route of a run or hike,
-          including while your phone is locked or Lift is in the
-          background.
+          Lift uses your location to record the route of a run, walk or hike
+          you start, including while your phone is locked until you finish it.
 
         # Background refresh for HealthKit sync (BGTaskScheduler), plus
-        # location updates for outdoor activity recording (LocationTracker).
+        # location updates so a recording carries on while the phone is locked
+        # (LocationTracker).
         # Identifiers MUST match the strings passed to BGTaskScheduler.register.
         UIBackgroundModes:
           - processing
@@ -139,6 +151,7 @@ targets:
       path: Config/LiftWidgets-Info.plist
       properties:
         CFBundleDisplayName: Lift
+        ITSAppUsesNonExemptEncryption: false
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 

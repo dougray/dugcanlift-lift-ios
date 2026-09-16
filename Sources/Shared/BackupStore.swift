@@ -30,6 +30,11 @@ enum BackupStore {
     // MARK: - Building
 
     static func build(context: ModelContext, keepingForeignExt foreign: [String: Any] = [:]) throws -> Data {
+        // An `outdoor` section an earlier build held as foreign data becomes
+        // this app's own before anything is read, so this save writes it from
+        // the store rather than dropping it. See `absorbPreservedOutdoor`.
+        absorbPreservedOutdoor(context: context)
+
         let days = try context.fetch(FetchDescriptor<WorkoutDay>())
         let food = try context.fetch(FetchDescriptor<FoodEntry>())
         let measurements = try context.fetch(FetchDescriptor<BodyMeasurement>())
@@ -256,6 +261,40 @@ enum BackupStore {
             return record
         }
 
+        // ---- outdoor ----
+        // BACKUP-FORMAT.md `outdoor[]`, in LIFT for Android's field names, as
+        // LIFT web's outdoor.js toBackup writes them. A recording still in
+        // progress is never written. Two things have no field in the common
+        // shape: active calories, which ride in ext.ios, and a point's vertical
+        // accuracy, which is not carried at all -- it only says how far to
+        // trust an altitude, and a missing altitude is already `null`.
+        var iosOutdoor: [String: Any] = [:]
+        let activities = try context.fetch(FetchDescriptor<OutdoorActivity>(sortBy: [SortDescriptor(\.startedAt)]))
+        data["outdoor"] = activities.compactMap { activity -> [String: Any]? in
+            guard let endedAt = activity.endedAt else { return nil }
+            let key = activity.id.uuidString
+            activity.activeCalories.map { iosOutdoor[key] = ["activeCalories": $0] }
+            return [
+                "id": key,
+                "activityType": activity.activityType.rawValue.uppercased(),
+                "startedAtEpochMs": epochMs(activity.startedAt),
+                "endedAtEpochMs": epochMs(endedAt),
+                "distanceMeters": activity.distanceMeters,
+                "elevationGainMeters": activity.elevationGainMeters,
+                "routePoints": activity.routePoints.map { point -> [String: Any] in
+                    [
+                        "latitude": point.latitude,
+                        "longitude": point.longitude,
+                        // CoreLocation marks an altitude it could not measure
+                        // with a negative vertical accuracy; the file says null.
+                        "altitudeMeters": point.verticalAccuracyMeters < 0 ? NSNull() as Any : point.altitudeMeters,
+                        "recordedAtEpochMs": epochMs(point.recordedAt),
+                        "horizontalAccuracyMeters": point.horizontalAccuracyMeters
+                    ]
+                }
+            ]
+        }
+
         // A section another client wrote that this app does not store goes back
         // out as it came in. Added last-wins-never: it can only fill a key this
         // app did not write, so a preserved copy cannot roll back real data.
@@ -271,6 +310,7 @@ enum BackupStore {
         if !iosExercises.isEmpty { ios["exercises"] = iosExercises }
         if !iosSets.isEmpty { ios["sets"] = iosSets }
         if !iosMeasurements.isEmpty { ios["measurements"] = iosMeasurements }
+        if !iosOutdoor.isEmpty { ios["outdoor"] = iosOutdoor }
 
         // Anything another platform left behind is carried through untouched.
         var ext = foreign.isEmpty ? storedForeignExt() : foreign
@@ -496,6 +536,11 @@ enum BackupStore {
             added += 1
         }
 
+        added += restoreOutdoor(payload["outdoor"], iosExtras: ios["outdoor"] as? [String: Any] ?? [:], context: context)
+        // Before the foreign sections are gathered below, so a copy an earlier
+        // build preserved is stored, not carried forward again.
+        absorbPreservedOutdoor(context: context)
+
         // A data section this app does not store -- web's `steps` and `profile`,
         // Android's `routines`, anything a newer client adds -- is kept and
         // written back out, exactly like ext. Without it, restoring an Android
@@ -557,7 +602,7 @@ enum BackupStore {
     /// carries is preserved rather than dropped. See BACKUP-FORMAT.md, "Unknown
     /// sections".
     static let storedSections: Set<String> = [
-        "food", "workouts", "weights", "coach", "goal", "settings", "recipes", "plan"
+        "food", "workouts", "weights", "coach", "goal", "settings", "recipes", "plan", "outdoor"
     ]
 
     /// Never written and never preserved, by the format: ticks mark one week's
@@ -593,7 +638,103 @@ enum BackupStore {
         return ext
     }
 
+    // MARK: - Outdoor
+
+    /// Adds the finished activities in a file's `outdoor` section that this
+    /// phone does not already have, by the rules of LIFT web's `fromBackup` and
+    /// `addMissing`: an id, a start and an end are required, an unknown type is
+    /// skipped, and ids compare without regard to case (`recordID` parses both
+    /// spellings of a UUID to one value, and derives a stable one for any other
+    /// id, so restoring a file twice adds nothing the second time).
+    ///
+    /// Never marks an activity as exported to Health: `healthKitUUID` stays nil.
+    /// Whether it was exported on the phone that wrote the file says nothing
+    /// about the Health store on this one.
+    @discardableResult
+    static func restoreOutdoor(_ section: Any?, iosExtras: [String: Any] = [:], context: ModelContext) -> Int {
+        guard let records = section as? [[String: Any]], !records.isEmpty else { return 0 }
+        var known = Set((try? context.fetch(FetchDescriptor<OutdoorActivity>()))?.map(\.id) ?? [])
+        var added = 0
+
+        for raw in records {
+            guard
+                let id = recordID(raw["id"]), !known.contains(id),
+                let type = OutdoorActivityType(rawValue: (raw["activityType"] as? String ?? "").lowercased()),
+                let startedAt = dateMs(finite(raw["startedAtEpochMs"])),
+                let endedAt = dateMs(finite(raw["endedAtEpochMs"]))
+            else { continue }
+
+            let points = (raw["routePoints"] as? [[String: Any]] ?? []).compactMap { point -> RoutePoint? in
+                guard let latitude = finite(point["latitude"]), let longitude = finite(point["longitude"]) else { return nil }
+                let horizontal = finite(point["horizontalAccuracyMeters"]) ?? 0
+                let altitude = finite(point["altitudeMeters"])
+                return RoutePoint(
+                    latitude: latitude,
+                    longitude: longitude,
+                    altitudeMeters: altitude ?? 0,
+                    recordedAt: dateMs(finite(point["recordedAtEpochMs"])) ?? startedAt,
+                    horizontalAccuracyMeters: horizontal,
+                    // No altitude is CoreLocation's negative vertical accuracy.
+                    // The file carries none for a real altitude either, so the
+                    // horizontal figure stands in: GPS height is rarely better
+                    // than GPS position, and a zero would claim a perfect fix.
+                    verticalAccuracyMeters: altitude == nil ? -1 : horizontal
+                )
+            }
+
+            let activity = OutdoorActivity(activityType: type, startedAt: startedAt)
+            activity.id = id
+            activity.endedAt = endedAt
+            activity.routePoints = points
+            activity.distanceMeters = finite(raw["distanceMeters"]) ?? OutdoorActivityMath.totalDistanceMeters(points)
+            activity.elevationGainMeters = finite(raw["elevationGainMeters"])
+                ?? OutdoorActivityMath.elevationGainMeters(points.filter { $0.verticalAccuracyMeters >= 0 })
+            let extras = iosExtras[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
+            activity.activeCalories = finite(extras["activeCalories"])
+            context.insert(activity)
+            known.insert(id)
+            added += 1
+        }
+        return added
+    }
+
+    /// Stores an `outdoor` section an earlier build kept as foreign data.
+    ///
+    /// Before this app wrote outdoor activities, a restored `outdoor` section
+    /// was preserved untouched in `foreignDataKey` and written back out on every
+    /// save. Now that `outdoor` is a stored section, `build` writes it from the
+    /// store and that copy would never be written again -- so it is moved into
+    /// the store instead, the first time either a save or a restore runs. Doing
+    /// it at save as well as at restore matters: someone who never restores
+    /// again would otherwise lose it at their next save. It is idempotent, and
+    /// the preserved copy is only removed once the store has saved it.
+    static func absorbPreservedOutdoor(context: ModelContext) {
+        var foreign = storedForeignData()
+        guard let section = foreign["outdoor"] else { return }
+        restoreOutdoor(section, context: context)
+        do { try context.save() } catch { return }
+        foreign.removeValue(forKey: "outdoor")
+        if foreign.isEmpty {
+            UserDefaults.standard.removeObject(forKey: foreignDataKey)
+        } else if let encoded = try? JSONSerialization.data(withJSONObject: foreign) {
+            UserDefaults.standard.set(encoded, forKey: foreignDataKey)
+        }
+    }
+
     // MARK: - Small conversions
+
+    private static func epochMs(_ date: Date) -> Int {
+        Int((date.timeIntervalSince1970 * 1000).rounded())
+    }
+
+    /// A number, and only a finite one -- `Number.isFinite` in outdoor.js.
+    /// `NSNull` and strings are not numbers here.
+    private static func finite(_ value: Any?) -> Double? {
+        // JSONSerialization hands back true/false as NSNumber too.
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let d = number.doubleValue
+        return d.isFinite ? d : nil
+    }
 
     private static func uuid(_ value: Any?) -> UUID? {
         (value as? String).flatMap(UUID.init(uuidString:))
@@ -659,6 +800,10 @@ enum BackupStore {
         if let i = value as? Int { return Double(i) }
         if let s = value as? String { return Double(s) }
         return nil
+    }
+
+    private static func dateMs(_ value: Double?) -> Date? {
+        value.map { Date(timeIntervalSince1970: $0 / 1000) }
     }
 
     private static func date(_ value: Any?) -> Date? {

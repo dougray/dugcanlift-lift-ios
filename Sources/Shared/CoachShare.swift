@@ -29,6 +29,10 @@ enum CoachShare {
         @AppStorageBacked("coachLifterName", default: "") static var lifterName: String
         @AppStorageBacked("coachWeeks", default: 8) static var weeks: Int
         @AppStorageBacked("coachItemisedFood", default: false) static var itemisedFood: Bool
+        /// Off unless the person turns it on. Times, distances and bests always
+        /// go; a map of where someone runs is a different kind of thing to hand
+        /// over, so it waits to be asked for.
+        @AppStorageBacked("coachShareLastRoute", default: false) static var lastRoute: Bool
 
         /// Identifies this person to the coach app across every link they send.
         /// Generated once and never regenerated — a new id would land them in
@@ -58,6 +62,8 @@ enum CoachShare {
         /// Steps per day, keyed "yyyy-MM-dd". Read from HealthKit at send
         /// time rather than stored, so it includes whatever a watch logged.
         var steps: [String: Int] = [:]
+        /// Every run, walk and hike, not just the window's: bests are all-time.
+        var outdoor: [OutdoorActivity] = []
         var goal: Goal?
         var unit: WeightUnit
 
@@ -73,11 +79,12 @@ enum CoachShare {
     // MARK: - Building the link
 
     static func buildLink(from snapshot: Snapshot, weeks: Int? = nil,
-                          itemised: Bool? = nil) throws -> String {
+                          itemised: Bool? = nil, lastRoute: Bool? = nil) throws -> String {
         let payload = buildPayload(
             from: snapshot,
             weeks: weeks ?? Settings.weeks,
-            itemised: itemised ?? Settings.itemisedFood
+            itemised: itemised ?? Settings.itemisedFood,
+            lastRoute: lastRoute ?? Settings.lastRoute
         )
         let json = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         guard let packed = CompactEncoding.deflateRaw(json) else {
@@ -88,8 +95,10 @@ enum CoachShare {
 
     static func linkIsRisky(_ link: String) -> Bool { link.count > riskyLinkLength }
 
-    private static func buildPayload(from snapshot: Snapshot, weeks: Int,
-                                     itemised: Bool) -> [String: Any] {
+    /// Internal rather than private so a test can read the dictionary before
+    /// it is deflated, for the same reason `setTuple` is.
+    static func buildPayload(from snapshot: Snapshot, weeks: Int,
+                             itemised: Bool, lastRoute: Bool) -> [String: Any] {
         let keys = lastDayKeys(count: weeks * 7)
         let offsets = Dictionary(uniqueKeysWithValues: keys.enumerated().map { ($1, $0) })
 
@@ -153,6 +162,20 @@ enum CoachShare {
             }
         }
 
+        // Runs, walks and hikes, by the local day they started. A day with
+        // nothing else on it is still a day.
+        let outdoorByDay = Dictionary(
+            grouping: snapshot.outdoor.filter { offsets[DayKey.make(from: $0.startedAt)] != nil },
+            by: { DayKey.make(from: $0.startedAt) }
+        )
+        for (key, activities) in outdoorByDay {
+            let wire = outdoorDay(activities)
+            guard !wire.isEmpty else { continue }
+            var entry = day(key)
+            entry["o"] = wire
+            days[key] = entry
+        }
+
         for (key, count) in snapshot.steps where offsets[key] != nil {
             var entry = day(key)
             entry["st"] = count
@@ -200,8 +223,71 @@ enum CoachShare {
             ]
         }
         if !foodDict.isEmpty { payload["fd"] = foodDict }
+        // Bests are all-time, not the window. The route goes only when asked
+        // for, trimmed so it never shows where someone starts and finishes.
+        if let bests = outdoorBests(snapshot.outdoor) { payload["ob"] = bests }
+        if lastRoute, let route = outdoorLastRoute(snapshot.outdoor) { payload["lr"] = route }
 
         return payload
+    }
+
+    // MARK: - Outdoor
+    //
+    // What goes out, how it is rounded, and how a route is trimmed, thinned
+    // and encoded are all `LiftCore.OutdoorShare`'s — a port of LIFT web's
+    // `outdoor.js`, pinned by fixtures that JavaScript wrote. This file only
+    // maps its own storage in and turns the kit's tuples into the plain
+    // arrays `JSONSerialization` writes. Nothing here re-derives a number.
+
+    /// A day's `o`. The caller has already decided the activities are that day's.
+    static func outdoorDay(_ activities: [OutdoorActivity]) -> [Any] {
+        OutdoorShare.day(activities.map { shareActivity($0, withRoute: false) }).compactMap(jsonValue)
+    }
+
+    /// `ob`, or nil when nothing is finished.
+    static func outdoorBests(_ activities: [OutdoorActivity]) -> [Any]? {
+        OutdoorShare.bests(activities.map { shareActivity($0, withRoute: false) })
+            .map { $0.compactMap(jsonValue) }
+    }
+
+    /// `lr`, or nil when no finished route survives the trim. Only this path
+    /// decodes route points, which on a long history is thousands of them per
+    /// activity — so a person who never opts in never pays for it.
+    static func outdoorLastRoute(_ activities: [OutdoorActivity]) -> Any? {
+        OutdoorShare.lastRoute(activities.map { shareActivity($0, withRoute: true) }).flatMap(jsonValue)
+    }
+
+    private static func shareActivity(_ activity: OutdoorActivity, withRoute: Bool) -> OutdoorShareActivity {
+        let type: Int = switch activity.activityType {
+        case .run:  0
+        case .walk: 1
+        case .hike: 2
+        }
+        return OutdoorShareActivity(
+            type: type,
+            startedAtEpochMs: epochMs(activity.startedAt),
+            // Still recording means no end, and the kit never sends it.
+            endedAtEpochMs: activity.endedAt.map(epochMs),
+            distanceMeters: activity.distanceMeters,
+            climbMeters: activity.elevationGainMeters,
+            route: withRoute
+                ? activity.routePoints.map { OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude) }
+                : []
+        )
+    }
+
+    /// Truncated to the millisecond, as `Date.now` is in JavaScript.
+    private static func epochMs(_ date: Date) -> Int64 {
+        Int64((date.timeIntervalSince1970 * 1000).rounded(.down))
+    }
+
+    /// The kit's wire types encode themselves as the tuples the format
+    /// specifies (a missing best is an explicit null). Going through that
+    /// encoding, rather than rebuilding the arrays here, keeps one definition
+    /// of the shape.
+    private static func jsonValue<T: Encodable>(_ value: T) -> Any? {
+        guard let data = try? JSONEncoder().encode(value) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
     }
 
     /// `[weight, reps, rpe, seconds, metres, flags]` with trailing blanks

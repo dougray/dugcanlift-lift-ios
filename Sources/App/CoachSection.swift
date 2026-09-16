@@ -23,10 +23,12 @@ struct CoachSection: View {
     @AppStorage("coachLifterName") private var lifterName = ""
     @AppStorage("coachWeeks") private var weeks = 8
     @AppStorage("coachItemisedFood") private var itemisedFood = false
+    @AppStorage("coachShareLastRoute") private var shareLastRoute = false
 
     @Query(sort: \WorkoutDay.date, order: .reverse) private var days: [WorkoutDay]
     @Query private var food: [FoodEntry]
     @Query private var measurements: [BodyMeasurement]
+    @Query private var outdoor: [OutdoorActivity]
 
     @State private var health = HealthKitManager.shared
     /// Read from HealthKit rather than stored, so it is whatever Health
@@ -46,6 +48,7 @@ struct CoachSection: View {
             food: food,
             measurements: measurements,
             steps: steps,
+            outdoor: outdoor,
             goal: goalIsSet ? .init(
                 calories: Int(goalCalories), proteinG: Int(goalProtein),
                 fatG: Int(goalFat), carbsG: Int(goalCarbs), fiberG: Int(goalFiber)
@@ -82,6 +85,17 @@ struct CoachSection: View {
 
                 Toggle("Include every food logged", isOn: $itemisedFood)
 
+                Picker("Your last route", selection: $shareLastRoute) {
+                    Text("Don't send").tag(false)
+                    Text("Send, trimmed").tag(true)
+                }
+
+                Text("Runs, walks and hikes always go as times, distances and bests. "
+                     + "The map of your newest one goes only if you turn it on, with the "
+                     + "first and last 200 m cut off so it never shows where you start from.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Button("Send to Coach", systemImage: "paperplane.fill") { compose() }
 
                 if let linkSize {
@@ -98,7 +112,7 @@ struct CoachSection: View {
                 Button("Change these details") { isEditing = true }
             }
         }
-        .task(id: "\(weeks)-\(itemisedFood)-\(days.count)-\(food.count)") {
+        .task(id: "\(weeks)-\(itemisedFood)-\(shareLastRoute)-\(days.count)-\(food.count)-\(outdoor.filter { $0.endedAt != nil }.count)") {
             steps = (try? await health.dailyStepCounts(days: weeks * 7)) ?? [:]
             measureLink()
         }

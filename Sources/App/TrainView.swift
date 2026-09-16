@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 import SwiftData
 import WidgetKit
@@ -32,6 +33,8 @@ struct TrainView: View {
                     DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
 
                     OutdoorDaySection(date: selectedDate)
+
+                    OutdoorHighlights()
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 40)
@@ -516,9 +519,16 @@ private struct OutdoorDaySection: View {
 
     var body: some View {
         LiftCard(title: "Outdoor") {
-            HStack {
-                Button("Start Run") { startingActivityType = .run }
-                Button("Start Hike") { startingActivityType = .hike }
+            HStack(spacing: 16) {
+                Button { startingActivityType = .run } label: {
+                    Label("Run", systemImage: "figure.run")
+                }
+                Button { startingActivityType = .walk } label: {
+                    Label("Walk", systemImage: "figure.walk")
+                }
+                Button { startingActivityType = .hike } label: {
+                    Label("Hike", systemImage: "figure.hiking")
+                }
                 Spacer()
                 NavigationLink("See all") {
                     OutdoorActivityListView()
@@ -556,5 +566,119 @@ private struct OutdoorDaySection: View {
                 OutdoorActivityReviewView(activity: activity)
             }
         }
+    }
+}
+
+/// The space under Outdoor: the newest route on a map, and the best distance,
+/// time and pace for each kind of activity. All-time rather than the selected
+/// day's, so it is still there on a rest day.
+private struct OutdoorHighlights: View {
+    @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
+    @Query(sort: \OutdoorActivity.startedAt, order: .reverse) private var activities: [OutdoorActivity]
+
+    private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
+
+    var body: some View {
+        let last = OutdoorRecords.lastRoute(in: activities)
+        let bests = OutdoorRecords.bests(in: activities)
+
+        if let last {
+            LiftCard(title: "Last route") {
+                NavigationLink {
+                    OutdoorActivityReviewView(activity: last)
+                } label: {
+                    VStack(alignment: .leading, spacing: 10) {
+                        RouteMap(points: last.routePoints)
+                            .frame(height: 180)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        HStack {
+                            Text(last.activityType.displayName)
+                                .foregroundStyle(Theme.textPrimary)
+                            Text(last.startedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                                .foregroundStyle(Theme.textSecondary)
+                            Spacer()
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+
+                        HStack(spacing: 0) {
+                            stat("Distance", OutdoorRecords.distanceText(last.distanceMeters, unit: unit))
+                            stat("Time", last.duration.map(OutdoorRecords.durationText) ?? "—")
+                            stat("Pace", last.distanceMeters >= OutdoorRecords.minimumPaceDistanceMeters
+                                 ? last.averagePaceSecondsPerMeter.map { OutdoorRecords.paceText($0, unit: unit) } ?? "—"
+                                 : "—")
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
+        if bests.isEmpty {
+            LiftCard(title: "Personal bests") {
+                Text("Your last route and your best distance, time and pace show up here after your first run, walk or hike.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        } else {
+            LiftCard(title: "Personal bests") {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(bests, id: \.type) { best in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(best.count == 1 ? "\(best.type.displayName) · 1 activity"
+                                                 : "\(best.type.displayName) · \(best.count) activities")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            HStack(spacing: 0) {
+                                stat("Farthest", best.longestDistanceMeters.map { OutdoorRecords.distanceText($0, unit: unit) } ?? "—")
+                                stat("Longest", best.longestDuration.map(OutdoorRecords.durationText) ?? "—")
+                                stat("Fastest pace", best.fastestPaceSecondsPerMeter.map { OutdoorRecords.paceText($0, unit: unit) } ?? "—")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func stat(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textSecondary)
+            Text(value)
+                .font(.system(size: 16, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A route drawn on a map that does not move. Scrolling Train must scroll
+/// Train; panning belongs to the review screen the card opens.
+private struct RouteMap: View {
+    let points: [RoutePoint]
+
+    var body: some View {
+        let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+        Map(initialPosition: .automatic, interactionModes: []) {
+            MapPolyline(coordinates: coordinates)
+                .stroke(Theme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+            if let start = coordinates.first {
+                Annotation("Start", coordinate: start, anchor: .center) {
+                    Circle().fill(Theme.accentSecondary).frame(width: 10, height: 10)
+                }
+                .annotationTitles(.hidden)
+            }
+            if let end = coordinates.last {
+                Annotation("Finish", coordinate: end, anchor: .center) {
+                    Circle().fill(Theme.accent).frame(width: 12, height: 12)
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

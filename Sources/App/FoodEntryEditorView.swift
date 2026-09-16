@@ -29,6 +29,10 @@ struct FoodEntryEditorView: View {
     private enum Field: Hashable { case name, amount, macro(FoodEntryEdit.Macro) }
     @FocusState private var focus: Field?
 
+    /// Collapsed on open: saturated fat, sugar and sodium are tracked, never
+    /// targeted, and most edits are an amount or a meal.
+    @State private var showingMoreNutrients = false
+
     init(entry: FoodEntry, preferredUnit: ServingUnit) {
         self.entry = entry
         _edit = State(initialValue: FoodEntryEdit(entry: entry, preferredUnit: preferredUnit))
@@ -42,6 +46,7 @@ struct FoodEntryEditorView: View {
                     amountSection
                     mealSection
                     macrosSection
+                    moreNutrientsSection
 
                     if let problem = edit.problem {
                         Text(problem)
@@ -172,7 +177,89 @@ struct FoodEntryEditorView: View {
         }
     }
 
+    /// Saturated fat, sugar and sodium. Typed for a manual entry, like the
+    /// macros; read-only for a food with a source, and shown only when that
+    /// source recorded them.
+    private var moreNutrientsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { showingMoreNutrients.toggle() }
+            } label: {
+                HStack {
+                    Text("More nutrients")
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accent)
+                    Spacer()
+                    if !showingMoreNutrients, let summary = detailsSummary {
+                        Text(summary)
+                            .font(Theme.detail)
+                            .foregroundStyle(Theme.textSecondary)
+                            .lineLimit(1)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .rotationEffect(.degrees(showingMoreNutrients ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(showingMoreNutrients ? "Expanded" : "Collapsed")
+
+            if showingMoreNutrients {
+                if edit.isManual {
+                    Text("Saturated fat, sugar and sodium, as totals for the amount above. No goals — blank stays unknown, not zero.")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                    HStack(alignment: .top, spacing: 10) {
+                        macroField(.saturatedFat)
+                        macroField(.sugar)
+                        macroField(.sodium)
+                    }
+                } else if let nutrition = edit.nutrition,
+                          NutrientDetailsDisplay.entryLine(nutrition) != nil {
+                    Text("From the food's own data, scaled to the amount above. No goals.")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                    HStack(spacing: 14) {
+                        ForEach(NutrientDetailsDisplay.Nutrient.allCases) { nutrient in
+                            if let value = nutrient.value(in: nutrition) {
+                                detailFigure(nutrient.label, nutrient.formatted(value))
+                            }
+                        }
+                    }
+                } else {
+                    Text("This food's source did not record saturated fat, sugar or sodium.")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.cardPadding)
+        .liftCardBackground()
+    }
+
+    /// How many of the three are known, for the collapsed header: "2 of 3".
+    private var detailsSummary: String? {
+        guard let nutrition = edit.nutrition else { return nil }
+        let known = NutrientDetailsDisplay.Nutrient.allCases.filter { $0.value(in: nutrition) != nil }.count
+        return known == 0 ? nil : "\(known) of 3 known"
+    }
+
     // MARK: Pieces
+
+    private func detailFigure(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(Theme.detail)
+                .foregroundStyle(Theme.textSecondary)
+                .lineLimit(1)
+            Text(value)
+                .font(Theme.body.weight(.semibold))
+                .foregroundStyle(Theme.textPrimary)
+        }
+    }
 
     private func macroField(_ macro: FoodEntryEdit.Macro) -> some View {
         VStack(alignment: .leading, spacing: 4) {

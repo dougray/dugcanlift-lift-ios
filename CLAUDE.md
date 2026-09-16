@@ -81,6 +81,22 @@ its own presentation. Draw cards with `LiftCard` or `.liftCardBackground()`, not
 need. Widgets follow the phone's appearance, not this setting: iOS does not let
 an app choose a widget's colour scheme.
 
+**Saturated fat, sugar and sodium are tracked, never targeted.** No goal, no
+bar, nothing "over". nil means the source did not say — never zero — so a
+day's total covers only the foods that recorded each value and says so when
+that is not all of them ("from 3 of 5 foods"). Display rounding, `fx`/`fe` in
+Send to Coach and `ux` from a plan all go through LiftKit's `ShareNutrients`,
+so the phone and the coach read the same number. The rules are
+`NutrientDetailsDisplay`, `FoodEntryEdit` and `RecipeMacroEntry`, not views.
+
+**A struct a model stores is part of the schema.** SwiftData flattens
+`NutritionFacts` into one column per field on FoodEntry, Recipe and
+PlannedMeal, so a new field in LiftKit is a schema change here. LiftKit 1.9.0's
+`saturatedFatG` needed `LiftSchemaV7` and a frozen seven-field copy; without it
+every existing install failed to open its store (134504). Verify any schema
+change by installing over a store the previous build wrote, not only in tests —
+`Tests/Fixtures/v6-simulator.store` is one.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

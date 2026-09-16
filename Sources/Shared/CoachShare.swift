@@ -132,6 +132,7 @@ enum CoachShare {
         }
 
         if itemised {
+            var detailsByDay: [String: [WireNutrientDetails?]] = [:]
             for food in snapshot.food where offsets[food.dayKey] != nil {
                 var entry = day(food.dayKey)
                 var list = entry["f"] as? [[Any]] ?? []
@@ -146,6 +147,16 @@ enum CoachShare {
                 ])
                 entry["f"] = list
                 days[food.dayKey] = entry
+                // One `fe` entry per `f` entry, in the same order, on the same
+                // basis: this food's stored values are already what was eaten
+                // and `f` says servings 1, so they go as they are.
+                detailsByDay[food.dayKey, default: []].append(WireNutrientDetails(facts))
+            }
+            for (key, details) in detailsByDay {
+                guard let rows = ShareNutrients.items(details), let wire = jsonValue(rows).map(shortDecimals) else { continue }
+                var entry = day(key)
+                entry["fe"] = wire
+                days[key] = entry
             }
         } else {
             let byDay = Dictionary(grouping: snapshot.food.filter { offsets[$0.dayKey] != nil },
@@ -160,6 +171,19 @@ enum CoachShare {
                 ]
                 days[key] = entry
             }
+        }
+
+        // `fx`: saturated fat, sugar and sodium for the day, over only the foods
+        // that recorded each, with how many foods that is. Sent itemised or
+        // not, so a coach never has to add `fe` up; absent when no food that
+        // day recorded any of the three. Rounding is the kit's, so it matches
+        // what LIFT Android and web send for the same day.
+        let foodByDay = Dictionary(grouping: snapshot.food.filter { offsets[$0.dayKey] != nil }, by: \.dayKey)
+        for (key, entries) in foodByDay {
+            guard let wire = nutrientTotals(entries) else { continue }
+            var entry = day(key)
+            entry["fx"] = wire
+            days[key] = entry
         }
 
         // Runs, walks and hikes, by the local day they started. A day with
@@ -229,6 +253,36 @@ enum CoachShare {
         if lastRoute, let route = outdoorLastRoute(snapshot.outdoor) { payload["lr"] = route }
 
         return payload
+    }
+
+    /// A day's `fx`, or nil when none of its foods recorded saturated fat,
+    /// sugar or sodium. `FoodEntry.nutrition` is already scaled to what was
+    /// eaten, so each food counts at servings 1 — the product the kit expects.
+    static func nutrientTotals(_ foods: [FoodEntry]) -> Any? {
+        ShareNutrients.dayTotals(foods.map { (servings: 1, details: WireNutrientDetails($0.nutrition)) })
+            .flatMap(jsonValue)
+            .map(shortDecimals)
+    }
+
+    /// `JSONSerialization` writes a Double with seventeen significant digits,
+    /// so the 14.7 `ShareNutrients` rounded to goes out as 14.699999999999999 —
+    /// the same number to any decoder, but fifteen characters longer than what
+    /// LIFT web and Android send, once per value, in a link that has a length
+    /// budget. An `NSDecimalNumber` built from Swift's shortest representation
+    /// is written as "14.7". Whole numbers become integers. Applied to `fx` and
+    /// `fe` only; the shape itself is still the kit's encoding.
+    static func shortDecimals(_ value: Any) -> Any {
+        switch value {
+        case let array as [Any]:
+            return array.map(shortDecimals)
+        case let number as NSNumber where CFGetTypeID(number) != CFBooleanGetTypeID():
+            let double = number.doubleValue
+            guard double.isFinite else { return number }
+            if double == double.rounded(), abs(double) < 1e15 { return NSNumber(value: Int64(double)) }
+            return NSDecimalNumber(string: "\(double)", locale: Locale(identifier: "en_US_POSIX"))
+        default:
+            return value
+        }
     }
 
     // MARK: - Outdoor

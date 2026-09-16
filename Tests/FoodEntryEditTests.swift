@@ -8,7 +8,7 @@ import LiftCore
 final class FoodEntryEditTests: XCTestCase {
 
     private let facts = NutritionFacts(calories: 300, proteinG: 24, carbsG: 30, fatG: 9,
-                                       fiberG: 6, sugarG: 12, sodiumMg: 450)
+                                       fiberG: 6, sugarG: 12, sodiumMg: 450, saturatedFatG: 4.5)
 
     private func gramEntry(_ grams: Double = 150, unit: ServingUnit = .grams,
                            nutrition: NutritionFacts? = nil) -> FoodEntryEdit {
@@ -30,6 +30,8 @@ final class FoodEntryEditTests: XCTestCase {
         if let a = actual.sugarG, let e = expected.sugarG { XCTAssertEqual(a, e, accuracy: 1e-9, file: file, line: line) }
         XCTAssertEqual(actual.sodiumMg == nil, expected.sodiumMg == nil, "sodium nil-ness", file: file, line: line)
         if let a = actual.sodiumMg, let e = expected.sodiumMg { XCTAssertEqual(a, e, accuracy: 1e-9, file: file, line: line) }
+        XCTAssertEqual(actual.saturatedFatG == nil, expected.saturatedFatG == nil, "saturated fat nil-ness", file: file, line: line)
+        if let a = actual.saturatedFatG, let e = expected.saturatedFatG { XCTAssertEqual(a, e, accuracy: 1e-9, file: file, line: line) }
     }
 
     // MARK: - Grams
@@ -43,6 +45,8 @@ final class FoodEntryEditTests: XCTestCase {
         let result = try XCTUnwrap(edit.result)
         assertFacts(result.nutrition, facts.scaled(by: 4.0 / 3.0))
         XCTAssertEqual(result.nutrition.calories, 400, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(result.nutrition.saturatedFatG), 6, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(result.nutrition.sodiumMg), 600, accuracy: 1e-9)
         XCTAssertEqual(result.amountGrams, 200)
         XCTAssertEqual(result.quantity, 200)
         XCTAssertEqual(result.servingUnit, "g")
@@ -168,7 +172,8 @@ final class FoodEntryEditTests: XCTestCase {
         XCTAssertEqual(result.nutrition.calories, 210)
         XCTAssertEqual(result.nutrition.proteinG, 12.5)
         XCTAssertEqual(result.nutrition.carbsG, 30, "an untyped macro keeps its value")
-        XCTAssertEqual(result.nutrition.sugarG, 12, "sugar has no field and is carried, not dropped")
+        XCTAssertEqual(result.nutrition.sugarG, 12, "an untyped nutrient keeps its value")
+        XCTAssertEqual(result.nutrition.saturatedFatG, 4.5)
     }
 
     func testABlankFibreStaysNil() throws {
@@ -187,9 +192,71 @@ final class FoodEntryEditTests: XCTestCase {
         var edit = manualEntry()
         edit.setText("", for: .protein)
         XCTAssertNil(edit.result)
-        XCTAssertEqual(edit.problem, "Enter protein — only fibre can be left blank.")
+        XCTAssertEqual(edit.problem, "Enter protein. Everything else can be left blank.")
         edit.setText("0", for: .protein)
         XCTAssertEqual(edit.result?.nutrition.proteinG, 0, "a typed zero is a zero")
+    }
+
+    // MARK: - Saturated fat, sugar and sodium
+
+    func testTheThreeDetailsAreTypedAndLabelled() throws {
+        var edit = manualEntry()
+        XCTAssertEqual(FoodEntryEdit.Macro.allCases.filter(\.isDetail), [.saturatedFat, .sugar, .sodium])
+        XCTAssertEqual(FoodEntryEdit.Macro.sodium.unit, "mg")
+        XCTAssertEqual(FoodEntryEdit.Macro.saturatedFat.label, "Saturated fat")
+        XCTAssertFalse(FoodEntryEdit.Macro.sugar.isRequired)
+        XCTAssertEqual(edit.text(for: .saturatedFat), "4.5")
+        XCTAssertEqual(edit.text(for: .sodium), "450")
+
+        edit.setText("2.5", for: .saturatedFat)
+        edit.setText("20", for: .sugar)
+        edit.setText("1200", for: .sodium)
+        let result = try XCTUnwrap(edit.result)
+        XCTAssertEqual(result.nutrition.saturatedFatG, 2.5)
+        XCTAssertEqual(result.nutrition.sugarG, 20)
+        XCTAssertEqual(result.nutrition.sodiumMg, 1200)
+        XCTAssertEqual(result.nutrition.calories, 300, "typing a detail leaves the macros alone")
+    }
+
+    func testABlankDetailStaysNilAndDoesNotBlockSave() throws {
+        var edit = manualEntry()
+        edit.setText("", for: .sodium)
+        edit.setText(" ", for: .saturatedFat)
+        XCTAssertNil(edit.problem)
+        let result = try XCTUnwrap(edit.result)
+        XCTAssertNil(result.nutrition.sodiumMg, "blank is unknown, never a measured zero")
+        XCTAssertNil(result.nutrition.saturatedFatG)
+        XCTAssertEqual(result.nutrition.sugarG, 12)
+
+        var unknown = facts
+        unknown.saturatedFatG = nil
+        unknown.sugarG = nil
+        unknown.sodiumMg = nil
+        let untouched = FoodEntryEdit(name: "Bar", foodRefID: "", mealType: .snack, quantity: 1,
+                                      servingUnit: "serving", amountGrams: nil, nutrition: unknown,
+                                      preferredUnit: .grams)
+        XCTAssertEqual(untouched.text(for: .sugar), "")
+        let saved = try XCTUnwrap(untouched.result)
+        XCTAssertNil(saved.nutrition.sugarG)
+        XCTAssertNil(saved.nutrition.saturatedFatG)
+    }
+
+    /// A typed detail is a total for the amount on screen, like a typed macro.
+    func testATypedDetailIsATotalForTheAmountOnScreen() throws {
+        var edit = manualEntry()
+        edit.amountText = "2"
+        XCTAssertEqual(edit.text(for: .saturatedFat), "9")
+        edit.setText("1000", for: .sodium)
+        edit.amountText = "1"
+        let result = try XCTUnwrap(edit.result)
+        XCTAssertEqual(try XCTUnwrap(result.nutrition.sodiumMg), 500, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(result.nutrition.saturatedFatG), 4.5, accuracy: 1e-9)
+    }
+
+    func testAReferenceFoodsDetailsCannotBeTyped() throws {
+        var edit = gramEntry()
+        edit.setText("99", for: .sugar)
+        XCTAssertEqual(edit.result?.nutrition.sugarG, 12)
     }
 
     func testAManualEntryNeedsAName() {

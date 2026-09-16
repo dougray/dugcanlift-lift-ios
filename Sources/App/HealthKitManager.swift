@@ -21,16 +21,11 @@ final class HealthKitManager {
     var lastSyncError: String?
 
     private var shareTypes: Set<HKSampleType> {
+        // Only what this file writes: strength workouts (`sync`) and outdoor
+        // workouts with their route (`exportOutdoorActivity`). Food is not
+        // written to Health, and neither is body weight, so neither is asked
+        // for -- App Review rejects permissions the app does not use.
         var types: Set<HKSampleType> = [HKObjectType.workoutType(), HKSeriesType.workoutRoute()]
-        if let bodyMass = HKQuantityType.quantityType(forIdentifier: .bodyMass) {
-            types.insert(bodyMass)
-        }
-        if let energy = HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed) {
-            types.insert(energy)
-        }
-        if let protein = HKQuantityType.quantityType(forIdentifier: .dietaryProtein) {
-            types.insert(protein)
-        }
         // exportOutdoorActivity writes a distanceWalkingRunning sample — without
         // requesting share authorization for it too, HealthKit silently drops
         // that sample rather than throwing, so a run's distance would never
@@ -41,8 +36,10 @@ final class HealthKitManager {
         return types
     }
 
+    /// Only what this file reads: body weight (`latestBodyMassKg`) and steps
+    /// (`todaysStepCount`, `dailyStepCounts`). Nothing queries workouts.
     private var readTypes: Set<HKObjectType> {
-        var types: Set<HKObjectType> = [HKObjectType.workoutType()]
+        var types: Set<HKObjectType> = []
         if let bodyMass = HKQuantityType.quantityType(forIdentifier: .bodyMass) {
             types.insert(bodyMass)
         }
@@ -220,16 +217,6 @@ final class HealthKitManager {
     }
 
     // MARK: Body mass
-
-    func saveBodyMass(kilograms: Double, date: Date = .now) async throws -> UUID? {
-        guard isAvailable,
-              let type = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return nil }
-
-        let quantity = HKQuantity(unit: .gramUnit(with: .kilo), doubleValue: kilograms)
-        let sample = HKQuantitySample(type: type, quantity: quantity, start: date, end: date)
-        try await store.save(sample)
-        return sample.uuid
-    }
 
     /// Most recent body mass recorded by any app — the Health app, a smart
     /// scale, or Lift itself.

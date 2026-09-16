@@ -28,14 +28,21 @@ final class LocationTracker: NSObject {
         manager.distanceFilter = 5
     }
 
+    /// When In Use, not Always: a recording only ever starts from the open
+    /// recording screen, and a session started in the foreground keeps running
+    /// when the phone locks because `start()` allows background updates under
+    /// the `location` background mode. Asking for more than the app uses is a
+    /// review rejection and a worse promise to make to the person.
     func requestAuthorization() {
-        manager.requestAlwaysAuthorization()
+        manager.requestWhenInUseAuthorization()
     }
 
     func start() {
         points = []
         isTracking = true
         manager.allowsBackgroundLocationUpdates = true
+        // The blue status-bar pill, so it is plain that a recording is running.
+        manager.showsBackgroundLocationIndicator = true
         manager.pausesLocationUpdatesAutomatically = false
         manager.startUpdatingLocation()
     }

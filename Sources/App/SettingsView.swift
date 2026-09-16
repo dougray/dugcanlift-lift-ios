@@ -91,7 +91,7 @@ struct SettingsView: View {
                             authorize()
                         }
                         .disabled(isRequesting)
-                        Text("Lift writes your workouts to Health and can read your body weight.")
+                        Text("Lift writes your workouts, runs, walks and hikes to Health, and reads your body weight and steps.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

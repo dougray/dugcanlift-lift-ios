@@ -2,17 +2,33 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- No tracking, no SDKs that track, no tracking domains. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
+	<!-- Empty on purpose, and only while it stays true that nothing leaves the
+	     device to the developer or a partner. Apple counts data as collected
+	     when it is transmitted off the device where the developer or a third
+	     party can access it. In this app:
+	     - The log, Health data and routes live in SwiftData in the App Group
+	       container and in HealthKit. There is no backend and no account.
+	     - The app's one network request fetches a public recipe page the
+	       person pastes (RecipeImportView) and sends nothing of theirs. No
+	       analytics or crash-reporting SDK is linked.
+	     - Send to Coach puts the log in the #fragment of a
+	       www.dugcanlift.com/coach/ link, which a browser never sends to the
+	       server, and the person sends it themselves to a coach they choose.
+	     - A backup is a file the person saves where they choose.
+	     If any of that changes - an upload, analytics, a crash reporter - this
+	     array must list what is sent. -->
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array/>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
-		<!-- @AppStorage (MacroGoals, weightUnit, goalIsSet, goalSteps) reads and
-		     writes UserDefaults.standard only — never a shared App Group suite,
-		     so CA92.1 applies rather than 1C8F.1. -->
+		<!-- @AppStorage (goals, units, appearance, Send to Coach settings) and
+		     BackupStore read and write UserDefaults.standard only, never a
+		     shared App Group suite, so CA92.1 applies rather than 1C8F.1. -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
@@ -21,8 +37,10 @@
 				<string>CA92.1</string>
 			</array>
 		</dict>
-		<!-- GRDB (Sources/Reference) and SwiftData both sit on SQLite, which
-		     reads file timestamps as part of normal database operation. -->
+		<!-- SwiftData (the store in the App Group container) and GRDB (LiftKit's
+		     LiftReference, over the bundled food and exercise databases) sit on
+		     SQLite, which reads file timestamps inside the app and App Group
+		     containers as part of normal database operation. -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>

@@ -2,8 +2,8 @@ import Foundation
 import SwiftData
 import LiftCore
 
-/// Ready-made routines — push/pull/legs, upper/lower, full body — for someone
-/// who hasn't written any of their own.
+/// Ready-made routines — push/pull/legs, upper/lower, full body, mobility,
+/// active rest and two runs — for someone who hasn't written any of their own.
 ///
 /// These waited on the exercise library for a concrete reason rather than a
 /// tidy one. A split is a list of exercise names, and a name that doesn't

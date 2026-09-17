@@ -28,7 +28,10 @@ settings:
     # under concurrency warnings during scaffolding — tighten once it builds.
     SWIFT_STRICT_CONCURRENCY: minimal
     ENABLE_USER_SCRIPT_SANDBOXING: YES
-    TARGETED_DEVICE_FAMILY: "1"   # iPhone only
+    # iPhone and iPad. Layout adapts to the width a window actually has
+    # (Sources/App/AdaptiveLayout.swift), so an iPad in Split View at phone
+    # width gets the phone's layout.
+    TARGETED_DEVICE_FAMILY: "1,2"
 
 packages:
   # Pinned to an exact tag, not a range: a change here reaches two shipped
@@ -85,6 +88,22 @@ targets:
         # Xcode generates the Info.plist, and this target supplies its own.
         UILaunchScreen: {}
         CFBundleDisplayName: Lift
+
+        # Declared rather than left to the default, because iPad multitasking
+        # (Split View, Slide Over, Stage Manager) requires all four iPad
+        # orientations, and App Store validation rejects an iPad build that
+        # neither lists them nor sets UIRequiresFullScreen. The iPhone list is
+        # what the app already did with no key: every orientation but
+        # upside down.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
 

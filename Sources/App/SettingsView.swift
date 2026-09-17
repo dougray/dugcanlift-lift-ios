@@ -117,6 +117,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .readableListMargins()
             .navigationTitle("Settings")
             .task { await loadWeight() }
         }

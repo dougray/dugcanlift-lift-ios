@@ -57,6 +57,9 @@ struct RoutinesView: View {
             // inline title: a large title here sat hard against the screen edge
             // under the app's top tabs, which no other tab does.
             .scrollContentBackground(.hidden)
+            // A readable column on a wide screen, rather than rows whose
+            // Start button sits a whole iPad away from their name.
+            .readableListMargins()
             .background(Theme.background)
             .navigationTitle("Routines")
             .navigationBarTitleDisplayMode(.inline)
@@ -127,6 +130,7 @@ private struct NewRoutineView: View {
                         .keyboardType(.numberPad)
                 }
             }
+            .readableListMargins()
             .navigationTitle("New Routine")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

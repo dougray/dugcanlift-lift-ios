@@ -61,6 +61,7 @@ struct FoodSearchView: View {
                     .buttonStyle(.plain)
                 }
                 .listStyle(.plain)
+                .readableListMargins()
             }
         }
         .navigationTitle("Log Food")
@@ -165,6 +166,7 @@ struct FoodSearchView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
+            .readableContentWidth()
         }
         .liftScreen()
         .background(Theme.background)

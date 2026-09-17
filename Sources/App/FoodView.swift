@@ -15,6 +15,7 @@ struct FoodView: View {
 
     @State private var showingSearch = false
     @State private var editing: FoodEntry?
+    @Environment(\.pageWidth) private var pageWidth
 
     /// Same pattern as `WeightUnit`/`DistanceUnit`/`FoodSearchView`: a live,
     /// current-device display preference, not part of any stored record.
@@ -64,18 +65,25 @@ struct FoodView: View {
                 }
                 .buttonStyle(.plain)
 
-                ForEach(MealType.allCases) { meal in
-                    let mealEntries = entries.filter { $0.mealType == meal }
-                    section(meal, entries: mealEntries)
+                // Meals in rows of two once two phone-width columns fit,
+                // in the day's order: breakfast beside lunch, dinner beside
+                // snack.
+                AdaptiveGrid(columns: AdaptiveLayout.columns(
+                    for: AdaptiveLayout.contentWidth(forPage: pageWidth)), spacing: 18) {
+                    ForEach(MealType.allCases) { meal in
+                        let mealEntries = entries.filter { $0.mealType == meal }
+                        section(meal, entries: mealEntries)
+                    }
+
+                    NutrientTotalsSection(foods: entries)
+
+                    recentSection
                 }
-
-                NutrientTotalsSection(foods: entries)
-
-                recentSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 40)
+            .adaptivePageWidth()
         }
         .liftScreen()
         .sheet(isPresented: $showingSearch) {

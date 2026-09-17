@@ -31,6 +31,7 @@ struct HomeView: View {
     @State private var todaySteps: Double = 0
     @State private var showingStepGoalEditor = false
     @State private var stepGoalInput = ""
+    @Environment(\.pageWidth) private var pageWidth
 
     @Query private var todaysFood: [FoodEntry]
     @Query private var todaysTraining: [WorkoutDay]
@@ -59,91 +60,96 @@ struct HomeView: View {
                     .font(Theme.cardTitle)
                     .foregroundStyle(Theme.accent)
 
-                if goalIsSet {
-                    LiftCard {
-                        VStack(alignment: .leading, spacing: 14) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(calorieHeadline)
-                                    .font(Theme.figure)
+                // Two columns of cards once each can be a phone's width.
+                AdaptiveColumns(columns: AdaptiveLayout.columns(
+                    for: AdaptiveLayout.contentWidth(forPage: pageWidth))) {
+                    if goalIsSet {
+                        LiftCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(calorieHeadline)
+                                        .font(Theme.figure)
+                                        .foregroundStyle(Theme.textPrimary)
+                                    Text("\(Int(totals.calories)) of \(Int(goalCalories))")
+                                        .font(Theme.detail)
+                                        .foregroundStyle(Theme.textSecondary)
+                                }
+
+                                MacroProgressRow(label: "Protein", current: totals.proteinG,
+                                                 goal: goalProtein, unit: "g")
+                                MacroProgressRow(label: "Fat", current: totals.fatG,
+                                                 goal: goalFat, unit: "g")
+                                MacroProgressRow(label: "Carbs", current: totals.carbsG,
+                                                 goal: goalCarbs, unit: "g")
+                                MacroProgressRow(label: "Fiber", current: totals.fiberG ?? 0,
+                                                 goal: goalFiber, unit: "g")
+                            }
+                        }
+                    } else {
+                        LiftCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("No goal set yet.")
+                                    .font(.system(size: 17, weight: .bold))
                                     .foregroundStyle(Theme.textPrimary)
-                                Text("\(Int(totals.calories)) of \(Int(goalCalories))")
+                                Text("Work out your daily calories and macros to start tracking against them.")
+                                    .font(Theme.body)
+                                    .foregroundStyle(Theme.textSecondary)
+                                // A filled pill, as the browser build renders a
+                                // primary action. Bare accent text reads as a link
+                                // and is easy to miss next to the web's button.
+                                LiftButton("Set my goal") { showingCalculator = true }
+                                    .padding(.top, 8)
+                            }
+                        }
+                    }
+
+                    LiftCard(title: "Steps") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            MacroProgressRow(label: "Today", current: todaySteps,
+                                             goal: goalSteps, unit: "steps")
+                            Button("Edit goal") {
+                                stepGoalInput = String(Int(goalSteps))
+                                showingStepGoalEditor = true
+                            }
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                        }
+                    }
+
+                    LiftCard(title: "Training") {
+                        if let day, day.totalSetCount > 0 {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(day.name.isEmpty ? day.focus.displayName : day.name)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(Theme.textPrimary)
+                                Text("\(day.exercises.count) exercises · \(day.summary(unit: unit))")
                                     .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
                             }
-
-                            MacroProgressRow(label: "Protein", current: totals.proteinG,
-                                             goal: goalProtein, unit: "g")
-                            MacroProgressRow(label: "Fat", current: totals.fatG,
-                                             goal: goalFat, unit: "g")
-                            MacroProgressRow(label: "Carbs", current: totals.carbsG,
-                                             goal: goalCarbs, unit: "g")
-                            MacroProgressRow(label: "Fiber", current: totals.fiberG ?? 0,
-                                             goal: goalFiber, unit: "g")
-                        }
-                    }
-                } else {
-                    LiftCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("No goal set yet.")
-                                .font(.system(size: 17, weight: .bold))
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("Work out your daily calories and macros to start tracking against them.")
+                        } else {
+                            Text("Nothing logged yet")
                                 .font(Theme.body)
                                 .foregroundStyle(Theme.textSecondary)
-                            // A filled pill, as the browser build renders a
-                            // primary action. Bare accent text reads as a link
-                            // and is easy to miss next to the web's button.
-                            LiftButton("Set my goal") { showingCalculator = true }
-                                .padding(.top, 8)
                         }
                     }
-                }
 
-                LiftCard(title: "Steps") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        MacroProgressRow(label: "Today", current: todaySteps,
-                                         goal: goalSteps, unit: "steps")
-                        Button("Edit goal") {
-                            stepGoalInput = String(Int(goalSteps))
-                            showingStepGoalEditor = true
+                    LiftCard(title: "Fuel so far today") {
+                        VStack(spacing: 9) {
+                            StatRow(label: "Calories", value: "\(Int(totals.calories)) kcal")
+                            StatRow(label: "Protein", value: "\(Int(totals.proteinG)) g")
+                            StatRow(label: "Carbs", value: "\(Int(totals.carbsG)) g")
+                            StatRow(label: "Fat", value: "\(Int(totals.fatG)) g")
+                            StatRow(label: "Fiber", value: "\(Int(totals.fiberG ?? 0)) g")
+                            // Saturated fat, sugar and sodium, when any food today
+                            // recorded them. Totals only, never against a goal.
+                            NutrientTotalRows(totals: NutrientDetailsDisplay.dayTotals(todaysFood.map(\.nutrition)))
                         }
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                    }
-                }
-
-                LiftCard(title: "Training") {
-                    if let day, day.totalSetCount > 0 {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(day.name.isEmpty ? day.focus.displayName : day.name)
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("\(day.exercises.count) exercises · \(day.summary(unit: unit))")
-                                .font(Theme.detail)
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                    } else {
-                        Text("Nothing logged yet")
-                            .font(Theme.body)
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                }
-
-                LiftCard(title: "Fuel so far today") {
-                    VStack(spacing: 9) {
-                        StatRow(label: "Calories", value: "\(Int(totals.calories)) kcal")
-                        StatRow(label: "Protein", value: "\(Int(totals.proteinG)) g")
-                        StatRow(label: "Carbs", value: "\(Int(totals.carbsG)) g")
-                        StatRow(label: "Fat", value: "\(Int(totals.fatG)) g")
-                        StatRow(label: "Fiber", value: "\(Int(totals.fiberG ?? 0)) g")
-                        // Saturated fat, sugar and sodium, when any food today
-                        // recorded them. Totals only, never against a goal.
-                        NutrientTotalRows(totals: NutrientDetailsDisplay.dayTotals(todaysFood.map(\.nutrition)))
                     }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 40)
+            .adaptivePageWidth()
         }
         .liftScreen()
         .sheet(isPresented: $showingCalculator) {

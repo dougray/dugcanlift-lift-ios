@@ -47,6 +47,7 @@ struct PlanPreviewView: View {
                     }
                 }
             }
+            .readableListMargins()
             .navigationTitle("New Plan")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

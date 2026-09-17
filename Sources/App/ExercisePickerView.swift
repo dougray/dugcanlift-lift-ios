@@ -58,6 +58,7 @@ struct ExercisePickerView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .readableListMargins()
                 }
             }
             .navigationTitle("Add Exercise")

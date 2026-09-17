@@ -41,6 +41,7 @@ struct OutdoorActivityReviewView: View {
                 ))
             }
         }
+        .readableListMargins()
         .navigationTitle(activity.activityType.displayName)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

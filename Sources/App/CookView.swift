@@ -31,6 +31,8 @@ struct CookView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            // Three short words do not need a 1,300pt control.
+            .readableContentWidth()
 
             switch section {
             case .recipes:  RecipeListView()
@@ -53,65 +55,76 @@ struct RecipeListView: View {
     @State private var importingFromLink = false
     @State private var browsingCatalogue = false
     @State private var pasting = false
+    @Environment(\.pageWidth) private var pageWidth
+
+    private var contentWidth: CGFloat { AdaptiveLayout.contentWidth(forPage: pageWidth) }
+
+    /// One, two or four across: never three over one.
+    private var actionColumns: Int {
+        let fit = AdaptiveLayout.columns(for: contentWidth, minWidth: 220, maxColumns: 4)
+        return fit == 3 ? 2 : fit
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
-                Button {
-                    creatingNew = true
-                } label: {
-                    Label("New recipe", systemImage: "plus")
-                        .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Theme.cardPadding)
-                        .liftCardBackground()
-                }
-                .buttonStyle(.plain)
+                AdaptiveGrid(columns: actionColumns) {
+                    Button {
+                        creatingNew = true
+                    } label: {
+                        Label("New recipe", systemImage: "plus")
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.cardPadding)
+                            .liftCardBackground()
+                    }
+                    .buttonStyle(.plain)
 
-                // Third, and the only one that needs neither typing nor a
-                // network: 600+ recipes ship in the app.
-                Button {
-                    browsingCatalogue = true
-                } label: {
-                    Label("Browse the catalogue", systemImage: "books.vertical")
-                        .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Theme.cardPadding)
-                        .liftCardBackground()
-                }
-                .buttonStyle(.plain)
+                    // Third, and the only one that needs neither typing nor a
+                    // network: 600+ recipes ship in the app.
+                    Button {
+                        browsingCatalogue = true
+                    } label: {
+                        Label("Browse the catalogue", systemImage: "books.vertical")
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.cardPadding)
+                            .liftCardBackground()
+                    }
+                    .buttonStyle(.plain)
 
-                // Second, not first: typing in a recipe you already cook is
-                // the normal way in, and an import always lands in the same
-                // editor afterwards anyway.
-                Button {
-                    importingFromLink = true
-                } label: {
-                    Label("Import from a link", systemImage: "link")
-                        .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Theme.cardPadding)
-                        .liftCardBackground()
-                }
-                .buttonStyle(.plain)
+                    // Second, not first: typing in a recipe you already cook is
+                    // the normal way in, and an import always lands in the same
+                    // editor afterwards anyway.
+                    Button {
+                        importingFromLink = true
+                    } label: {
+                        Label("Import from a link", systemImage: "link")
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.cardPadding)
+                            .liftCardBackground()
+                    }
+                    .buttonStyle(.plain)
 
-                // Last of the four: a link reads a page properly wherever one
-                // exists, so this is what is left when no page does -- a video
-                // caption, an email, a card off the fridge.
-                Button {
-                    pasting = true
-                } label: {
-                    Label("Paste a recipe", systemImage: "doc.on.clipboard")
-                        .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Theme.cardPadding)
-                        .liftCardBackground()
+                    // Last of the four: a link reads a page properly wherever one
+                    // exists, so this is what is left when no page does -- a video
+                    // caption, an email, a card off the fridge.
+                    Button {
+                        pasting = true
+                    } label: {
+                        Label("Paste a recipe", systemImage: "doc.on.clipboard")
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.cardPadding)
+                            .liftCardBackground()
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 if recipes.isEmpty {
                     Text("No recipes yet. Add one you already cook — the plan and the shopping list build themselves from here.")
@@ -119,9 +132,11 @@ struct RecipeListView: View {
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.top, 4)
                 } else {
-                    ForEach(recipes) { recipe in
-                        Button { editing = recipe } label: { row(recipe) }
-                            .buttonStyle(.plain)
+                    AdaptiveGrid(columns: AdaptiveLayout.columns(for: contentWidth, maxColumns: 3)) {
+                        ForEach(recipes) { recipe in
+                            Button { editing = recipe } label: { row(recipe) }
+                                .buttonStyle(.plain)
+                        }
                     }
                 }
 
@@ -139,6 +154,7 @@ struct RecipeListView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 40)
+            .adaptivePageWidth()
         }
         .sheet(isPresented: $creatingNew) {
             RecipeEditorView(recipe: nil).liftAppearance()
@@ -212,6 +228,13 @@ struct MealPlanView: View {
     @Query(sort: \Recipe.name) private var recipes: [Recipe]
 
     @State private var picking: (day: Date, meal: MealType)?
+    @Environment(\.pageWidth) private var pageWidth
+
+    private var contentWidth: CGFloat { AdaptiveLayout.contentWidth(forPage: pageWidth) }
+
+    /// The week as seven columns, Monday-to-Sunday style, once each day can
+    /// be about 130pt wide. Coach lays a plan week out the same way.
+    private var showsWeekColumns: Bool { contentWidth >= AdaptiveLayout.weekColumnsMinWidth }
 
     /// Today plus six. A plan is a week you are shopping for, not a calendar.
     private var week: [Date] {
@@ -228,12 +251,27 @@ struct MealPlanView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
 
-                ForEach(week, id: \.self) { day in
-                    daySection(day)
+                if showsWeekColumns {
+                    HStack(alignment: .top, spacing: 8) {
+                        ForEach(week, id: \.self) { day in
+                            dayColumn(day)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                .liftCardBackground()
+                        }
+                    }
+                    // Every day's card as tall as the fullest day's.
+                    .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    AdaptiveGrid(columns: AdaptiveLayout.columns(for: contentWidth), spacing: 18) {
+                        ForEach(week, id: \.self) { day in
+                            daySection(day)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 40)
+            .adaptivePageWidth()
         }
         .sheet(item: Binding(
             get: { picking.map { PickerTarget(day: $0.day, meal: $0.meal) } },
@@ -293,6 +331,46 @@ struct MealPlanView: View {
         }
         .padding(Theme.cardPadding)
         .liftCardBackground()
+    }
+
+    /// One day as a narrow column: each meal's name above its recipes rather
+    /// than beside them, because a seventh of the page has no room for the
+    /// 66pt label column `daySection` uses. Same rows, same Add.
+    private func dayColumn(_ day: Date) -> some View {
+        let key = DayKey.make(from: day)
+        let forDay = planned.filter { $0.dayKey == key }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(CookFormat.dayLabel(day))
+                .font(Theme.cardTitle)
+                .foregroundStyle(Theme.accent)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(MealType.allCases) { meal in
+                let meals = forDay.filter { $0.mealType == meal }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(meal.displayName)
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+
+                    if meals.isEmpty {
+                        Button {
+                            picking = (day: day, meal: meal)
+                        } label: {
+                            Text("Add")
+                                .font(Theme.detail)
+                                .foregroundStyle(Theme.accent.opacity(0.8))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        ForEach(meals) { plannedMeal in
+                            plannedRow(plannedMeal)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
     }
 
     /// Remove is a trailing "x", matching how FoodView already deletes a
@@ -445,6 +523,7 @@ struct RecipePickerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+            .readableContentWidth()
         }
         .liftScreen()
         .background(Theme.background)
@@ -500,6 +579,7 @@ struct RecipePickerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
+            .readableContentWidth()
         }
         .liftScreen()
         .background(Theme.background)
@@ -553,6 +633,7 @@ struct ShoppingListView: View {
     @Query private var planned: [PlannedMeal]
     @Query private var recipes: [Recipe]
     @Query private var checks: [ShoppingListCheck]
+    @Environment(\.pageWidth) private var pageWidth
 
     var body: some View {
         let lines = ShoppingList.build(
@@ -568,8 +649,11 @@ struct ShoppingListView: View {
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 } else {
-                    ForEach(lines) { line in
-                        row(line, isChecked: checkedKeys.contains(line.key))
+                    AdaptiveGrid(columns: AdaptiveLayout.columns(
+                        for: AdaptiveLayout.contentWidth(forPage: pageWidth), maxColumns: 3), spacing: 10) {
+                        ForEach(lines) { line in
+                            row(line, isChecked: checkedKeys.contains(line.key))
+                        }
                     }
 
                     if !checkedKeys.isEmpty {
@@ -583,6 +667,7 @@ struct ShoppingListView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 40)
+            .adaptivePageWidth()
         }
     }
 

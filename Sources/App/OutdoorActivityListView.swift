@@ -26,6 +26,7 @@ struct OutdoorActivityListView: View {
                 try? context.save()
             }
         }
+        .readableListMargins()
         .navigationTitle("Outdoor")
     }
 

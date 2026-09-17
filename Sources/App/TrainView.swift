@@ -13,6 +13,7 @@ struct TrainView: View {
 
     @State private var selectedDate = Date.now
     @State private var showingPicker = false
+    @Environment(\.pageWidth) private var pageWidth
 
     private var unit: WeightUnit { WeightUnit(rawValue: unitRaw) ?? .pounds }
 
@@ -22,22 +23,33 @@ struct TrainView: View {
                 VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                     dayNavigator
 
-                    Text("Focus")
-                        .font(Theme.sectionLabel)
-                        .foregroundStyle(Theme.textPrimary)
+                    // The day's lifting on the left and its runs, walks and
+                    // hikes on the right, once each half is wide enough for a
+                    // set's inline editor (weight x reps @ RPE, Warmup).
+                    AdaptiveColumns(columns: AdaptiveLayout.columns(
+                        for: AdaptiveLayout.contentWidth(forPage: pageWidth), minWidth: 394)) {
+                        VStack(alignment: .leading, spacing: Theme.cardSpacing) {
+                            Text("Focus")
+                                .font(Theme.sectionLabel)
+                                .foregroundStyle(Theme.textPrimary)
 
-                    FocusPicker(date: selectedDate)
+                            FocusPicker(date: selectedDate)
 
-                    ScheduledSessionBanner(date: selectedDate)
+                            ScheduledSessionBanner(date: selectedDate)
 
-                    DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
+                            DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
+                        }
 
-                    OutdoorDaySection(date: selectedDate)
+                        VStack(alignment: .leading, spacing: Theme.cardSpacing) {
+                            OutdoorDaySection(date: selectedDate)
 
-                    OutdoorHighlights()
+                            OutdoorHighlights()
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 40)
+                .adaptivePageWidth()
             }
             .liftScreen()
             .toolbar(.hidden, for: .navigationBar)

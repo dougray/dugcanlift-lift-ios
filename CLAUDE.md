@@ -81,6 +81,20 @@ its own presentation. Draw cards with `LiftCard` or `.liftCardBackground()`, not
 need. Widgets follow the phone's appearance, not this setting: iOS does not let
 an app choose a widget's colour scheme.
 
+**Large screens are laid out by width, never by device.** LIFT runs on iPad
+(`TARGETED_DEVICE_FAMILY` 1,2, all four iPad orientations so multitasking
+works). `RootView` measures the window: from 1024pt the tabs become a sidebar,
+and every tab reads `\.pageWidth` to choose its columns through
+`AdaptiveLayout` (two card columns from 640pt of content, Train's two halves
+from 800pt, Cook's plan as seven day columns from 1000pt, forms and lists
+capped at 700pt, everything at 1600pt). An iPad window at phone width is the
+phone. Below every threshold the helpers are the plain leading `VStack` the
+phone always had, so portrait iPhone must not change: compare screenshots
+against main before merging a layout change. `AdaptiveColumns`/`AdaptiveGrid`
+switch layouts through `AnyLayout`, not `if`, so crossing a breakpoint keeps
+view state. The top bar and sidebar use `clearOfWindowControls`, or iPadOS 26's
+window buttons sit on top of the Home tab.
+
 **Saturated fat, sugar and sodium are tracked, never targeted.** No goal, no
 bar, nothing "over". nil means the source did not say — never zero — so a
 day's total covers only the foods that recorded each value and says so when

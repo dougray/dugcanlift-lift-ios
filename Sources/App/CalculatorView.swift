@@ -105,6 +105,7 @@ struct CalculatorView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 40)
+                .readableContentWidth()
             }
             .liftScreen()
             .navigationTitle("Macro Calculator")

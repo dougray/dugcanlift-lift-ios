@@ -103,6 +103,32 @@ Send to Coach and `ux` from a plan all go through LiftKit's `ShareNutrients`,
 so the phone and the coach read the same number. The rules are
 `NutrientDetailsDisplay`, `FoodEntryEdit` and `RecipeMacroEntry`, not views.
 
+**A set may record a side, and absent is "both" forever.** `SetEntry.sideRaw`
+is schema V8 (`LiftPreSideShapes` freezes what V6 and V7 shipped, and
+`Tests/Fixtures/v7-simulator.store` is a store the V7 binary wrote). Nothing is
+backfilled: every set logged before this is two-sided, which is honest, and no
+decoder anywhere should guess a side from an exercise name. Whether a lift is
+logged per limb is the lifter's choice, kept in `perSideExercises` keyed
+`name|equipment` — `UnilateralGuess` only pre-ticks the box, and a "no" on a
+name it says yes to must stick.
+
+**A lift's identity is name, equipment *and* side** wherever sets are grouped
+or charted (`LiftKey`), for the same reason equipment joined it: a left-arm row
+and a right-arm row are not the same lift. A two-sided lift is untouched — one
+series, no imbalance figure. The maths is `LiftProgression`, a value type with
+no view in it and unit tests, because a rule in a view's `@State` cannot be
+tested and this one decides what someone is told about their own body.
+**Tracked and shown, never targeted**, exactly as saturated fat, sugar and
+sodium are: no threshold, no colour, no prompt to fix anything.
+
+**On the wire, side is bits 1-2 of the share tuple's `flags`** (0 both, 1 left,
+2 right) and a named `side` field in a backup, omitted when both. Bits in the
+link so the tuple stays six fields and an older decoder still reads the weight
+and the reps; a name in the backup because that file is read by people and by
+three platforms. `PLAN-FORMAT` is unchanged — prescriptions stay two-sided in
+v1. The documents in the `dugcanlift-coach` repo are the contract; `PerLimbTests`
+pins this side of it.
+
 **A struct a model stores is part of the schema.** SwiftData flattens
 `NutritionFacts` into one column per field on FoodEntry, Recipe and
 PlannedMeal, so a new field in LiftKit is a schema change here. LiftKit 1.9.0's

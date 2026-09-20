@@ -354,9 +354,17 @@ enum CoachShare {
     /// Internal rather than private so a test can assert the tuple directly;
     /// the link it ends up in is deflated, and round-tripping that would test
     /// the codec rather than this.
+    ///
+    /// **`flags` is a bitfield: bit 0 warmup, bits 1-2 side** — 0 both, 1
+    /// left, 2 right (`SetSide.shareFlagBits`). Side rides in the byte that
+    /// already exists rather than taking a seventh position, so the tuple
+    /// stays six fields long and a decoder built before per-limb logging
+    /// reads the same weight, reps, RPE, seconds and metres it always did. It
+    /// simply cannot say which limb, which is the correct way for this to
+    /// degrade: the volume in a coach's week is right either way.
     static func setTuple(_ set: SetEntry) -> [Any] {
         let weight = set.weightKg > 0 ? round(set.weightKg * lbPerKg * 10) / 10 : nil
-        let flags = set.isWarmup ? 1 : 0
+        let flags = (set.isWarmup ? 1 : 0) | (set.side?.shareFlagBits ?? 0) << 1
 
         var values: [Any?] = [
             weight, set.reps > 0 ? set.reps : nil, set.rpe,

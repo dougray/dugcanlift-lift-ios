@@ -11,6 +11,8 @@ struct TrainView: View {
     @Environment(\.modelContext) private var context
     @AppStorage("weightUnit") private var unitRaw = WeightUnit.pounds.rawValue
 
+    @AppStorage(PerSideLogging.storageKey) private var perSideRaw = "{}"
+
     @State private var selectedDate = Date.now
     @State private var showingPicker = false
     @Environment(\.pageWidth) private var pageWidth
@@ -106,7 +108,13 @@ struct TrainView: View {
             primaryMuscle: record.primaryMuscle,
             equipment: record.equipment
         )
-        entry.sets = [SetEntry(orderIndex: 0)]
+        // The preference is answered before the exercise exists, so the set
+        // that comes with it can already carry a side. Without this, the very
+        // first set of every single-arm lift would be a two-sided one the
+        // lifter has to go back and fix.
+        let perSide = PerSideLogging.effective(
+            name: record.name, equipment: record.equipment, in: perSideRaw)
+        entry.sets = [SetEntry(orderIndex: 0, side: perSide ? .left : nil)]
         day.exercises.append(entry)
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
@@ -291,24 +299,68 @@ private struct DayEditor: View {
 
 private struct ExerciseBlock: View {
     @Environment(\.modelContext) private var context
+    @AppStorage(PerSideLogging.storageKey) private var perSideRaw = "{}"
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
     let focus: TrainingFocus
 
+    /// Whether this lift is being logged a limb at a time: the lifter's own
+    /// answer if they have given one, otherwise what the name suggests. The
+    /// toggle is offered on every exercise, because the exercise database has
+    /// no unilateral column and a name is only ever a guess.
+    private var perSide: Bool {
+        PerSideLogging.effective(name: exercise.name,
+                                 equipment: exercise.equipment, in: perSideRaw)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(exercise.displayName)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Theme.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    // The name opens the lift's own progression — two lines
+                    // and the gap between them when it is logged per side.
+                    NavigationLink {
+                        ExerciseProgressionView(name: exercise.name,
+                                                equipment: exercise.equipment)
+                    } label: {
+                        Text(exercise.displayName)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .buttonStyle(.plain)
+
+                    // "L 3 · R 3". A missed side is the failure this whole
+                    // feature exists to make visible, so the count sits in
+                    // the header rather than waiting to be counted by eye.
+                    if perSide {
+                        Text(exercise.perSideCountLabel)
+                            .font(Theme.detail)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
                 Spacer()
                 Button("Remove") { remove() }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.accent)
             }
 
+            Button {
+                perSideRaw = PerSideLogging.setting(
+                    !perSide,
+                    for: ExerciseKey.make(name: exercise.name, equipment: exercise.equipment),
+                    in: perSideRaw)
+            } label: {
+                Label("Log left and right separately",
+                      systemImage: perSide ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(perSide ? Theme.accent : Theme.textSecondary)
+            }
+            .buttonStyle(.plain)
+
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
-                SetRow(index: index + 1, set: set, unit: unit, focus: focus) {
+                SetRow(index: index + 1, set: set, unit: unit, focus: focus,
+                       showsSide: perSide) {
                     delete(set)
                 }
             }
@@ -325,12 +377,19 @@ private struct ExerciseBlock: View {
         // decisions. Time and distance are never carried forward — a second
         // interval is rarely the same length as the first, and a wrong number
         // that looks deliberate is worse than an empty field.
+        //
+        // When sides are being logged, the set before is the *other* limb's,
+        // because `nextSide` alternates — which is exactly the "same as last"
+        // shortcut the spec asks for: most people match reps across limbs and
+        // adjust the weight, so copying and editing beats typing from
+        // nothing. One tap more than a normal set, not two.
         let previous = exercise.orderedSets.last
         exercise.sets.append(SetEntry(
             orderIndex: exercise.sets.count,
             weightKg: previous?.weightKg ?? 0,
             reps: previous?.reps ?? focus.defaultReps ?? 0,
-            rpe: previous?.rpe
+            rpe: previous?.rpe,
+            side: perSide ? exercise.nextSide : nil
         ))
         save()
     }
@@ -359,6 +418,9 @@ private struct SetRow: View {
     @Bindable var set: SetEntry
     let unit: WeightUnit
     let focus: TrainingFocus
+    /// Whether this lift is logged a limb at a time. Off, this row is exactly
+    /// what it has always been — no control, no side in the text.
+    var showsSide: Bool = false
     let onDelete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -372,10 +434,16 @@ private struct SetRow: View {
                     .foregroundStyle(Theme.textSecondary)
                     .frame(width: 22, alignment: .leading)
 
+                // In the row, not behind a tap on the editor: picking the
+                // limb has to cost one tap, and a set already lands on the
+                // side with fewer logged, so most of the time it costs none.
+                if showsSide { sidePicker }
+
                 Button {
                     isEditing.toggle()
                 } label: {
-                    Text(set.display(unit: unit))
+                    // The control beside it already says L or R.
+                    Text(set.display(unit: unit, includingSide: !showsSide))
                         .font(.system(size: 16, weight: set.isWarmup ? .regular : .semibold))
                         .foregroundStyle(set.isWarmup ? Theme.textSecondary : Theme.textPrimary)
                 }
@@ -402,6 +470,35 @@ private struct SetRow: View {
             if isEditing {
                 editor
             }
+        }
+    }
+
+    /// Two buttons rather than a `Picker`: a segmented picker cannot express
+    /// "neither", and a set logged before this exercise was switched to
+    /// per-side has no side at all. Tapping the highlighted side clears it
+    /// back to both, so nothing is a one-way door.
+    private var sidePicker: some View {
+        HStack(spacing: 0) {
+            ForEach(SetSide.allCases) { side in
+                Button {
+                    set.side = set.side == side ? nil : side
+                    save()
+                } label: {
+                    Text(side.shortLabel)
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 26, height: 26)
+                        .foregroundStyle(set.side == side ? Theme.background : Theme.textSecondary)
+                        .background {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(set.side == side ? Theme.accent : Color.clear)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(side.displayName)
+            }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 6).stroke(Theme.hairline, lineWidth: 1)
         }
     }
 

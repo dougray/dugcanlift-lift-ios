@@ -5,12 +5,11 @@ import LiftCore
 
 final class PlanImporterTests: XCTestCase {
 
+    /// `LiftStore.schema`, never a version pinned by hand — a pinned one
+    /// stops being the app's schema the moment a new version lands, and the
+    /// failure is a cast inside SwiftData rather than a compile error.
     private func makeContext() throws -> ModelContext {
-        let container = try ModelContainer(
-            for: Schema(versionedSchema: LiftSchemaV7.self),
-            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-        )
-        return ModelContext(container)
+        ModelContext(LiftStore.makeContainer(inMemory: true))
     }
 
     private let examplePayload = PlanPayload(

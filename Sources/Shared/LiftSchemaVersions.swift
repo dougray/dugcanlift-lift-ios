@@ -29,7 +29,7 @@ import LiftCore
 /// optional non-optional. Any of those needs a `.custom` stage with a real
 /// `willMigrate`/`didMigrate`, not another `.lightweight`.
 ///
-/// When the shape changes again: add a `V8`, add a stage from `V7` to `V8`,
+/// When the shape changes again: add a `V9`, add a stage from `V8` to `V9`,
 /// and point `LiftStore.schema` at the new version. That includes a change to
 /// a struct a model stores, such as `NutritionFacts` — see
 /// `LiftPreSaturatedFatShapes`. Never edit a version that
@@ -454,6 +454,110 @@ enum LiftPreSaturatedFatShapes {
     }
 }
 
+// MARK: - Frozen pre-V8 shapes of WorkoutDay / ExerciseEntry / SetEntry
+//
+// V8 adds `sideRaw` to the live `SetEntry` — which limb a set was performed
+// with, nil meaning both. See `SetSide`.
+//
+// This is the same drift the two enums above exist for, one version later.
+// V6 and V7 both list the live `WorkoutDay`, `ExerciseEntry` and `SetEntry` by
+// `.self`; the moment `sideRaw` lands on the live class, their *declared*
+// shape silently becomes V8's, nothing in their own declarations having
+// changed, and SwiftData can no longer tell three versions apart. An existing
+// install then fails at launch — `Duplicate version checksums detected`, or
+// 134504 from staged migration — which in a release build is a fatalError for
+// every user who already has data.
+//
+// All three classes are frozen together rather than `SetEntry` alone, for the
+// reason `LiftPreSetMetricsShapes` gives: the freeze has to close over the
+// relationship graph, because `SetEntry.exercise`, `ExerciseEntry.sets` and
+// `ExerciseEntry.day` are each typed to whichever class they point at.
+//
+// These are V6/V7's three classes exactly — with `durationSec` and
+// `distanceMeters`, without `sideRaw`. Never add `sideRaw` here.
+// `Tests/Fixtures/v7-simulator.store` is a store the V7 binary wrote in a
+// simulator (a workout with two sets, a logged food, a saved routine and a
+// recorded run), and `testRealV7StoreOpensAsV8` opens it.
+//
+// `WorkoutDay` and `ExerciseEntry` are byte for byte what
+// `LiftPreSetMetricsShapes` declares plus V6's two set columns — they have no
+// changes of their own in either version.
+enum LiftPreSideShapes {
+
+    @Model
+    final class WorkoutDay {
+        var id: UUID = UUID()
+        var dayKey: String = ""
+        var date: Date = Date.now
+        var name: String = ""
+        var focusRaw: String = "bodybuilding"
+        var liveStartedAt: Date?
+        var liveEndedAt: Date?
+        var healthKitUUID: UUID?
+
+        @Relationship(deleteRule: .cascade, inverse: \ExerciseEntry.day)
+        var exercises: [ExerciseEntry] = []
+
+        init(date: Date = .now, name: String = "", focusRaw: String = "bodybuilding") {
+            self.id = UUID()
+            self.date = date
+            self.name = name
+            self.focusRaw = focusRaw
+        }
+    }
+
+    @Model
+    final class ExerciseEntry {
+        var id: UUID = UUID()
+        var exerciseRefID: String = ""
+        var name: String = ""
+        var primaryMuscle: String?
+        var equipment: String?
+        var orderIndex: Int = 0
+        var day: WorkoutDay?
+
+        @Relationship(deleteRule: .cascade, inverse: \SetEntry.exercise)
+        var sets: [SetEntry] = []
+
+        init(exerciseRefID: String, name: String, orderIndex: Int,
+             primaryMuscle: String? = nil, equipment: String? = nil) {
+            self.id = UUID()
+            self.exerciseRefID = exerciseRefID
+            self.name = name
+            self.orderIndex = orderIndex
+            self.primaryMuscle = primaryMuscle
+            self.equipment = equipment
+        }
+    }
+
+    @Model
+    final class SetEntry {
+        var id: UUID = UUID()
+        var orderIndex: Int = 0
+        var weightKg: Double = 0
+        var reps: Int = 0
+        var rpe: Double?
+        var isWarmup: Bool = false
+        var completedAt: Date?
+        var exercise: ExerciseEntry?
+        var durationSec: Int?
+        var distanceMeters: Double?
+
+        init(orderIndex: Int, weightKg: Double = 0, reps: Int = 0,
+             rpe: Double? = nil, isWarmup: Bool = false,
+             durationSec: Int? = nil, distanceMeters: Double? = nil) {
+            self.id = UUID()
+            self.orderIndex = orderIndex
+            self.weightKg = weightKg
+            self.reps = reps
+            self.rpe = rpe
+            self.isWarmup = isWarmup
+            self.durationSec = durationSec
+            self.distanceMeters = distanceMeters
+        }
+    }
+}
+
 // MARK: - V1 — everything before COOK
 
 enum LiftSchemaV1: VersionedSchema {
@@ -584,11 +688,12 @@ enum LiftSchemaV6: VersionedSchema {
 
     static var models: [any PersistentModel.Type] {
         [
-            // The three that changed — live classes, with durationSec and
-            // distanceMeters on SetEntry.
-            WorkoutDay.self,
-            ExerciseEntry.self,
-            SetEntry.self,
+            // The three that changed in V6 — durationSec and distanceMeters on
+            // SetEntry. Frozen as of V8, which adds `sideRaw` to the live
+            // SetEntry; see LiftPreSideShapes.
+            LiftPreSideShapes.WorkoutDay.self,
+            LiftPreSideShapes.ExerciseEntry.self,
+            LiftPreSideShapes.SetEntry.self,
             // Unchanged since V5 — frozen, because V7 changes the
             // NutritionFacts they store.
             LiftPreSaturatedFatShapes.FoodEntry.self,
@@ -614,12 +719,44 @@ enum LiftSchemaV7: VersionedSchema {
 
     static var models: [any PersistentModel.Type] {
         [
-            WorkoutDay.self,
-            ExerciseEntry.self,
-            SetEntry.self,
+            // Unchanged since V6 — frozen, because V8 adds `sideRaw` to
+            // SetEntry.
+            LiftPreSideShapes.WorkoutDay.self,
+            LiftPreSideShapes.ExerciseEntry.self,
+            LiftPreSideShapes.SetEntry.self,
             // The four that changed — live classes, whose NutritionFacts
             // columns now include saturatedFatG. RecipeIngredient has none of
             // its own; it follows Recipe through the relationship.
+            FoodEntry.self,
+            BodyMeasurement.self,
+            Recipe.self,
+            RecipeIngredient.self,
+            PlannedMeal.self,
+            ShoppingListCheck.self,
+            Routine.self,
+            RoutineExercise.self,
+            RoutinePrescribedSet.self,
+            ImportedPlan.self,
+            ScheduledSession.self,
+            OutdoorActivity.self
+        ]
+    }
+}
+
+// MARK: - V8 — a set can record which limb it was performed with
+
+enum LiftSchemaV8: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(8, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            // The three that changed — live classes, with `sideRaw` on
+            // SetEntry. WorkoutDay and ExerciseEntry have no change of their
+            // own; they are here because the relationship graph a frozen
+            // SetEntry belongs to cannot straddle two versions.
+            WorkoutDay.self,
+            ExerciseEntry.self,
+            SetEntry.self,
             FoodEntry.self,
             BodyMeasurement.self,
             Recipe.self,
@@ -642,11 +779,12 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
 
     static var schemas: [any VersionedSchema.Type] {
         [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self,
-         LiftSchemaV5.self, LiftSchemaV6.self, LiftSchemaV7.self]
+         LiftSchemaV5.self, LiftSchemaV6.self, LiftSchemaV7.self,
+         LiftSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -705,5 +843,21 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v6ToV7 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV6.self,
         toVersion: LiftSchemaV7.self
+    )
+
+    /// One new optional column on SetEntry, `sideRaw`. No new model types, no
+    /// renames, no type changes, no optional-to-non-optional changes —
+    /// lightweight per this file's own rule above.
+    ///
+    /// **Nothing is backfilled, on purpose.** Every existing row reads nil,
+    /// and nil already means "both" (`SetSide`), which is the honest answer
+    /// for a set logged before anyone could record a side. Guessing left and
+    /// right from a name would invent a history nobody lived.
+    ///
+    /// V6 and V7 are pointed at `LiftPreSideShapes` so their checksums still
+    /// describe the stores those builds wrote.
+    static let v7ToV8 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV7.self,
+        toVersion: LiftSchemaV8.self
     )
 }

@@ -290,7 +290,9 @@ final class SchemaMigrationTests: XCTestCase {
                                                                   fatG: 0.0475, sugarG: 0.02, sodiumMg: 1.6)
             context.insert(meal)
 
-            context.insert(WorkoutDay(date: loggedAt, name: "Legs"))
+            // V6 and V7 both point the workout trio at LiftPreSideShapes as
+            // of V8, so this writes the columns a V7 build wrote.
+            context.insert(LiftPreSideShapes.WorkoutDay(date: loggedAt, name: "Legs"))
             try context.save()
         }
 
@@ -324,7 +326,7 @@ final class SchemaMigrationTests: XCTestCase {
         XCTAssertEqual(meal.snapshotNutritionPerGram?.sodiumMg, 1.6)
         XCTAssertNil(meal.snapshotNutrition?.saturatedFatG)
         XCTAssertNil(meal.snapshotNutritionPerGram?.saturatedFatG)
-        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutDay>()).first?.name, "Legs")
+        XCTAssertEqual(try context.fetch(FetchDescriptor<LiftPreSideShapes.WorkoutDay>()).first?.name, "Legs")
 
         // And the new column takes a value.
         food.nutrition.saturatedFatG = 0.1
@@ -340,6 +342,66 @@ final class SchemaMigrationTests: XCTestCase {
     /// with a set, and a recorded run. If a frozen shape drifts from what that
     /// build wrote, staged migration cannot identify the store and this throws
     /// 134504, exactly as an existing install would fail to launch.
+    /// The store `main` (V7) actually wrote, opened by this build.
+    ///
+    /// `Fixtures/v7-simulator.store` was captured from a simulator running the
+    /// V7 binary after logging one thing of each kind through the real UI: a
+    /// workout with two sets of a split squat, a banana from food search, the
+    /// ready-made "Lower" routine saved, and a recorded run with its route.
+    /// If `LiftPreSideShapes` drifts from what that build declared, staged
+    /// migration cannot identify the store and this throws 134504 — exactly
+    /// as an existing install would fail to launch.
+    func testRealV7StoreOpensAsV8WithEverythingIntact() throws {
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "v7-simulator", withExtension: "store"))
+        try FileManager.default.copyItem(at: fixture, to: storeURL)
+
+        let container = try ModelContainer(
+            for: LiftStore.schema,
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(container)
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<WorkoutDay>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ExerciseEntry>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SetEntry>()), 2)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<FoodEntry>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Routine>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<RoutineExercise>()), 5)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<RoutinePrescribedSet>()), 17)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<OutdoorActivity>()), 1)
+
+        let exercise = try XCTUnwrap(context.fetch(FetchDescriptor<ExerciseEntry>()).first)
+        XCTAssertEqual(exercise.name, "Split Squat with Dumbbells")
+        XCTAssertEqual(exercise.equipment, "dumbbell")
+
+        // Every set written before V8 reads as "both" — nothing is guessed.
+        let sets = try context.fetch(FetchDescriptor<SetEntry>())
+        XCTAssertEqual(sets.map(\.reps), [8, 8])
+        for set in sets {
+            XCTAssertEqual(set.weightKg, 226.796185005018, accuracy: 0.0001)
+            XCTAssertNil(set.side, "a set logged before per-limb logging is two-sided, not left")
+            XCTAssertNil(set.sideRaw)
+        }
+
+        let food = try XCTUnwrap(context.fetch(FetchDescriptor<FoodEntry>()).first)
+        XCTAssertEqual(food.name, "Bananas, raw")
+        XCTAssertEqual(food.amountGrams, 120)
+        XCTAssertEqual(food.nutrition.calories, 106.8, accuracy: 0.0001)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Routine>()).first?.name, "Lower")
+
+        let run = try XCTUnwrap(context.fetch(FetchDescriptor<OutdoorActivity>()).first)
+        XCTAssertEqual(run.activityType, .run)
+        XCTAssertEqual(run.distanceMeters, 492.2, accuracy: 0.1)
+        XCTAssertFalse(run.routePoints.isEmpty, "the route survives the migration too")
+
+        // And the new column takes a value in the migrated store.
+        sets[0].side = .left
+        try context.save()
+        XCTAssertEqual(try context.fetch(FetchDescriptor<SetEntry>()).first(where: { $0.sideRaw != nil })?.side, .left)
+    }
+
     func testRealV6StoreOpensAsV7() throws {
         let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "v6-simulator", withExtension: "store"))
         try FileManager.default.copyItem(at: fixture, to: storeURL)

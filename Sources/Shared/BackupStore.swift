@@ -125,6 +125,13 @@ enum BackupStore {
                         payload["weightLb"] = (set.weightKg * lbPerKg * 10).rounded() / 10
                     }
                     set.rpe.map { payload["rpe"] = $0 }
+                    // `side` is "left" or "right" and is omitted entirely when
+                    // both — a named field in the common shape, not a bitfield
+                    // and not an ios extra, because all three platforms read
+                    // it and a backup is a file a person can open. A file
+                    // written before per-limb logging has no key here and
+                    // restores as both, which is what those sets always meant.
+                    set.side.map { payload["side"] = $0.backupValue }
                     return payload
                 }
 
@@ -432,7 +439,8 @@ enum BackupStore {
                         weightKg: (double(rawSet["weightLb"]) ?? 0) / lbPerKg,
                         reps: rawSet["reps"] as? Int ?? 0,
                         rpe: double(rawSet["rpe"]),
-                        isWarmup: setExtras["isWarmup"] as? Bool ?? false
+                        isWarmup: setExtras["isWarmup"] as? Bool ?? false,
+                        side: SetSide.fromBackup(rawSet["side"])
                     )
                     set.id = uuid(rawSet["id"]) ?? UUID()
                     set.completedAt = date(setExtras["completedAt"])

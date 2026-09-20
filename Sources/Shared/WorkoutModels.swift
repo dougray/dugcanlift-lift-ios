@@ -310,6 +310,42 @@ final class ExerciseEntry {
     var volumeKg: Double {
         sets.reduce(0) { $0 + $1.volumeKg }
     }
+
+    // MARK: - Per-limb logging
+
+    /// How many sets of this exercise, on this day, were logged on one side.
+    /// Warmups count: a missed side is a missed side.
+    func setCount(on side: SetSide) -> Int {
+        sets.filter { $0.side == side }.count
+    }
+
+    /// "L 3 · R 3", shown in the exercise header whenever the lift is being
+    /// logged per side. The point is that "L 3 · R 2" is impossible to miss —
+    /// a skipped side is the failure mode this whole feature exists to catch.
+    ///
+    /// Unmarked sets are counted too, as "· 2 both", matching LIFT web's
+    /// `countsLabel`. Sets logged before the toggle went on are still in this
+    /// exercise and still real; saying so beats quietly leaving them out of a
+    /// count whose whole job is to add up.
+    var perSideCountLabel: String {
+        let both = sets.filter { $0.side == nil }.count
+        let text = "L \(setCount(on: .left)) · R \(setCount(on: .right))"
+        return both > 0 ? "\(text) · \(both) both" : text
+    }
+
+    /// Which side a new set should start on: whichever has fewer so far, so
+    /// alternating costs no taps at all. Left breaks a tie, which makes the
+    /// first set of an exercise L and the sequence L, R, L, R.
+    var nextSide: SetSide {
+        setCount(on: .right) < setCount(on: .left) ? .right : .left
+    }
+
+    /// The most recent set on one side, which the other side's next set
+    /// pre-fills from — most people match reps across limbs and adjust the
+    /// weight, so copying and editing beats typing from nothing.
+    func lastSet(on side: SetSide) -> SetEntry? {
+        orderedSets.last { $0.side == side }
+    }
 }
 
 @Model
@@ -339,9 +375,25 @@ final class SetEntry {
     var durationSec: Int?
     var distanceMeters: Double?
 
+    /// Which limb this set was performed with, held as a raw string for the
+    /// same reason `WorkoutDay.focusRaw` is one: a `String?` column accepts a
+    /// value it does not recognise rather than failing to open the store.
+    /// Read and write it through `side`.
+    ///
+    /// Nil is "both" — see `SetSide`. Every set written before schema V8 has
+    /// no value here, which is already the right answer, so the migration has
+    /// nothing to backfill and never guesses a side for history.
+    var sideRaw: String?
+
+    var side: SetSide? {
+        get { sideRaw.flatMap(SetSide.init(rawValue:)) }
+        set { sideRaw = newValue?.rawValue }
+    }
+
     init(orderIndex: Int, weightKg: Double = 0, reps: Int = 0,
          rpe: Double? = nil, isWarmup: Bool = false,
-         durationSec: Int? = nil, distanceMeters: Double? = nil) {
+         durationSec: Int? = nil, distanceMeters: Double? = nil,
+         side: SetSide? = nil) {
         self.id = UUID()
         self.orderIndex = orderIndex
         self.weightKg = weightKg
@@ -350,6 +402,7 @@ final class SetEntry {
         self.isWarmup = isWarmup
         self.durationSec = durationSec
         self.distanceMeters = distanceMeters
+        self.sideRaw = side?.rawValue
     }
 
     var volumeKg: Double {
@@ -362,7 +415,18 @@ final class SetEntry {
     /// field in the editor must not hide the number already in it.
     ///
     /// Matches Android's `formatSet`, which orders the same way.
-    func display(unit: WeightUnit) -> String {
+    ///
+    /// A side, when there is one, is the **last** part: "185 x 5 L", the
+    /// spelling the per-limb spec gives for a coach's session list. Last
+    /// rather than tucked in after the reps because it is one rule to state
+    /// and to match on three platforms — append `L` or `R`, and a set with no
+    /// side is byte for byte what it always was.
+    ///
+    /// `includingSide` is false only where an L/R control already sits beside
+    /// the text, so the row does not say the same thing twice. Everywhere
+    /// else — a day summary, a widget, a coach's session list — the side is
+    /// part of what the set is.
+    func display(unit: WeightUnit, includingSide: Bool = true) -> String {
         var parts: [String] = []
 
         // Weight and reps only pair up when there is a weight. A set with
@@ -390,6 +454,10 @@ final class SetEntry {
         }
         if let durationSec { parts.append(SetMetrics.clock(durationSec)) }
         if let distanceMeters { parts.append(SetMetrics.distance(distanceMeters)) }
+
+        // A side with nothing else is still worth saying: "L" beats "-" for a
+        // row the lifter has picked a limb for but not yet filled in.
+        if includingSide, let side { parts.append(side.shortLabel) }
 
         return parts.isEmpty ? "-" : parts.joined(separator: " ")
     }

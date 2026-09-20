@@ -6,12 +6,13 @@ import LiftCore
 @MainActor
 final class RoutineModelsTests: XCTestCase {
 
+    /// `LiftStore.schema`, never a version pinned by hand. This named
+    /// `LiftSchemaV7` while V7 was current; when V8 pointed V7 at
+    /// `LiftPreSideShapes`, `startSession` went on inserting the live
+    /// `WorkoutDay` into a container that no longer held that class and every
+    /// test here died on a cast inside SwiftData.
     private func makeContext() throws -> ModelContext {
-        let container = try ModelContainer(
-            for: Schema(versionedSchema: LiftSchemaV7.self),
-            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
-        )
-        return ModelContext(container)
+        ModelContext(LiftStore.makeContainer(inMemory: true))
     }
 
     func testStartSessionCreatesExercisesAndSetsFromTargets() throws {

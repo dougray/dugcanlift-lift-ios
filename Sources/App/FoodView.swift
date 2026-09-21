@@ -14,6 +14,7 @@ struct FoodView: View {
     @Query private var entries: [FoodEntry]
 
     @State private var showingSearch = false
+    @State private var showingRoadFood = false
     @State private var editing: FoodEntry?
     @Environment(\.pageWidth) private var pageWidth
 
@@ -65,6 +66,35 @@ struct FoodView: View {
                 }
                 .buttonStyle(.plain)
 
+                // Only when there is a list to show: a release build without
+                // Resources/road-food.json has no Road Food rather than an
+                // empty screen (see RoadFoodCatalog.bundled).
+                if RoadFoodCatalog.shared != nil {
+                    Button {
+                        showingRoadFood = true
+                    } label: {
+                        HStack(alignment: .center, spacing: 12) {
+                            Image(systemName: "car")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Road Food")
+                                    .font(Theme.body.weight(.semibold))
+                                    .foregroundStyle(Theme.accent)
+                                Text("Fast food and gas stations, ranked against what's left today")
+                                    .font(Theme.detail)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Theme.cardPadding)
+                        .liftCardBackground()
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 // Meals in rows of two once two phone-width columns fit,
                 // in the day's order: breakfast beside lunch, dinner beside
                 // snack.
@@ -89,6 +119,13 @@ struct FoodView: View {
         .sheet(isPresented: $showingSearch) {
             FoodSearchView(mealType: MealType.forHour(Calendar.current.component(.hour, from: .now)))
                 .liftAppearance()
+        }
+        .sheet(isPresented: $showingRoadFood) {
+            if let roadFood = RoadFoodCatalog.shared {
+                RoadFoodView(catalog: roadFood.catalog, source: roadFood.source)
+                    .roadFoodSheetSizing()
+                    .liftAppearance()
+            }
         }
         .sheet(item: $editing) { entry in
             FoodEntryEditorView(entry: entry, preferredUnit: servingUnit)

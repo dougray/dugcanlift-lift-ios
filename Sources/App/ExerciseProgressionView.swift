@@ -61,6 +61,9 @@ struct ExerciseProgressionView: View {
             .adaptivePageWidth()
         }
         .liftScreen()
+        // Pushed inside Train's NavigationStack, which paints the system
+        // background; the cards sit on Theme.background everywhere else.
+        .background(Theme.background)
     }
 
     private var displayName: String {

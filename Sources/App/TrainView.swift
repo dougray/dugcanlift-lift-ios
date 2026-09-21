@@ -54,6 +54,10 @@ struct TrainView: View {
                 .adaptivePageWidth()
             }
             .liftScreen()
+            // The NavigationStack paints the system background (white/black)
+            // over RootView's Theme.background, which Home, Food and Cook
+            // show because they sit in no stack. Paint it back, edge to edge.
+            .background(Theme.background)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingPicker) {
                 ExercisePickerView { record in

@@ -333,7 +333,7 @@ final class PerLimbTests: XCTestCase {
             right: points([50, 80, 90, 100])))
         XCTAssertEqual(imbalance.strongerSide, .left)
         XCTAssertEqual(imbalance.percent, 10, accuracy: 0.0001)
-        XCTAssertEqual(imbalance.percentText, "10.0%")
+        XCTAssertEqual(imbalance.percentText, "10%", "a trailing .0 is dropped, as JavaScript prints it")
     }
 
     func testAPeakIsNotTheFigure() throws {
@@ -353,7 +353,7 @@ final class PerLimbTests: XCTestCase {
         XCTAssertEqual(imbalance.percent, 0, accuracy: 0.0001)
         XCTAssertNil(imbalance.strongerSide)
         XCTAssertEqual(imbalance.trend, .steady)
-        XCTAssertEqual(imbalance.trendText, "holding steady")
+        XCTAssertEqual(imbalance.trendText, "steady")
     }
 
     func testNotEnoughSessionsOnOneSideMeansNoFigureAtAll() {
@@ -421,6 +421,65 @@ final class PerLimbTests: XCTestCase {
             left: shuffled, right: points([90, 90, 90, 90])))
         XCTAssertEqual(straight.percent, jumbled.percent, accuracy: 0.0001)
         XCTAssertEqual(straight.percent, 10, accuracy: 0.0001)
+    }
+
+    // MARK: - The card's wording
+    //
+    // Coach web's `imbalanceLines` (coach/sides.js) word for word, with its
+    // own test cases (coach/sides.test.mjs) ported: the lifter and the coach
+    // read the same sentence about the same log.
+
+    func testTheLinesSayWhatIsMissingRatherThanNothing() {
+        let notYet = ImbalanceLines.make(left: points([100]), right: points([100, 100, 100]))
+        XCTAssertEqual(notYet.headline, "—")
+        XCTAssertEqual(notYet.detail, "Needs 3 sessions a side · 1 left, 3 right so far")
+
+        let twoEach = ImbalanceLines.make(left: points([90, 95]), right: points([80, 85]))
+        XCTAssertEqual(twoEach.headline, "—")
+        XCTAssertEqual(twoEach.detail, "Needs 3 sessions a side · 2 left, 2 right so far")
+    }
+
+    func testTheHeadlineNamesTheStrongSideAndTheTrendFollowsGap() {
+        let ahead = ImbalanceLines.make(left: points([80, 80, 80, 95, 95, 95]),
+                                        right: points([100, 100, 100, 100, 100, 100]))
+        XCTAssertEqual(ahead.headline, "Right ahead by 5%")
+        XCTAssertEqual(ahead.detail, "Mean estimated 1RM of the last 3 sessions each · gap closing")
+
+        let widening = ImbalanceLines.make(left: points([100, 100, 100, 100, 100, 100]),
+                                           right: points([95, 95, 95, 85, 85, 85]))
+        XCTAssertEqual(widening.headline, "Left ahead by 15%")
+        XCTAssertEqual(widening.detail, "Mean estimated 1RM of the last 3 sessions each · gap widening")
+
+        let steady = ImbalanceLines.make(left: points([100, 100, 100, 100]),
+                                         right: points([90, 90, 90, 90]))
+        XCTAssertEqual(steady.detail, "Mean estimated 1RM of the last 3 sessions each · gap steady")
+    }
+
+    func testOneDecimalWithATrailingZeroDropped() {
+        // Means 95 and 85: 10.526…% prints as 10.5%.
+        let lines = ImbalanceLines.make(left: points([90, 95, 100]), right: points([80, 85, 90]))
+        XCTAssertEqual(lines.headline, "Left ahead by 10.5%")
+    }
+
+    func testNoTrendClauseWhenTheTrendCannotBeJudged() {
+        let lines = ImbalanceLines.make(left: points([90, 95, 100]), right: points([80, 85, 90]))
+        XCTAssertEqual(lines.detail, "Mean estimated 1RM of the last 3 sessions each")
+    }
+
+    func testADeadHeatIsSidesLevel() {
+        XCTAssertEqual(ImbalanceLines.make(left: points([100, 100, 100]),
+                                           right: points([100, 100, 100])).headline, "Sides level")
+    }
+
+    func testTheLinesCarryNoAdvice() {
+        let text = [
+            ImbalanceLines.make(left: points([100]), right: points([100, 100, 100])),
+            ImbalanceLines.make(left: points([80, 80, 80, 95, 95, 95]),
+                                right: points([100, 100, 100, 100, 100, 100])),
+        ].map { "\($0.headline) \($0.detail)" }.joined(separator: " ").lowercased()
+        for word in ["should", "fix", "warning", "target", "too ", "concern"] {
+            XCTAssertFalse(text.contains(word), "\"\(word)\" has no business in this card")
+        }
     }
 
     func testTheGapIsAlwaysRelativeToTheStrongerSide() {

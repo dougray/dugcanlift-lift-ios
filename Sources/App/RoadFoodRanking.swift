@@ -216,7 +216,9 @@ enum RoadFoodRanking {
         return FoodEntry(
             foodRefID: foodRefPrefix + item.id,
             name: name,
-            brand: chainName == nil ? item.brand : nil,
+            // The curated snack names already lead with the brand (LIFT web shows
+            // only the name), so carrying it again would print it twice.
+            brand: chainName == nil ? item.brand.flatMap { item.name.localizedCaseInsensitiveContains($0) ? nil : $0 } : nil,
             quantity: serving.quantity,
             servingUnit: serving.unit,
             nutrition: nutrition,

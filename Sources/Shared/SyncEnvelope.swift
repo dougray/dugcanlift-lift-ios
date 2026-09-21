@@ -10,12 +10,26 @@ import LiftCore
 /// detail — `SyncEnvelopeTests` pins them to the schema.
 struct SyncEnvelope: Codable, Equatable, Sendable {
 
+    /// A closed enum on purpose: an event this build has never heard of
+    /// throws at decode, and `deliver(_:)` decodes with `try?`, so an older
+    /// build *ignores* a newer one's event rather than failing on it. That is
+    /// the schema's rule, and it only holds while new information arrives as
+    /// new events and absent keys — never as a `null` in an existing one.
     enum Event: String, Codable, Sendable {
         case sessionFinished          = "SESSION_FINISHED"
         case workoutEdited            = "WORKOUT_EDITED"
         case workoutSyncAck           = "WORKOUT_SYNC_ACK"
         case outdoorActivityFinished  = "OUTDOOR_ACTIVITY_FINISHED"
         case foodLogged               = "FOOD_LOGGED"
+        /// Phone -> watch: here is the workout to run. The envelope's
+        /// `workoutID` is the plan's identity and `revision` is the plan's
+        /// revision, so a re-push reconciles under the rule that already
+        /// exists rather than a new one.
+        case planPushed               = "PLAN_PUSHED"
+        /// Watch -> phone: push me the current plan. Carries no payload;
+        /// `workoutID` is a fresh one-shot request id, exactly as
+        /// `.foodLogged` uses it, and `revision` is 1.
+        case planRequest              = "PLAN_REQUEST"
     }
 
     enum Origin: String, Codable, Sendable {
@@ -31,6 +45,14 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
     /// field and never sets it. Must round-trip as an absent key, not a JSON
     /// `null`, so older decoders on either platform never see the key at all.
     var foodLog: FoodLogPayload?
+    /// Only non-nil for `.planPushed`, and only ever sent by the phone.
+    /// Absent — never a JSON `null` — on every other event, so a watch build
+    /// that predates plans never sees the key at all.
+    var plan: WorkoutPlan?
+    /// Only non-nil for `.sessionFinished`, and only when the watch actually
+    /// recorded heart rate for that session. Absent is "not recorded"; it is
+    /// never a zero, which would read as a real, impossible measurement.
+    var heartRate: SessionHeartRate?
 
     private enum CodingKeys: String, CodingKey {
         case event
@@ -39,6 +61,8 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         case updatedAt
         case origin
         case foodLog
+        case plan
+        case heartRate
     }
 
     init(
@@ -47,7 +71,9 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         revision: Int,
         updatedAt: Date,
         origin: Origin,
-        foodLog: FoodLogPayload? = nil
+        foodLog: FoodLogPayload? = nil,
+        plan: WorkoutPlan? = nil,
+        heartRate: SessionHeartRate? = nil
     ) {
         self.event = event
         self.workoutID = workoutID
@@ -55,6 +81,8 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         self.updatedAt = updatedAt
         self.origin = origin
         self.foodLog = foodLog
+        self.plan = plan
+        self.heartRate = heartRate
     }
 
     init(from decoder: Decoder) throws {
@@ -67,6 +95,8 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         // decodeIfPresent treats both a missing key and an explicit JSON
         // `null` as nil, so either wire shape from the watch decodes cleanly.
         foodLog = try container.decodeIfPresent(FoodLogPayload.self, forKey: .foodLog)
+        plan = try container.decodeIfPresent(WorkoutPlan.self, forKey: .plan)
+        heartRate = try container.decodeIfPresent(SessionHeartRate.self, forKey: .heartRate)
 
         // The schema says `revision` has a minimum of 1. Decoding is the only
         // place a foreign device's value enters, so reject it here rather than

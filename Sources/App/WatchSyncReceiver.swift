@@ -57,6 +57,11 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         guard activationState == .activated else { return }
         Task { @MainActor in
             pushRecentFoodsSnapshot()
+            // The watch asks for a plan when it becomes active, but it can
+            // only ask once this session is up on both ends; pushing here
+            // covers the case where the watch app woke first and its
+            // request arrived before there was anyone to hear it.
+            pushTodaysPlan()
         }
     }
 
@@ -90,9 +95,114 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         switch envelope.event {
         case .foodLogged:
             return await handleFoodLogged(envelope)
-        case .sessionFinished, .workoutEdited, .workoutSyncAck, .outdoorActivityFinished:
+        case .planRequest:
+            // The watch asks on becoming active, which is exactly when it
+            // needs an answer, so this pushes immediately rather than
+            // waiting for some later trigger.
+            return pushTodaysPlan()
+        case .sessionFinished:
+            return handleSessionFinished(envelope)
+        case .planPushed:
+            // Phone -> watch only. Receiving one means the watch echoed our
+            // own push back, which nothing does; ignore rather than act on
+            // a plan this device is the author of.
+            return false
+        case .workoutEdited, .workoutSyncAck, .outdoorActivityFinished:
             return false // no phone-side handler yet for these
         }
+    }
+
+    // MARK: - Plans
+
+    /// Builds today's plan and sends it to the watch, returning whether
+    /// there was one to send. No plan today is not a failure — it is the
+    /// watch's free-entry flow, unchanged, and sending an empty plan would
+    /// replace that with an empty guided session.
+    ///
+    /// Called on activation, when the watch asks (`PLAN_REQUEST`), when a
+    /// coach's plan link is accepted, and when the lifter sends a routine by
+    /// hand from Routines.
+    @MainActor
+    @discardableResult
+    func pushTodaysPlan(on date: Date = .now, defaults: UserDefaults = .standard) -> Bool {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return false }
+        guard let pushable = WatchPlanBuilder.todaysPlan(
+            on: date,
+            in: context,
+            restSeconds: WatchPlanSettings.resolvedRestSeconds(in: defaults),
+            defaults: defaults
+        ) else { return false }
+
+        var revisions = WatchPlanRevisions.load(from: defaults)
+        let revision = revisions.revision(
+            for: pushable.id,
+            contentHash: WatchPlanRevisions.contentHash(of: pushable.plan)
+        )
+        revisions.save(to: defaults)
+
+        send(SyncEnvelope(
+            event: .planPushed,
+            workoutID: pushable.id,
+            revision: revision,
+            updatedAt: .now,
+            origin: .ios,
+            plan: pushable.plan
+        ))
+        return true
+    }
+
+    /// **Measured, 2026-09-20: this very likely reaches nothing yet.** On a
+    /// paired iPhone 17 / Apple Watch Ultra 4 simulator pair with both apps
+    /// installed and running, `WCSession.default` on this side reports
+    /// `isPaired == true` but `isWatchAppInstalled == false` and
+    /// `isReachable == false` — LIFT watchOS is a `WKWatchOnly` app with its
+    /// own bundle id (`com.dugcanlift.watch`) rather than this app's
+    /// companion, and `WCSession` connects an iOS app to *its own* watch
+    /// app. The watch repo's complications design already suspected this
+    /// ("LIFT iOS and LiftWatch are very likely not `WCSession` peers"); the
+    /// numbers above are the first measurement of it. Everything below is
+    /// still correct and is what will run the day the watch app ships as a
+    /// companion target — and the same gap already applies to the food
+    /// snapshot and `FOOD_LOGGED`, so it is not this feature's to fix.
+    ///
+    /// `transferUserInfo` is the delivery that matters: the OS queues it and
+    /// hands it over when the watch is next in range, which is the whole
+    /// point — a plan pushed while the watch is on a charger in another room
+    /// must still be there when it is picked up. `sendMessage` is only a
+    /// fast path for a watch that is awake right now, and its failure falls
+    /// back to the queue rather than dropping the plan.
+    private func send(_ envelope: SyncEnvelope) {
+        guard let body = try? envelope.messageBody() else { return }
+        let session = WCSession.default
+        guard session.isReachable else {
+            session.transferUserInfo(body)
+            return
+        }
+        session.sendMessage(body, replyHandler: nil) { _ in
+            session.transferUserInfo(body)
+        }
+    }
+
+    // MARK: - Session heart rate
+
+    /// Heart rate for the last lifting session the watch finished, average
+    /// and max.
+    ///
+    /// Kept here rather than written onto the day: `WorkoutDay` has no heart
+    /// rate columns, and adding them is a schema change for a store two
+    /// shipped apps share (see CLAUDE.md, "A struct a model stores is part
+    /// of the schema"). The samples themselves are in HealthKit already,
+    /// written by the watch as part of its own workout, so nothing is lost
+    /// by not duplicating them into SwiftData — what is missing is only a
+    /// phone screen that shows these two numbers, which this task does not
+    /// add.
+    @MainActor
+    @discardableResult
+    private func handleSessionFinished(_ envelope: SyncEnvelope,
+                                       defaults: UserDefaults = .standard) -> Bool {
+        guard let heartRate = envelope.heartRate else { return false }
+        WatchSessionHeartRateStore.record(heartRate, for: envelope.workoutID, in: defaults)
+        return true
     }
 
     @MainActor

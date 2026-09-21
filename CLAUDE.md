@@ -137,6 +137,24 @@ every existing install failed to open its store (134504). Verify any schema
 change by installing over a store the previous build wrote, not only in tests —
 `Tests/Fixtures/v6-simulator.store` is one.
 
+**The watch is told what to lift, in kilograms, with blanks left blank.**
+`PLAN_PUSHED` carries today's plan to LIFT watchOS: the routine a coach's
+plan booked for today, or one the lifter sent by hand from Routines
+(`WatchPlanPin`, a day-scoped `UserDefaults` pin rather than a field on the
+shared `Routine` model). `WatchPlanBuilder` decides which, and `Sources/
+Shared/WatchPlan.swift` holds the wire types — hand-mirrored from
+`dugcanlift-lift-watch/shared/contracts/workout-sync.schema.json` exactly as
+`SyncEnvelope` is, and pinned by `WatchPlanWireTests`. Three rules carry the
+risk: the wire field is `weightKg` and `RoutinePrescribedSet.targetWeightKg`
+is already kilograms, so nothing on that path converts; every prescribed
+field is optional and a blank travels as an absent key, never a zero or a
+`null`; and a re-push of an unchanged plan keeps its revision
+(`WatchPlanRevisions` hashes the payload), because the watch ignores a
+revision it has already seen. Delivery is `transferUserInfo` with
+`sendMessage` as a fast path — but see that file's note: measured on a paired
+simulator pair, this phone is not that watch's `WCSession` peer yet, and
+nothing it sends arrives.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

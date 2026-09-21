@@ -34,7 +34,7 @@ struct ExerciseProgressionView: View {
     /// The headline figure and the lines above it always describe the same
     /// stretch of training — the imbalance is computed from the series the
     /// chart drew, never from a window of its own.
-    private var imbalance: LiftImbalance? { LiftProgression.imbalance(in: series) }
+    private var imbalanceLines: ImbalanceLines { ImbalanceLines.make(in: series) }
 
     private var hasSides: Bool { series.contains { $0.side != nil } }
 
@@ -129,45 +129,20 @@ struct ExerciseProgressionView: View {
     /// prompt to fix anything — the same discipline saturated fat, sugar and
     /// sodium are held to. A gap of a few per cent is ordinary, this app is
     /// not qualified to say what one person's means, and a trainer is. The
-    /// card says that in words rather than leaving the number to be read as a
-    /// verdict.
+    /// card states the figure and what it was measured over, and nothing else.
     @ViewBuilder
     private var imbalanceCard: some View {
         LiftCard(title: "Left and right") {
-            if let imbalance {
-                Text(headline(imbalance))
-                    .font(Theme.figure)
-                    .foregroundStyle(Theme.textPrimary)
+            // Coach web's imbalanceLines, word for word (ImbalanceLines).
+            Text(imbalanceLines.headline)
+                .font(Theme.figure)
+                .foregroundStyle(Theme.textPrimary)
 
-                if let trendText = imbalance.trendText {
-                    Text("The gap is \(trendText)"
-                         + (imbalance.previousPercent.map {
-                             " — it was \(String(format: "%.1f%%", $0)) over the first three sessions in this window."
-                         } ?? " across these \(weeks) weeks."))
-                        .font(Theme.detail)
-                        .foregroundStyle(Theme.textSecondary)
-                } else {
-                    Text("A trend needs \(LiftProgression.minimumSessionsForTrend) sessions a side. With three, the first three and the last three are the same sessions.")
-                        .font(Theme.detail)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-
-                Text("Estimated 1RM, averaged over each side's last \(LiftProgression.minimumSessionsPerSide) sessions. A difference between limbs is normal and this is here to be watched, not fixed to a number.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.textSecondary)
-            } else {
-                Text("A figure needs at least \(LiftProgression.minimumSessionsPerSide) sessions on each side inside this window. Below that a single heavy day decides the answer, which is worse than no answer.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.textSecondary)
-            }
+            Text(imbalanceLines.detail)
+                .font(Theme.detail)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    /// "Left ahead by 4.2%", or "Even" for a dead heat — `strongerSide` is
-    /// nil exactly then, and "ahead by 0.0%" would be a strange thing to read.
-    private func headline(_ imbalance: LiftImbalance) -> String {
-        guard let stronger = imbalance.strongerSide else { return "Even" }
-        return "\(stronger.displayName) ahead by \(imbalance.percentText)"
     }
 
     private func label(for side: SetSide?) -> String {

@@ -83,17 +83,68 @@ struct LiftImbalance: Sendable {
     /// would be arithmetic rather than an observation.
     enum Trend: Sendable, Equatable { case widening, closing, steady, notEnoughData }
 
-    /// "4.2%" — one decimal, which is as much precision as an Epley estimate
-    /// off a rep-range lift can honestly carry.
-    var percentText: String { String(format: "%.1f%%", percent) }
+    /// "4.2%", and "5%" for a round one — one decimal, which is as much
+    /// precision as an Epley estimate off a rep-range lift can honestly
+    /// carry. Coach web rounds to a tenth and JavaScript drops a trailing
+    /// zero, so a plain `%.1f` would print "5.0%" where every other app
+    /// prints "5%".
+    var percentText: String {
+        let rounded = (percent * 10).rounded() / 10
+        return rounded == rounded.rounded()
+            ? "\(Int(rounded))%" : String(format: "%.1f%%", rounded)
+    }
 
+    /// The word after "gap " in the detail line: Coach web's own values
+    /// (`widening` / `closing` / `steady`), not a rephrasing.
     var trendText: String? {
         switch trend {
         case .widening:       "widening"
         case .closing:        "closing"
-        case .steady:         "holding steady"
+        case .steady:         "steady"
         case .notEnoughData:  nil
         }
+    }
+}
+
+/// What the per-limb card prints: a short headline and a quieter line saying
+/// what it was measured over, or what is still missing.
+///
+/// A port of Coach web's `imbalanceLines` (`coach/sides.js`), word for word —
+/// Coach iOS carries the same port — so a lifter and their coach read the same
+/// sentence about the same log on every platform:
+///
+/// - "Right ahead by 5%" / "Sides level", over "Mean estimated 1RM of the
+///   last 3 sessions each · gap closing" (or "gap widening", "gap steady",
+///   and no clause at all when the trend cannot be judged);
+/// - below the threshold, "—" over "Needs 3 sessions a side · 2 left, 2
+///   right so far", so "not enough yet" says what is missing.
+///
+/// Stated and nothing more: no threshold, no colour, no advice.
+struct ImbalanceLines: Equatable, Sendable {
+    var headline: String
+    var detail: String
+
+    static func make(left: [LiftSessionPoint], right: [LiftSessionPoint]) -> ImbalanceLines {
+        let sessions = LiftProgression.minimumSessionsPerSide
+        guard let imbalance = LiftProgression.imbalance(left: left, right: right) else {
+            return ImbalanceLines(
+                headline: "—",
+                detail: "Needs \(sessions) sessions a side · "
+                    + "\(LiftProgression.recordedSessionCount(left)) left, "
+                    + "\(LiftProgression.recordedSessionCount(right)) right so far")
+        }
+        let headline = imbalance.strongerSide.map {
+            "\($0.displayName) ahead by \(imbalance.percentText)"
+        } ?? "Sides level"
+        let basis = "Mean estimated 1RM of the last \(sessions) sessions each"
+        return ImbalanceLines(headline: headline,
+                              detail: imbalance.trendText.map { "\(basis) · gap \($0)" } ?? basis)
+    }
+
+    /// Over the series the chart already built.
+    static func make(in series: [LiftSeries]) -> ImbalanceLines {
+        make(left: series.first { $0.side == .left }?.points ?? [],
+             right: series.first { $0.side == .right }?.points ?? [])
     }
 }
 
@@ -265,6 +316,12 @@ enum LiftProgression {
     /// Chronological estimates, dropping any session that recorded nothing
     /// usable — a zero or a non-finite value is not a light day, it is an
     /// absence, and averaging it in would invent a gap.
+    /// Sessions that recorded a usable estimate — what "2 left, 2 right so
+    /// far" counts, and exactly what the threshold is measured against.
+    static func recordedSessionCount(_ points: [LiftSessionPoint]) -> Int {
+        values(points).count
+    }
+
     private static func values(_ points: [LiftSessionPoint]) -> [Double] {
         points
             .sorted { $0.date < $1.date }

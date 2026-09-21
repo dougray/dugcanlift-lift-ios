@@ -31,7 +31,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Appearance")
                 } footer: {
-                    Text("System follows your phone's light or dark setting.")
+                    Text("System follows this device's light or dark setting.")
                 }
 
                 Section("Units") {

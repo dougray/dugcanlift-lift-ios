@@ -5,7 +5,16 @@
   "required": ["event", "workoutId", "revision", "updatedAt", "origin"],
   "properties": {
     "event": {
-      "enum": ["SESSION_FINISHED", "WORKOUT_EDITED", "WORKOUT_SYNC_ACK", "OUTDOOR_ACTIVITY_FINISHED", "FOOD_LOGGED"]
+      "description": "A receiver that does not know an event value ignores the envelope rather than failing. Both Swift ports decode `event` into a closed enum, so an unknown value throws at decode and the transport drops the message -- which is the intended behaviour, not an error to report.",
+      "enum": [
+        "SESSION_FINISHED",
+        "WORKOUT_EDITED",
+        "WORKOUT_SYNC_ACK",
+        "OUTDOOR_ACTIVITY_FINISHED",
+        "FOOD_LOGGED",
+        "PLAN_PUSHED",
+        "PLAN_REQUEST"
+      ]
     },
     "workoutId": {
       "type": "string",
@@ -41,7 +50,122 @@
         }
       },
       "required": ["foodRefID", "amountGrams", "meal", "loggedAt"]
+    },
+    "plan": {
+      "$ref": "#/$defs/plan",
+      "description": "Present only when event is PLAN_PUSHED (phone -> watch). The envelope's own `workoutId` is the plan's identity and `revision` is the plan's revision, so the existing conflict rule applies unchanged: a receiver ignores a PLAN_PUSHED whose revision it has already seen for that id, and accepts a newer one. PLAN_REQUEST (watch -> phone) carries no `plan` at all; it is a bare envelope asking the phone to push the current one, with a fresh one-shot `workoutId` and revision 1, exactly as FOOD_LOGGED uses those fields."
+    },
+    "heartRate": {
+      "type": "object",
+      "description": "Present only when event is SESSION_FINISHED, and only when the watch actually recorded heart rate for that session. Absent means 'not recorded' -- never zero.",
+      "properties": {
+        "averageBpm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "maxBpm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": ["averageBpm", "maxBpm"]
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "$defs": {
+    "plan": {
+      "type": "object",
+      "description": "The workout the watch should run. Ordered: `exercises` is the order to train in, and each exercise's `sets` are the order to perform them in.",
+      "required": ["name", "source", "exercises"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "description": "Where the plan came from, so the watch can say so: a routine the lifter saved, or a routine that arrived in a coach's plan link.",
+          "enum": ["ROUTINE", "COACH_PLAN"]
+        },
+        "scheduledFor": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The local calendar day this plan is for, as yyyy-MM-dd with no time component -- the same shape PLAN-FORMAT.md uses, and read in the device's own timezone. Absent when the plan is not tied to a date."
+        },
+        "exercises": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/planExercise" }
+        }
+      }
+    },
+    "planExercise": {
+      "type": "object",
+      "required": ["name", "sets"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "equipment": {
+          "type": "string",
+          "description": "Omitted, never empty, when the exercise has none. A lift's identity is name and equipment together."
+        },
+        "note": {
+          "type": "string"
+        },
+        "sets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/prescribedSet" }
+        },
+        "lastPerformed": {
+          "$ref": "#/$defs/lastPerformed",
+          "description": "What the lifter actually did the last time they trained this exercise, so the watch can show 'last: 185x5 @8' beside the prescription. Omitted when there is no history for it."
+        }
+      }
+    },
+    "prescribedSet": {
+      "type": "object",
+      "description": "Every field is optional, keeping PLAN-FORMAT.md's rule that a prescription is often partial: reps with no weight is 'five reps, you pick the weight'. An absent field is absent -- a receiver must never render or store it as zero. A set that prescribes nothing at all is a legal, empty object.",
+      "properties": {
+        "weightKg": {
+          "type": "number",
+          "description": "KILOGRAMS. PLAN-FORMAT.md's set tuple is pounds; this contract is not that format, and both apps store kilograms, so the field name carries the unit rather than leaving it to a convention that can be forgotten. A receiver converts for display only."
+        },
+        "reps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rpe": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "restSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How long to rest after this set. Absent means the sender has no opinion and the watch uses its own default -- it does not mean zero rest."
+        }
+      }
+    },
+    "lastPerformed": {
+      "type": "object",
+      "description": "An actual, already-performed set. Every field optional for the same reason a prescription's are, plus `performedOn`, the local calendar day it was performed.",
+      "properties": {
+        "weightKg": {
+          "type": "number",
+          "description": "KILOGRAMS, as in prescribedSet."
+        },
+        "reps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rpe": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "performedOn": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        }
+      }
+    }
+  }
 }

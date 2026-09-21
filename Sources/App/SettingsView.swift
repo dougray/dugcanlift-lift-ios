@@ -9,6 +9,8 @@ struct SettingsView: View {
     @AppStorage("weightUnit") private var unitRaw = WeightUnit.pounds.rawValue
     @AppStorage("distanceUnit") private var distanceUnitRaw = DistanceUnit.miles.rawValue
     @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
+    @AppStorage(WatchPlanSettings.restSecondsKey) private var watchRestSeconds =
+        WatchPlanSettings.defaultRestSeconds
 
     @Query(filter: #Predicate<WorkoutDay> { $0.healthKitUUID == nil })
     private var unsynced: [WorkoutDay]
@@ -62,6 +64,19 @@ struct SettingsView: View {
                     Text("Serving amounts are always stored in grams; this only changes how they're shown.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Stepper(value: $watchRestSeconds,
+                            in: WatchPlanSettings.restSecondsRange,
+                            step: WatchPlanSettings.restSecondsStep) {
+                        LabeledContent("Rest between sets",
+                                       value: SetMetrics.clock(watchRestSeconds))
+                    }
+                } header: {
+                    Text("Apple Watch")
+                } footer: {
+                    Text("Sent with every prescribed set, so the watch starts resting on its own when you log one. A routine itself carries no rest time.")
                 }
 
                 CoachSection()

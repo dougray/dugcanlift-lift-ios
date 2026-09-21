@@ -46,7 +46,11 @@ struct HomeView: View {
     private var totals: NutritionFacts { todaysFood.totalNutrition }
     private var day: WorkoutDay? { todaysTraining.first }
 
-    private var calorieDelta: Double { totals.calories - goalCalories }
+    /// Shared with Road Food, which ranks against the same number.
+    private var remaining: RemainingMacros? {
+        RemainingMacros.forDay(goalIsSet: goalIsSet, goalCalories: goalCalories,
+                               goalProteinG: goalProtein, eaten: totals)
+    }
 
     var body: some View {
         ScrollView {
@@ -176,7 +180,6 @@ struct HomeView: View {
 
     private var calorieHeadline: String {
         if totals.calories == 0 { return "Nothing logged" }
-        let delta = abs(Int(calorieDelta))
-        return calorieDelta >= 0 ? "\(delta) kcal over" : "\(delta) kcal left"
+        return remaining?.calorieHeadline ?? ""
     }
 }

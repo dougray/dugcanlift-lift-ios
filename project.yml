@@ -93,9 +93,12 @@ targets:
         # is how the system grants a session permission to run.
         NSHealthShareUsageDescription: >-
           LIFT uses HealthKit to run a workout session, which keeps GPS
-          active while recording a run or hike.
+          active while recording a run or hike, and reads your heart rate
+          while you lift so the app can show it and record it with the
+          workout.
         NSHealthUpdateUsageDescription: >-
-          LIFT saves the runs and hikes you record to the Health app.
+          LIFT saves the runs and hikes you record, and the workouts you
+          lift, to the Health app.
         # CLLocationManager itself requires this key on watchOS too: there is
         # no requestWhenInUseAuthorization/requestAlwaysAuthorization on
         # watchOS (confirmed absent from CLLocationManager.h for this

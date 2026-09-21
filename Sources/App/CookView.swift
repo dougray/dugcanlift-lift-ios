@@ -694,7 +694,7 @@ struct ShoppingListView: View {
                         .strikethrough(isChecked, color: Theme.textSecondary)
 
                     if !line.amounts.isEmpty {
-                        Text(CookFormat.amountsLabel(line.amounts))
+                        Text(ShoppingAmountFormat.label(line.amounts))
                             .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }

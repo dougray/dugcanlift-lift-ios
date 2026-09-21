@@ -19,8 +19,8 @@ struct BackupSection: View {
 
     var body: some View {
         Section("Your data") {
-            Text("Everything you log stays on this iPhone. There is no account to "
-                 + "log back into, so a reinstall or a new phone takes it all with "
+            Text("Everything you log stays on this device. There is no account to "
+                 + "log back into, so a reinstall or a new device takes it all with "
                  + "it. A backup file is the only copy that survives.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -68,9 +68,9 @@ struct BackupSection: View {
             message = {
                 if !outcome.ok { return outcome.problem ?? "That file isn't a LIFT backup." }
                 switch outcome.added {
-                case 0: return "Restored. This iPhone already had everything in that file."
-                case 1: return "Restored. Added 1 entry this iPhone didn't have."
-                default: return "Restored. Added \(outcome.added) entries this iPhone didn't have."
+                case 0: return "Restored. This device already had everything in that file."
+                case 1: return "Restored. Added 1 entry this device didn't have."
+                default: return "Restored. Added \(outcome.added) entries this device didn't have."
                 }
             }()
         }

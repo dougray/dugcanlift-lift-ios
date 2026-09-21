@@ -158,7 +158,7 @@ struct CoachSection: View {
                 if let url = components?.url {
                     UIApplication.shared.open(url)
                 } else {
-                    problem = "No email account is set up on this iPhone."
+                    problem = "No email account is set up on this device."
                 }
                 return
             }

@@ -111,9 +111,24 @@ struct HomeView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             MacroProgressRow(label: "Today", current: todaySteps,
                                              goal: goalSteps, unit: "steps")
-                            Button("Edit goal") {
-                                stepGoalInput = String(Int(goalSteps))
-                                showingStepGoalEditor = true
+                            // HealthKit never says whether reading steps was
+                            // refused, so no steps after LIFT has asked may be
+                            // either. Say where they come from and where to
+                            // allow it -- never ask again from here.
+                            if todaySteps == 0 && health.isAvailable && health.hasAskedForAuthorization {
+                                Text("No steps from Apple Health yet. If LIFT isn't allowed to read them, turn Steps on in Settings › Privacy & Security › Health › LIFT.")
+                                    .font(Theme.detail)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            HStack(spacing: 20) {
+                                Button("Edit goal") {
+                                    stepGoalInput = String(Int(goalSteps))
+                                    showingStepGoalEditor = true
+                                }
+                                if todaySteps == 0 && health.isAvailable && health.hasAskedForAuthorization {
+                                    Button("Open Settings") { HealthSettingsLink.open() }
+                                }
                             }
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Theme.accent)
@@ -174,7 +189,9 @@ struct HomeView: View {
 
     private func loadSteps() async {
         guard health.isAvailable else { return }
-        try? await health.requestAuthorization()
+        // First run only. After any answer, Home reads what Health gives and
+        // says so quietly rather than asking again (HealthAuthorization).
+        try? await health.authorize(.automatic)
         todaySteps = (try? await health.todaysStepCount()) ?? 0
     }
 

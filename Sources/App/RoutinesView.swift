@@ -90,6 +90,7 @@ struct RoutinesView: View {
 private struct RoutineRow: View {
     @Environment(\.modelContext) private var context
     let routine: Routine
+    @State private var didSendToWatch = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -97,11 +98,26 @@ private struct RoutineRow: View {
             Text("\(routine.orderedExercises.count) exercise\(routine.orderedExercises.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("Start Today") {
-                routine.startSession(on: .now, in: context)
+            HStack(spacing: 16) {
+                Button("Start Today") {
+                    routine.startSession(on: .now, in: context)
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.borderless)
+
+                // Pins this routine as today's plan and pushes it. The push
+                // is queued by the OS when the watch is out of range, so
+                // this works with the watch on a charger in another room —
+                // which is why the label does not promise it arrived.
+                Button(didSendToWatch ? "Sent to Watch" : "Send to Watch") {
+                    WatchPlanPin.save(routineID: routine.id)
+                    WatchSyncReceiver.shared?.pushTodaysPlan()
+                    didSendToWatch = true
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.borderless)
+                .disabled(didSendToWatch)
             }
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.borderless)
         }
     }
 }

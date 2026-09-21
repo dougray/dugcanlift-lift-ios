@@ -76,6 +76,10 @@ struct PlanPreviewView: View {
             let hash = try PlanImporter.hash(of: payload)
             try PlanImporter.accept(payload, hash: hash, in: context)
             didImport = true
+            // A coach's plan can book a session for today; if it just did,
+            // the watch should have it without the lifter opening anything.
+            // No-op when the plan schedules nothing for today.
+            WatchSyncReceiver.shared?.pushTodaysPlan()
         } catch {
             importError = "This plan couldn't be added. Please try again."
         }

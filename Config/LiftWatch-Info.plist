@@ -21,9 +21,9 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>LIFT uses HealthKit to run a workout session, which keeps GPS active while recording a run or hike.</string>
+	<string>LIFT uses HealthKit to run a workout session, which keeps GPS active while recording a run or hike, and reads your heart rate while you lift so the app can show it and record it with the workout.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>LIFT saves the runs and hikes you record to the Health app.</string>
+	<string>LIFT saves the runs and hikes you record, and the workouts you lift, to the Health app.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>LIFT uses your location to record the route of a run or hike.</string>
 	<key>UIBackgroundModes</key>

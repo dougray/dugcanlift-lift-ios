@@ -6,6 +6,11 @@ struct WorkoutView: View {
 
     var body: some View {
         TabView {
+            // Only a planned session gets a Now page. With no plan this is
+            // the same three pages it has always been.
+            if session.guided != nil {
+                NowView()
+            }
             ExerciseListView()
             RestTimerView()
             SummaryView()
@@ -26,6 +31,12 @@ struct ExerciseListView: View {
                     } label: {
                         ExerciseRow(exercise: exercise, unit: session.unit)
                     }
+                    // Opening an exercise out of order moves the guided
+                    // session with it, so the prescription on the next screen
+                    // belongs to the exercise the lifter actually opened.
+                    .simultaneousGesture(TapGesture().onEnded {
+                        session.focusGuidedSession(on: exercise.id)
+                    })
                 }
             }
             NavigationLink("Add Exercise") { ExercisePickerView() }

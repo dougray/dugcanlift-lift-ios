@@ -1,6 +1,19 @@
 SCHEME      := LiftWatch
 BUNDLE_ID   := com.dugcanlift.watch
-SIM         := Apple Watch Series 11 (46mm)
+# The watch simulator to build, install and run on. Detected rather than
+# pinned: a hard-coded model is wrong the moment Xcode ships a new one or this
+# checkout moves to another Mac, and the failure -- "Unable to find a device
+# matching the provided destination specifier" -- names the destination, not
+# the cause. This is the same detection lift-ios's Makefile does for iPhones.
+# A booted watch wins, because it is already on screen and needs no boot;
+# otherwise the first available one. Override for a specific model:
+#   make run SIM="Apple Watch Ultra 4 (49mm)"
+#
+# A watch model's own name contains parentheses ("Apple Watch Series 12
+# (46mm)"), so the name is taken as everything before the UDID rather than
+# before the first "(" -- which would install onto a destination named
+# "Apple Watch Series 12" that does not exist.
+SIM         := $(shell xcrun simctl list devices available 2>/dev/null | awk '/^ +Apple Watch/ { line = $$0; sub(/^ +/, "", line); if (!match(line, / \([0-9A-Fa-f-]{36}\)/)) next; n = substr(line, 1, RSTART - 1); if (!f) f = n; if (line ~ /Booted/) { print n; d = 1; exit } } END { if (!d) print f }')
 DERIVED     := .build/DerivedData
 # The product is LIFT.app, not LiftWatch.app — the scheme and the bundle name
 # differ, which is easy to trip over when hand-writing an install path.

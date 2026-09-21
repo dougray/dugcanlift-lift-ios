@@ -23,13 +23,36 @@ final class WorkoutSessionModel: ObservableObject {
     @Published private(set) var isPhoneReachable = false
     @Published private(set) var recentFoodsSnapshot: RecentFoodsSnapshot?
 
+    /// Today's plan, as the phone last pushed it. `nil` is not a failure —
+    /// it is the free-entry flow this app has always had, unchanged.
+    @Published private(set) var plan: WorkoutPlan?
+    /// Where the lifter is inside that plan. Non-nil only while a planned
+    /// workout is actually being trained.
+    @Published private(set) var guided: GuidedSession?
+
+    /// The plan's identity and revision, straight off the envelope — the
+    /// same reconciliation rule `WorkoutStore` applies to a workout: a newer
+    /// revision replaces, an older one is ignored.
+    private var planID: UUID?
+    private var planRevision = 0
+
+    /// What rest to start when the set just logged prescribed none. Matches
+    /// `RestTimer`'s own default, so an unplanned session rests exactly as it
+    /// did before any of this existed.
+    static let defaultRestSeconds = 90
+
     private let transport: PhoneSyncTransport
     private let foodSnapshotStore: RecentFoodsSnapshotStore
+    /// Heart rate and wrist-down runtime for a lifting session. Optional so
+    /// a test (or a preview) can build a model with no HealthKit at all.
+    private let heartRate: LiftingSessionRecorder?
 
     init(transport: PhoneSyncTransport = PhoneSyncTransport(),
-         foodSnapshotStore: RecentFoodsSnapshotStore = RecentFoodsSnapshotStore()) {
+         foodSnapshotStore: RecentFoodsSnapshotStore = RecentFoodsSnapshotStore(),
+         heartRate: LiftingSessionRecorder? = nil) {
         self.transport = transport
         self.foodSnapshotStore = foodSnapshotStore
+        self.heartRate = heartRate
         recentFoodsSnapshot = foodSnapshotStore.cached
         transport.onEnvelope = { [weak self] envelope in
             Task { @MainActor in self?.receive(envelope) }
@@ -37,7 +60,14 @@ final class WorkoutSessionModel: ObservableObject {
         transport.onReachabilityChange = { [weak self] reachable in
             Task { @MainActor in
                 self?.isPhoneReachable = reachable
-                if reachable { self?.flushOutbox() }
+                if reachable {
+                    self?.flushOutbox()
+                    // The phone pushes on its own activation too, but this
+                    // covers the watch waking first: asking costs one queued
+                    // envelope and answers the question the Now screen needs
+                    // answered before the lifter starts.
+                    self?.requestPlan()
+                }
             }
         }
         transport.onApplicationContext = { [weak self] context in
@@ -47,7 +77,37 @@ final class WorkoutSessionModel: ObservableObject {
         if let latest = transport.latestApplicationContext() {
             receiveApplicationContext(latest)
         }
+        #if DEBUG
+        ingestEnvelopeFromLaunchEnvironment()
+        #endif
     }
+
+    #if DEBUG
+    /// Accepts one `SyncEnvelope`, as JSON, from the launch environment:
+    ///
+    ///     SIMCTL_CHILD_LIFT_SYNC_ENVELOPE="$(cat plan.json)" \
+    ///       xcrun simctl launch booted com.dugcanlift.watch
+    ///
+    /// DEBUG only, and it exists because a plan cannot otherwise be put in
+    /// front of this app on a simulator: LIFT iOS is very likely not this
+    /// app's `WCSession` peer at all (`WKWatchOnly`, a different bundle id,
+    /// no embedded watch target — see the transport note in
+    /// `docs/ARCHITECTURE.md`), and a paired simulator pair reports
+    /// `isWatchAppInstalled == false` from the phone, so every
+    /// `transferUserInfo` queues into nothing.
+    ///
+    /// It deliberately goes through `receive(_:)`, the same method the
+    /// transport calls, rather than assigning `plan` directly: the decode,
+    /// the revision rule and the guided start are then the real ones, and
+    /// only the delivery is by hand.
+    private func ingestEnvelopeFromLaunchEnvironment() {
+        guard let json = ProcessInfo.processInfo.environment["LIFT_SYNC_ENVELOPE"],
+              let data = json.data(using: .utf8),
+              let envelope = try? SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
+        else { return }
+        receive(envelope)
+    }
+    #endif
 
     // MARK: - Training
 
@@ -55,6 +115,65 @@ final class WorkoutSessionModel: ObservableObject {
         let workout = WorkoutDraft(name: name, focus: focus)
         draft = workout
         store.store(workout)
+        heartRate?.start()
+    }
+
+    /// Starts today's plan: one draft exercise per planned exercise, in the
+    /// plan's own order, and a `GuidedSession` tracking position through it.
+    ///
+    /// What gets logged is an ordinary `WorkoutDraft` — the plan decides what
+    /// to put in front of the lifter, never what a set *is* — so revisions,
+    /// the outbox and `SESSION_FINISHED` behave exactly as they do for a
+    /// workout typed in from nothing.
+    func startPlannedWorkout() {
+        guard let plan, !plan.exercises.isEmpty else { return }
+        let exercises = plan.exercises.enumerated().map { index, exercise in
+            DraftExercise(
+                // The plan carries no exercise ids (PLAN-FORMAT gives
+                // workouts none), so position is the reference — and it is
+                // stable, because the draft is built from the plan once and
+                // the plan is never swapped underneath a running session.
+                exerciseRefID: "plan:\(index)",
+                name: exercise.name,
+                orderIndex: index,
+                equipment: exercise.equipment,
+                sets: []
+            )
+        }
+        let workout = WorkoutDraft(name: plan.name, exercises: exercises)
+        draft = workout
+        store.store(workout)
+        guided = GuidedSession(plan: plan)
+        heartRate?.start()
+    }
+
+    /// The draft exercise the guided session is currently on, or `nil` when
+    /// nothing is being guided.
+    var guidedExerciseID: UUID? {
+        guard let guided, let draft, let index = guided.currentExerciseIndex,
+              draft.exercises.indices.contains(index) else { return nil }
+        return draft.exercises[index].id
+    }
+
+    /// The prescription for the set about to be logged against `exerciseID`,
+    /// or `nil` when that exercise is not the guided one.
+    func prescription(for exerciseID: UUID) -> PrescribedSet? {
+        guard guidedExerciseID == exerciseID else { return nil }
+        return guided?.currentPrescription
+    }
+
+    func lastPerformed(for exerciseID: UUID) -> LastPerformed? {
+        guard guidedExerciseID == exerciseID else { return nil }
+        return guided?.currentExercise?.lastPerformed
+    }
+
+    /// Moves the guided session to whichever exercise the lifter opened, so
+    /// training out of order is a tap rather than a wrong prescription.
+    func focusGuidedSession(on exerciseID: UUID) {
+        guard guided != nil, let draft,
+              let index = draft.exercises.firstIndex(where: { $0.id == exerciseID })
+        else { return }
+        guided?.select(exerciseIndex: index)
     }
 
     func addExercise(refID: String, name: String, equipment: String? = nil) {
@@ -68,13 +187,45 @@ final class WorkoutSessionModel: ObservableObject {
                                               reps: reps, rpe: rpe) else { return }
             draft.completeSet(setID)
         }
+
+        // Rest is the one the set just performed prescribed — not the next
+        // set's, and not the next exercise's. `recordSet()` also advances the
+        // position, and the next exercise when this one's sets are done.
+        var prescribedRest: Int?
+        if guidedExerciseID == exerciseID {
+            prescribedRest = guided?.recordSet()?.restSeconds
+        }
+        restTimer.interval = TimeInterval(prescribedRest ?? Self.defaultRestSeconds)
         restTimer.start()
     }
 
     func finishWorkout() {
         edit { $0.finish() }
         restTimer.stop()
-        if let draft { enqueue(.sessionFinished, for: draft) }
+        // Ends the HealthKit session and hands back the two numbers the
+        // phone gets. `nil` when nothing was ever measured — a simulator, a
+        // refused permission — and the envelope then omits the key rather
+        // than reporting a heart rate of zero.
+        let sessionHeartRate = heartRate?.finish()
+        if let draft {
+            enqueue(.sessionFinished, for: draft, heartRate: sessionHeartRate)
+        }
+        guided = nil
+    }
+
+    // MARK: - Plans
+
+    /// Asks the phone for today's plan. Fire and forget: the answer arrives
+    /// as a `PLAN_PUSHED` whenever the phone next has a chance to send one,
+    /// which may be after the app is suspended, so nothing here waits.
+    func requestPlan() {
+        transport.sendNow(SyncEnvelope(
+            event: .planRequest,
+            workoutID: UUID(),
+            revision: 1,
+            updatedAt: .now,
+            origin: .watchOS
+        ))
     }
 
     /// Applies a local edit, persists it, and tells the phone — in that order,
@@ -91,8 +242,10 @@ final class WorkoutSessionModel: ObservableObject {
 
     // MARK: - Synchronization
 
-    private func enqueue(_ event: SyncEnvelope.Event, for workout: WorkoutDraft) {
-        enqueue(event, workoutID: workout.id, revision: workout.revision, updatedAt: workout.updatedAt)
+    private func enqueue(_ event: SyncEnvelope.Event, for workout: WorkoutDraft,
+                          heartRate: SessionHeartRate? = nil) {
+        enqueue(event, workoutID: workout.id, revision: workout.revision,
+                updatedAt: workout.updatedAt, heartRate: heartRate)
     }
 
     /// Entry point for sync notifications that don't originate from a
@@ -131,14 +284,16 @@ final class WorkoutSessionModel: ObservableObject {
     }
 
     private func enqueue(_ event: SyncEnvelope.Event, workoutID: UUID, revision: Int,
-                          updatedAt: Date, foodLog: FoodLogPayload? = nil) {
+                          updatedAt: Date, foodLog: FoodLogPayload? = nil,
+                          heartRate: SessionHeartRate? = nil) {
         let envelope = SyncEnvelope(
             event: event,
             workoutID: workoutID,
             revision: revision,
             updatedAt: updatedAt,
             origin: .watchOS,
-            foodLog: foodLog
+            foodLog: foodLog,
+            heartRate: heartRate
         )
         outbox.enqueue(envelope)
         flushOutbox()
@@ -175,6 +330,24 @@ final class WorkoutSessionModel: ObservableObject {
         foodSnapshotStore.save(snapshot)
     }
 
+    /// Accepts a pushed plan under the contract's own conflict rule: a newer
+    /// revision for the same plan replaces what is held, the same or an older
+    /// one is ignored. A different plan id always replaces — the phone
+    /// decides what today is, and the watch does not argue about it.
+    ///
+    /// A plan that lands mid-session is stored but does not disturb the
+    /// session in progress: `GuidedSession` is built once, at start, so a
+    /// coach editing a routine while someone is under a bar cannot move
+    /// their position or change the set they are about to log. It takes
+    /// effect the next time a planned workout is started.
+    private func receivePlan(_ envelope: SyncEnvelope) {
+        guard let pushed = envelope.plan else { return }
+        if envelope.workoutID == planID, envelope.revision <= planRevision { return }
+        planID = envelope.workoutID
+        planRevision = envelope.revision
+        plan = pushed
+    }
+
     private func receive(_ envelope: SyncEnvelope) {
         switch envelope.event {
         case .workoutSyncAck:
@@ -184,6 +357,11 @@ final class WorkoutSessionModel: ObservableObject {
             // separate, non-`SyncEnvelope` channel (`RecentFoodsSnapshot` via
             // `updateApplicationContext`, see `RecentFoodsSnapshotStore`).
             // This case exists only so the switch stays exhaustive.
+            break
+        case .planPushed:
+            receivePlan(envelope)
+        case .planRequest:
+            // Watch -> phone only. Nothing here asks this watch for a plan.
             break
         case .workoutEdited, .sessionFinished, .outdoorActivityFinished:
             // The envelope is a notification, not the workout. A full snapshot

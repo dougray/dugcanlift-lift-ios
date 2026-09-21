@@ -3,7 +3,9 @@
 - `LiftKit/` — Swift package. Platform-independent domain model
   (`WorkoutDraft`), the wire contract (`SyncEnvelope`, matching
   `shared/contracts/workout-sync.schema.json`), revision-based reconciliation
-  (`WorkoutStore`), the offline edit queue (`SyncOutbox`), and `RestTimer`.
+  (`WorkoutStore`), the offline edit queue (`SyncOutbox`), `RestTimer`, and
+  the guided session — `WorkoutPlan` (the `PLAN_PUSHED` payload, every
+  prescribed field optional) with `GuidedSession` (position through it).
   Fully unit tested (`swift test`) with no watchOS dependency, so the rules in
   `docs/ARCHITECTURE.md` are verifiable without a simulator or device.
 - `LiftWatch/` — the watchOS app target: SwiftUI views plus
@@ -28,9 +30,22 @@ The product is `LIFT.app`, not `LiftWatch.app` — the scheme name and the bundl
 name differ, which is worth knowing before hand-writing an install path.
 
 The app is built as `WKWatchOnly` (no bundled iPhone companion in this repo —
-LIFT's iPhone app lives in the separate `lift-ios` repository). It still
-speaks `WatchConnectivity`/`SyncEnvelope` to whatever LIFT iOS build is
-paired, but installs and runs standalone for development.
+LIFT's iPhone app lives in the separate `lift-ios` repository), so it installs
+and runs standalone for development.
+
+It speaks `WatchConnectivity`/`SyncEnvelope`, but **a watch-only app is not an
+iPhone app's `WCSession` peer**, and measurement on a paired simulator pair
+says LIFT iOS cannot actually deliver to it today — see "The transport gap,
+measured" in `docs/ARCHITECTURE.md`. Until that changes, a DEBUG build takes
+one envelope from the launch environment:
+
+```sh
+SIMCTL_CHILD_LIFT_SYNC_ENVELOPE="$(cat plan.json)" \
+  xcrun simctl launch booted com.dugcanlift.watch
+```
+
+which goes through the same decode, revision check and guided start a real
+push would.
 
 Device testing requires the paired iPhone and Apple Watch to be visible to
 Xcode, a selected signing team, and a connected Apple Developer account when

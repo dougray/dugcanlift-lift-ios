@@ -46,6 +46,24 @@ final class PhoneSyncTransport: NSObject {
         // *not* need the counterpart reachable right now.
         session.transferUserInfo(body)
     }
+
+    /// The same delivery, with a fast path. `sendMessage` reaches a phone
+    /// that is awake right now in a fraction of the time `transferUserInfo`
+    /// takes, which matters for a plan request made as the app opens — the
+    /// lifter is looking at the screen waiting for an answer. Anything else
+    /// falls back to the queue, so being out of range costs latency rather
+    /// than the request.
+    func sendNow(_ envelope: SyncEnvelope) {
+        guard let session else { return }
+        guard let body = try? envelope.messageBody() else { return }
+        guard session.isReachable else {
+            session.transferUserInfo(body)
+            return
+        }
+        session.sendMessage(body, replyHandler: nil) { _ in
+            session.transferUserInfo(body)
+        }
+    }
 }
 
 extension PhoneSyncTransport: WCSessionDelegate {

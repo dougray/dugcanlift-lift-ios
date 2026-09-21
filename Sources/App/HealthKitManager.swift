@@ -51,9 +51,60 @@ final class HealthKitManager {
 
     // MARK: Authorization
 
-    func requestAuthorization() async throws {
-        guard isAvailable else { return }
+    /// Whether the permission sheet has been shown, by the app's own record or
+    /// by HealthKit's request status. Refreshed by `refreshAuthorizationState`
+    /// and `authorize(_:)`; screens read it to offer Settings instead of a
+    /// sheet that will not come back.
+    private(set) var hasAskedForAuthorization =
+        UserDefaults.standard.bool(forKey: HealthAuthorization.askedKey)
+
+    /// HealthKit's own view: is any type LIFT uses still unasked?
+    private(set) var requestStatus: HealthAuthorization.SystemStatus = .unknown
+
+    /// Asks for Health access only when `HealthAuthorization` says to. Call
+    /// with `.automatic` from anything that runs on its own (a screen
+    /// appearing) and `.userAction` from a button. Never calls HealthKit's
+    /// `requestAuthorization` directly from anywhere else: that is how every
+    /// launch came to ask again after "Don't Allow".
+    @discardableResult
+    func authorize(_ trigger: HealthAuthorization.Trigger) async throws -> HealthAuthorization.Decision {
+        guard isAvailable else { return .skip }
+        await refreshAuthorizationState()
+        let decision = HealthAuthorization.decide(
+            trigger: trigger,
+            askedFlag: UserDefaults.standard.bool(forKey: HealthAuthorization.askedKey),
+            status: requestStatus)
+        guard decision == .request else { return decision }
+
+        // Recorded before the sheet, not after: once it has been on screen it
+        // has been asked, even if the app is killed before the answer returns.
+        markAsked()
         try await store.requestAuthorization(toShare: shareTypes, read: readTypes)
+        await refreshAuthorizationState()
+        return decision
+    }
+
+    /// Reads HealthKit's request status, and adopts `.unnecessary` as "asked"
+    /// for an install that answered before the app kept its own record.
+    func refreshAuthorizationState() async {
+        guard isAvailable else { return }
+        let status: HealthAuthorization.SystemStatus
+        do {
+            switch try await store.statusForAuthorizationRequest(toShare: shareTypes, read: readTypes) {
+            case .shouldRequest: status = .shouldRequest
+            case .unnecessary: status = .unnecessary
+            default: status = .unknown
+            }
+        } catch {
+            status = .unknown
+        }
+        requestStatus = status
+        if status == .unnecessary { markAsked() }
+    }
+
+    private func markAsked() {
+        UserDefaults.standard.set(true, forKey: HealthAuthorization.askedKey)
+        hasAskedForAuthorization = true
     }
 
     /// Note this only ever reports write permission. HealthKit deliberately
@@ -130,7 +181,10 @@ final class HealthKitManager {
     /// elsewhere can never cause a duplicate write on retry.
     @discardableResult
     func exportOutdoorActivity(_ activity: OutdoorActivity) async throws -> UUID? {
-        guard isAvailable, activity.healthKitUUID == nil,
+        // Not allowed to write workouts: keep the activity in LIFT and say
+        // nothing, as `syncPending` does. Without this every finished run
+        // after a "Don't Allow" ended in a "Couldn't save to Health" alert.
+        guard isAvailable, isWorkoutWritingAuthorized, activity.healthKitUUID == nil,
               let endedAt = activity.endedAt else { return nil }
 
         let configuration = HKWorkoutConfiguration()

@@ -101,6 +101,15 @@ struct SettingsView: View {
                         if let latestWeight {
                             LabeledContent("Latest weight", value: latestWeight)
                         }
+                    } else if health.requestStatus == .unnecessary {
+                        // Already asked, and HealthKit will not show the sheet
+                        // again: a "Connect" button here would do nothing.
+                        Button("Open Settings", systemImage: "gear") {
+                            HealthSettingsLink.open()
+                        }
+                        Text("Lift has asked already, so iOS won't ask again. To let Lift write your workouts, runs, walks and hikes and read your body weight and steps, turn them on in Settings › Privacy & Security › Health › LIFT.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     } else {
                         Button("Connect Apple Health", systemImage: "heart.fill") {
                             authorize()
@@ -134,7 +143,10 @@ struct SettingsView: View {
             }
             .readableListMargins()
             .navigationTitle("Settings")
-            .task { await loadWeight() }
+            .task {
+                await health.refreshAuthorizationState()
+                await loadWeight()
+            }
         }
     }
 
@@ -152,7 +164,10 @@ struct SettingsView: View {
         Task {
             defer { isRequesting = false }
             do {
-                try await health.requestAuthorization()
+                if try await health.authorize(.userAction) == .openSettings {
+                    HealthSettingsLink.open()
+                    return
+                }
                 await health.syncPending(context: context)
                 await loadWeight()
             } catch {

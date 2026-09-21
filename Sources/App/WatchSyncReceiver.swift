@@ -3,6 +3,10 @@ import WatchConnectivity
 import SwiftData
 import WidgetKit
 import LiftCore
+import os
+
+/// SPIKE (spike/watch-companion): delivery evidence. `log stream --predicate 'subsystem == "com.dugcanlift.spike"'`.
+let spikeLog = Logger(subsystem: "com.dugcanlift.spike", category: "phone")
 
 /// The phone's only `WCSessionDelegate` — mirrors the watch's own
 /// `PhoneSyncTransport` on the other end of the same wire format. Decodes
@@ -54,6 +58,7 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     // `context`, a `@MainActor`-isolated `ModelContext`), so hop explicitly
     // rather than calling it synchronously from here.
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        spikeLog.notice("activation=\(activationState.rawValue, privacy: .public) isPaired=\(session.isPaired, privacy: .public) isWatchAppInstalled=\(session.isWatchAppInstalled, privacy: .public) isReachable=\(session.isReachable, privacy: .public) error=\(String(describing: error), privacy: .public)")
         guard activationState == .activated else { return }
         Task { @MainActor in
             pushRecentFoodsSnapshot()
@@ -63,6 +68,18 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
             // request arrived before there was anyone to hear it.
             pushTodaysPlan()
         }
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        spikeLog.notice("reachability isWatchAppInstalled=\(session.isWatchAppInstalled, privacy: .public) isReachable=\(session.isReachable, privacy: .public)")
+    }
+
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        spikeLog.notice("watchState isPaired=\(session.isPaired, privacy: .public) isWatchAppInstalled=\(session.isWatchAppInstalled, privacy: .public)")
+    }
+
+    func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+        spikeLog.notice("transferUserInfo finished error=\(String(describing: error), privacy: .public)")
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
@@ -81,9 +98,14 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         // `.iso8601`-configured decoder — a plain `JSONDecoder()` here would
         // fail on every `updatedAt`/`loggedAt` string the watch actually
         // sends.
-        guard let envelope = try? SyncEnvelope(messageBody: body) else { return }
+        guard let envelope = try? SyncEnvelope(messageBody: body) else {
+            spikeLog.error("received undecodable body keys=\(body.keys.sorted().joined(separator: ","), privacy: .public)")
+            return
+        }
+        spikeLog.notice("received \(envelope.event.rawValue, privacy: .public) workoutId=\(envelope.workoutID.uuidString, privacy: .public) rev=\(envelope.revision, privacy: .public)")
         Task { @MainActor in
-            await handle(envelope)
+            let handled = await handle(envelope)
+            spikeLog.notice("handled \(envelope.event.rawValue, privacy: .public) -> \(handled, privacy: .public)")
         }
     }
 
@@ -174,11 +196,13 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     private func send(_ envelope: SyncEnvelope) {
         guard let body = try? envelope.messageBody() else { return }
         let session = WCSession.default
+        spikeLog.notice("send \(envelope.event.rawValue, privacy: .public) workoutId=\(envelope.workoutID.uuidString, privacy: .public) rev=\(envelope.revision, privacy: .public) isWatchAppInstalled=\(session.isWatchAppInstalled, privacy: .public) isReachable=\(session.isReachable, privacy: .public)")
         guard session.isReachable else {
             session.transferUserInfo(body)
             return
         }
-        session.sendMessage(body, replyHandler: nil) { _ in
+        session.sendMessage(body, replyHandler: nil) { error in
+            spikeLog.notice("sendMessage failed, falling back: \(String(describing: error), privacy: .public)")
             session.transferUserInfo(body)
         }
     }

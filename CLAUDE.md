@@ -155,6 +155,17 @@ revision it has already seen. Delivery is `transferUserInfo` with
 simulator pair, this phone is not that watch's `WCSession` peer yet, and
 nothing it sends arrives.
 
+**Road Food ranks against Home's number and logs an ordinary entry.** The
+rules are `RoadFoodRanking`, a port of LIFT web's `lift/road-food.js` with its
+tests ported alongside -- change one, change both. What is left of today is
+`RemainingMacros`, which Home's headline also reads. The curated list is
+`Resources/road-food.json`, copied unchanged from `dugcanlift-kit/data/`; with no
+file, a DEBUG build falls back to `RoadFoodSample` (web's fake-named fixture,
+inside `#if DEBUG`) and a release build hides Road Food entirely. Blank stays
+blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
+missing one of the four core macros is not logged at all, because
+`NutritionFacts` would store it as zero. No location, ever.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

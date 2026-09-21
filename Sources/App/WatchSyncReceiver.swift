@@ -252,8 +252,11 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// the exact contract the watch-side plan builds against. `internal`,
     /// not `private`, so `WatchSyncReceiverTests` can call it directly.
     static func makeSnapshot(from entries: [FoodEntry], generatedAt: Date = .now) -> RecentFoodsSnapshot {
+        // A Road Food item has a stable id but nothing the watch can resolve
+        // to grams and nutrition (`FoodRefResolver` knows reference foods and
+        // recipes), so offering it there would be a tap that logs nothing.
         let items = entries
-            .filter { !$0.foodRefID.isEmpty }
+            .filter { !$0.foodRefID.isEmpty && !$0.foodRefID.hasPrefix(RoadFoodRanking.foodRefPrefix) }
             .map {
                 RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName, lastAmountGrams: $0.amountGrams)
             }

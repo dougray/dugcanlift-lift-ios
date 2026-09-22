@@ -218,6 +218,15 @@ final class WorkoutSessionModel: ObservableObject {
             enqueue(.sessionFinished, for: draft, heartRate: sessionHeartRate)
         }
         guided = nil
+        // Back to the start screen. `RootView` shows the workout for as long
+        // as there is a draft, and this used to leave it set: after Finish
+        // the watch stayed on the Summary page, with no way back to Start
+        // Workout, Log Food, Start Run or Export short of quitting the app,
+        // and a second tap on Finish queued a second SESSION_FINISHED
+        // without the heart rate, replacing the one that had it. The
+        // finished workout is kept in `store`, and its SESSION_FINISHED in
+        // the outbox, both of which is all that ever read it afterwards.
+        draft = nil
     }
 
     // MARK: - Plans

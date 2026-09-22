@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// Where the lifter is inside a pushed plan: which exercise, which set of it,
 /// and what to do when a set is logged.

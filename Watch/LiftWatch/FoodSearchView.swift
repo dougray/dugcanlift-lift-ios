@@ -1,5 +1,6 @@
 import LiftKit
 import SwiftUI
+import LiftSync
 
 /// Search the bundled USDA library. This is what a watch that has never been
 /// paired to a LIFT iPhone logs from — `RecentFoodsListView` shows only what

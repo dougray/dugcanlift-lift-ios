@@ -1,6 +1,7 @@
 import Foundation
 import LiftKit
 import SwiftUI
+import LiftSync
 
 /// Owns the workout the watch is training against right now.
 ///
@@ -325,7 +326,7 @@ final class WorkoutSessionModel: ObservableObject {
     }
 
     private func receiveApplicationContext(_ context: [String: Any]) {
-        guard let snapshot = try? RecentFoodsSnapshot(applicationContext: context) else { return }
+        guard let snapshot = try? RecentFoodsSnapshot(messageBody: context) else { return }
         recentFoodsSnapshot = snapshot
         foodSnapshotStore.save(snapshot)
     }

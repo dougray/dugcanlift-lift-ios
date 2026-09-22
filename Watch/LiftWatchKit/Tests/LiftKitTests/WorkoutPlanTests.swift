@@ -1,12 +1,13 @@
 import XCTest
 @testable import LiftKit
+import LiftSync
 
 /// The watch's half of the `PLAN_PUSHED` contract in
-/// `shared/contracts/workout-sync.schema.json`. `lift-ios`'s
-/// `WatchPlanWireTests` pins the same key spellings from the phone's end;
-/// these tests decode what that encoder actually produces, and pin what this
-/// side renders from it — in particular that a blank prescription never
-/// becomes a zero on a wrist.
+/// `Watch/contracts/workout-sync.schema.json`. `LiftSyncTests`'
+/// `WatchPlanWireTests` pins the key spellings the phone encodes; these tests
+/// decode what that encoder actually produces, and pin what this side renders
+/// from it — in particular that a blank prescription never becomes a zero on
+/// a wrist.
 final class WorkoutPlanTests: XCTestCase {
 
     /// The exact shape `lift-ios` sends: absent keys for everything blank,

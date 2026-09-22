@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 import LiftKit
+import LiftSync
 
 /// The live `HKWorkoutSession` for a lifting session: wrist-down runtime
 /// while the watch is in a pocket between sets, heart rate on the Now screen,

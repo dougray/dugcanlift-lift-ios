@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// Edits made while the phone is out of range.
 ///

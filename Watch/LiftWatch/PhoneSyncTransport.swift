@@ -1,6 +1,7 @@
 import Foundation
 import LiftKit
 import WatchConnectivity
+import LiftSync
 
 /// WatchConnectivity plumbing, kept away from the domain so the reconciliation
 /// rules stay testable without a paired device.

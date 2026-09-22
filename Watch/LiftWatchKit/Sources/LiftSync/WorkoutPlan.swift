@@ -2,11 +2,12 @@ import Foundation
 
 /// What the watch is meant to lift today, as the phone pushed it.
 ///
-/// This is the `plan` payload of `shared/contracts/workout-sync.schema.json`,
-/// carried by a `PLAN_PUSHED` envelope. The Codable shape below is a contract
-/// with `lift-ios`'s hand-mirrored copy in `Sources/Shared/WatchPlan.swift`
-/// and with the schema — `WorkoutPlanTests` pins the JSON key spellings on
-/// this side, `WatchPlanWireTests` pins them on the phone's.
+/// This is the `plan` payload of `Watch/contracts/workout-sync.schema.json`,
+/// carried by a `PLAN_PUSHED` envelope. The phone builds it
+/// (`WatchPlanBuilder`) and the watch runs it, and both compile this one
+/// definition, so the two cannot disagree about a key. `WatchPlanWireTests`
+/// pins the JSON spellings and `SchemaConformanceTests` checks them against
+/// the schema file itself.
 ///
 /// The plan is *not* the workout. Training against it builds an ordinary
 /// `WorkoutDraft`, exactly as free entry does, so everything downstream of a
@@ -19,16 +20,9 @@ import Foundation
 public struct WorkoutPlan: Codable, Equatable, Sendable {
 
     /// Where the plan came from, so the watch can say so on screen.
-    public enum Source: String, Codable, Sendable {
+    public enum Source: String, Codable, CaseIterable, Sendable {
         case routine   = "ROUTINE"
         case coachPlan = "COACH_PLAN"
-
-        public var displayName: String {
-            switch self {
-            case .routine:   return "Routine"
-            case .coachPlan: return "From your coach"
-            }
-        }
     }
 
     public var name: String
@@ -68,12 +62,6 @@ public struct PlanExercise: Codable, Equatable, Sendable {
         self.note = note
         self.sets = sets
         self.lastPerformed = lastPerformed
-    }
-
-    /// "Deadlift (Barbell)" — the same convention `DraftExercise` uses.
-    public var displayName: String {
-        guard let equipment, !equipment.isEmpty else { return name }
-        return "\(name) (\(equipment.capitalized))"
     }
 }
 
@@ -135,74 +123,5 @@ public struct SessionHeartRate: Codable, Equatable, Sendable {
     public init(averageBpm: Double, maxBpm: Double) {
         self.averageBpm = averageBpm
         self.maxBpm = maxBpm
-    }
-}
-
-// MARK: - Display
-//
-// Formatting lives here, beside the rules it formats, rather than in a view:
-// "blank must never render as zero" is the whole point of these types, and a
-// rule in a view's body cannot be tested.
-
-extension PrescribedSet {
-
-    /// The weight alone — "185" — or `nil` when none is prescribed. Rounded
-    /// the way a plate-loaded bar actually goes: whole numbers stay whole.
-    public func weightText(unit: WeightUnit) -> String? {
-        guard let weightKg else { return nil }
-        return PlanFormat.weight(weightKg, unit: unit)
-    }
-
-    /// The big line on the Now screen: "185 x 5", "5 reps", "185 lb", or
-    /// "—" when this set prescribes nothing at all. Never "0 x 5".
-    public func headline(unit: WeightUnit) -> String {
-        switch (weightText(unit: unit), reps) {
-        case let (weight?, reps?): return "\(weight) x \(reps)"
-        case let (weight?, nil):   return "\(weight) \(unit.abbreviation)"
-        case let (nil, reps?):     return "\(reps) reps"
-        case (nil, nil):           return "—"
-        }
-    }
-
-    /// Everything the set prescribes, RPE included: "185 x 5 @8".
-    public func summary(unit: WeightUnit) -> String {
-        var text = headline(unit: unit)
-        if let rpe { text += " @\(PlanFormat.rpe(rpe))" }
-        return text
-    }
-}
-
-extension LastPerformed {
-    /// "185x5 @8" — the reference line under the prescription. `nil` when the
-    /// record holds no numbers worth showing, so the caller shows nothing at
-    /// all rather than a dash pretending to be history.
-    public func summary(unit: WeightUnit) -> String? {
-        var text = ""
-        if let weightKg, let reps {
-            text = "\(PlanFormat.weight(weightKg, unit: unit))x\(reps)"
-        } else if let weightKg {
-            text = "\(PlanFormat.weight(weightKg, unit: unit)) \(unit.abbreviation)"
-        } else if let reps {
-            text = "\(reps) reps"
-        } else {
-            return nil
-        }
-        if let rpe { text += " @\(PlanFormat.rpe(rpe))" }
-        return text
-    }
-}
-
-public enum PlanFormat {
-    /// Trailing ".0" is noise on a wrist; a real half-kilo is not.
-    public static func weight(_ kilograms: Double, unit: WeightUnit) -> String {
-        let value = unit.fromKilograms(kilograms)
-        let rounded = (value * 10).rounded() / 10
-        return rounded == rounded.rounded()
-            ? String(Int(rounded))
-            : String(format: "%.1f", rounded)
-    }
-
-    public static func rpe(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
     }
 }

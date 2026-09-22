@@ -1,5 +1,6 @@
 import XCTest
 @testable import LiftKit
+import LiftSync
 
 final class StandaloneFoodLogTests: XCTestCase {
 

@@ -1,5 +1,6 @@
 import XCTest
 @testable import LiftKit
+import LiftSync
 
 /// docs/ARCHITECTURE.md: "a receiver inserts an unknown ID, accepts a newer
 /// revision, ignores an older revision, treats an identical revision as

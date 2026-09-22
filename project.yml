@@ -71,6 +71,10 @@ targets:
         product: LiftCore
       - package: LiftKit
         product: LiftReference
+      # The WatchConnectivity wire types, the same definitions the watch app
+      # compiles. Only this product: none of the watch's domain comes along.
+      - package: LiftWatchKit
+        product: LiftSync
       - target: LiftWidgets
         embed: true
       # The watch app ships inside this one, under Lift.app/Watch. Being
@@ -227,6 +231,8 @@ targets:
     dependencies:
       - package: LiftWatchKit
         product: LiftKit
+      - package: LiftWatchKit
+        product: LiftSync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.watchkitapp
@@ -323,6 +329,8 @@ targets:
         product: LiftCore
       - package: LiftKit
         product: LiftReference
+      - package: LiftWatchKit
+        product: LiftSync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.tests

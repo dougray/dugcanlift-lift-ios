@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// The outcome of applying an inbound snapshot, per `docs/ARCHITECTURE.md`.
 public enum ReconcileOutcome: Equatable, Sendable {

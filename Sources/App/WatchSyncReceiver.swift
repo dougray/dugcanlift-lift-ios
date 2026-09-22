@@ -3,6 +3,7 @@ import WatchConnectivity
 import SwiftData
 import WidgetKit
 import LiftCore
+import LiftSync
 
 /// The phone's only `WCSessionDelegate` — mirrors the watch's own
 /// `PhoneSyncTransport` on the other end of the same wire format. Decodes

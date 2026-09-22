@@ -1,21 +1,23 @@
 import Foundation
-import LiftCore
 
-/// Wire format shared with LIFT watchOS (ported, not shared source — the two
-/// apps are separate Xcode projects with no shared source, only an agreed
-/// wire format). See `dugcanlift-lift-watch/shared/contracts/workout-sync.schema.json`
-/// for the contract of record both platforms' Swift types must match exactly.
+/// The WatchConnectivity wire format between LIFT for iPhone and LIFT for
+/// Apple Watch, defined by `Watch/contracts/workout-sync.schema.json`.
 ///
-/// Field names and enum spellings here are a contract, not an implementation
-/// detail — `SyncEnvelopeTests` pins them to the schema.
-struct SyncEnvelope: Codable, Equatable, Sendable {
+/// One definition, compiled into both apps: the phone links this module
+/// (`LiftSync`) and so does the watch, through `LiftKit`. Until 2026-09 each
+/// app carried its own hand-mirrored copy, in two repositories. The field
+/// names and enum spellings are still a contract, because a phone and a
+/// watch can run different builds: `SyncEnvelopeTests` pins them, and
+/// `SchemaConformanceTests` checks them against the schema file in both
+/// directions.
+public struct SyncEnvelope: Codable, Equatable, Sendable {
 
     /// A closed enum on purpose: an event this build has never heard of
-    /// throws at decode, and `deliver(_:)` decodes with `try?`, so an older
-    /// build *ignores* a newer one's event rather than failing on it. That is
+    /// throws at decode, and every transport here decodes with `try?`, so an
+    /// older build *ignores* a newer one's event instead of failing. That is
     /// the schema's rule, and it only holds while new information arrives as
     /// new events and absent keys — never as a `null` in an existing one.
-    enum Event: String, Codable, Sendable {
+    public enum Event: String, Codable, CaseIterable, Sendable {
         case sessionFinished          = "SESSION_FINISHED"
         case workoutEdited            = "WORKOUT_EDITED"
         case workoutSyncAck           = "WORKOUT_SYNC_ACK"
@@ -27,32 +29,30 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         /// exists rather than a new one.
         case planPushed               = "PLAN_PUSHED"
         /// Watch -> phone: push me the current plan. Carries no payload;
-        /// `workoutID` is a fresh one-shot request id, exactly as
-        /// `.foodLogged` uses it, and `revision` is 1.
+        /// `workoutID` is a fresh one-shot request id, as `.foodLogged` uses
+        /// it, and `revision` is 1.
         case planRequest              = "PLAN_REQUEST"
     }
 
-    enum Origin: String, Codable, Sendable {
+    public enum Origin: String, Codable, CaseIterable, Sendable {
         case watchOS, wearOS, android, ios, pwa
     }
 
-    var event: Event
-    var workoutID: UUID
-    var revision: Int
-    var updatedAt: Date
-    var origin: Origin
-    /// Only non-nil for `.foodLogged`. Every other event case predates this
-    /// field and never sets it. Must round-trip as an absent key, not a JSON
-    /// `null`, so older decoders on either platform never see the key at all.
-    var foodLog: FoodLogPayload?
-    /// Only non-nil for `.planPushed`, and only ever sent by the phone.
-    /// Absent — never a JSON `null` — on every other event, so a watch build
-    /// that predates plans never sees the key at all.
-    var plan: WorkoutPlan?
-    /// Only non-nil for `.sessionFinished`, and only when the watch actually
-    /// recorded heart rate for that session. Absent is "not recorded"; it is
-    /// never a zero, which would read as a real, impossible measurement.
-    var heartRate: SessionHeartRate?
+    public var event: Event
+    public var workoutID: UUID
+    public var revision: Int
+    public var updatedAt: Date
+    public var origin: Origin
+    /// Present only when `event == .foodLogged`. `workoutID` is repurposed
+    /// for a food-log event as a fresh, one-shot request ID (not an actual
+    /// workout) — see `FoodLogPayload`'s own doc comment.
+    public var foodLog: FoodLogPayload?
+    /// Present only when `event == .planPushed`. Absent — never `null` — on
+    /// every other event, so a build that predates plans never sees the key.
+    public var plan: WorkoutPlan?
+    /// Present only when `event == .sessionFinished`, and only when heart
+    /// rate was actually recorded. Absent is "not recorded", never zero.
+    public var heartRate: SessionHeartRate?
 
     private enum CodingKeys: String, CodingKey {
         case event
@@ -65,16 +65,9 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         case heartRate
     }
 
-    init(
-        event: Event,
-        workoutID: UUID,
-        revision: Int,
-        updatedAt: Date,
-        origin: Origin,
-        foodLog: FoodLogPayload? = nil,
-        plan: WorkoutPlan? = nil,
-        heartRate: SessionHeartRate? = nil
-    ) {
+    public init(event: Event, workoutID: UUID, revision: Int, updatedAt: Date,
+                origin: Origin, foodLog: FoodLogPayload? = nil,
+                plan: WorkoutPlan? = nil, heartRate: SessionHeartRate? = nil) {
         self.event = event
         self.workoutID = workoutID
         self.revision = revision
@@ -85,7 +78,7 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         self.heartRate = heartRate
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         event = try container.decode(Event.self, forKey: .event)
         workoutID = try container.decode(UUID.self, forKey: .workoutID)
@@ -93,7 +86,7 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         origin = try container.decode(Origin.self, forKey: .origin)
         // decodeIfPresent treats both a missing key and an explicit JSON
-        // `null` as nil, so either wire shape from the watch decodes cleanly.
+        // `null` as nil, so either shape from another encoder decodes.
         foodLog = try container.decodeIfPresent(FoodLogPayload.self, forKey: .foodLog)
         plan = try container.decodeIfPresent(WorkoutPlan.self, forKey: .plan)
         heartRate = try container.decodeIfPresent(SessionHeartRate.self, forKey: .heartRate)
@@ -111,37 +104,41 @@ struct SyncEnvelope: Codable, Equatable, Sendable {
     }
 }
 
-/// Payload for the `.foodLogged` event, added to the wire contract by the
-/// watch food quick-log feature. `dugcanlift-lift-watch` does not have a matching
-/// Swift type yet — this is the iOS side landing first; the watch side and
-/// the schema update land alongside this task.
-///
-/// `meal` carries the same raw values as the app's `MealType`
-/// (breakfast/lunch/dinner/snack) but is kept as a plain `String` here since
-/// this type describes the wire shape, not the app's internal model.
-struct FoodLogPayload: Codable, Equatable, Sendable {
-    let foodRefID: String
-    let amountGrams: Double
-    let meal: String
-    let loggedAt: Date
+/// `event == .foodLogged`'s payload. `meal` is deliberately a plain string
+/// (matching the schema, which does not constrain it to an enum) rather than
+/// `FoodLogMeal`'s raw value being required here — `FoodLogMeal` (see
+/// `FoodLogMeal.swift`) is this app's own convenience type for the picker UI;
+/// callers pass `FoodLogMeal.rawValue` in.
+public struct FoodLogPayload: Codable, Equatable, Sendable {
+    public var foodRefID: String
+    public var amountGrams: Double
+    public var meal: String
+    public var loggedAt: Date
+
+    public init(foodRefID: String, amountGrams: Double, meal: String, loggedAt: Date) {
+        self.foodRefID = foodRefID
+        self.amountGrams = amountGrams
+        self.meal = meal
+        self.loggedAt = loggedAt
+    }
 }
 
 extension SyncEnvelope {
     /// ISO-8601 with a `Z` offset, matching the schema's `date-time` format.
-    static let encoder: JSONEncoder = {
+    public static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()
 
-    static let decoder: JSONDecoder = {
+    public static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
 
     /// Convenience for the payload dictionary WatchConnectivity actually sends.
-    func messageBody() throws -> [String: Any] {
+    public func messageBody() throws -> [String: Any] {
         let data = try Self.encoder.encode(self)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw SyncTransportError.malformedPayload
@@ -149,13 +146,13 @@ extension SyncEnvelope {
         return object
     }
 
-    init(messageBody: [String: Any]) throws {
+    public init(messageBody: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: messageBody)
         self = try Self.decoder.decode(SyncEnvelope.self, from: data)
     }
 }
 
-enum SyncTransportError: Error {
+public enum SyncTransportError: Error {
     case malformedPayload
     case counterpartUnreachable
 }

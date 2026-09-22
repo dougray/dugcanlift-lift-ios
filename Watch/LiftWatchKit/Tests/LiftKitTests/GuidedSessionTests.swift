@@ -1,5 +1,6 @@
 import XCTest
 @testable import LiftKit
+import LiftSync
 
 /// Where the lifter is inside a plan, and what happens when they log a set.
 final class GuidedSessionTests: XCTestCase {

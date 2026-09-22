@@ -1,6 +1,7 @@
 import XCTest
 import Compression
 @testable import LiftKit
+import LiftSync
 
 final class StandaloneExportTests: XCTestCase {
 

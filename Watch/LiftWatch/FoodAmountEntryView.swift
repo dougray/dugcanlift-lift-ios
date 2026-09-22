@@ -19,15 +19,19 @@ struct FoodAmountEntryView: View {
     /// `70` was worth 1984.5 g, so a portion set near the cap in grams lost
     /// ~15 g on the way into ounces. See `AmountLimits`.
     private var maxAmount: Double { AmountLimits.maximum(in: unit) }
+    /// 5 g, as `LibraryFoodAmountView` already stops at. This one started
+    /// at 0, so a 0 g, 0 kcal food could be logged, sent to the phone and
+    /// stored there as a real entry.
+    private var minAmount: Double { AmountLimits.minimum(in: unit) }
 
     var body: some View {
         List {
             Section {
-                Stepper(value: $amount, in: 0...maxAmount, step: step) {
+                Stepper(value: $amount, in: minAmount...maxAmount, step: step) {
                     LabeledValue("Amount", "\(formattedAmount) \(unit.abbreviation)")
                 }
                 .focusable()
-                .digitalCrownRotation($amount, from: 0, through: maxAmount, by: step)
+                .digitalCrownRotation($amount, from: minAmount, through: maxAmount, by: step)
 
                 Button(unit == .grams ? "Switch to oz" : "Switch to g") {
                     // Both bounds now convert from the same gram figures, so the
@@ -36,7 +40,7 @@ struct FoodAmountEntryView: View {
                     // value seeded from the phone still has to land inside it.
                     let grams = unit.toGrams(amount)
                     session.servingUnit = unit == .grams ? .ounces : .grams
-                    amount = min(session.servingUnit.fromGrams(grams), maxAmount)
+                    amount = min(max(session.servingUnit.fromGrams(grams), minAmount), maxAmount)
                 }
             }
 
@@ -91,6 +95,6 @@ struct FoodAmountEntryView: View {
         // The wire contract doesn't bound `lastAmountGrams` — clamp the same
         // way the unit-switch button does, so a large phone-side value can't
         // seed the Stepper/crown outside its own range.
-        amount = min(unit.fromGrams(lastGrams), maxAmount)
+        amount = min(max(unit.fromGrams(lastGrams), minAmount), maxAmount)
     }
 }

@@ -65,6 +65,20 @@ final class PlanRequestGateTests: XCTestCase {
         XCTAssertTrue(gate.shouldRequest(reachable: true, now: earlier))
     }
 
+    /// Measured on the simulator pair: the phone went out of reach in the
+    /// millisecond after a live request, `sendMessage` failed with 7007 and
+    /// the request was queued, and the phone was back 0.3 s later. The next
+    /// trigger must get to ask again rather than wait on a reply that the
+    /// failed message will not bring.
+    func testALiveRequestThatFellBackToTheQueueNoLongerHoldsOffTheFastPath() {
+        var gate = PlanRequestGate()
+        XCTAssertTrue(gate.shouldRequest(reachable: true, now: t0))
+        gate.liveRequestFellBackToQueue()
+        XCTAssertFalse(gate.shouldRequest(reachable: false, now: t0.addingTimeInterval(0.1)))
+        XCTAssertTrue(gate.shouldRequest(reachable: true, now: t0.addingTimeInterval(0.4)))
+        XCTAssertFalse(gate.shouldRequest(reachable: true, now: t0.addingTimeInterval(0.5)))
+    }
+
     // MARK: - ReachabilityTracker
 
     /// Activation finds the phone reachable, then sessionReachabilityDidChange

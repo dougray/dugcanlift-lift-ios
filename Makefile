@@ -52,17 +52,25 @@ DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/iPhone|iPad/ 
 # build setting keeps project.yml and the committed entitlements untouched, so
 # a paid team still gets the real capability with no edit to undo.
 #
+# Through a per-target setting, not CODE_SIGN_ENTITLEMENTS=<file> directly: a
+# command-line build setting applies to every target in the build, so that
+# signed the widgets, and would sign the watch app, with this app's HealthKit
+# and App Group entitlements instead of their own. FREE_TEAM_ENTITLEMENTS is
+# set on the Lift target only (project.yml); every other target finds it
+# empty and keeps what $(inherited) gives it, its own entitlements file.
+# `make signing` prints what each target ends up with.
+#
 # The cost is that Universal Links do not work in a device build made this way
 # -- tapping a dugcanlift.com plan link opens the browser. That capability has
 # never worked on a free team anyway, which is why Coach iOS ingests links by
 # paste.
-FREE_ENTITLEMENTS := Config/Lift-free.entitlements
+FREE_ENTITLEMENTS := CODE_SIGN_ENTITLEMENTS='$$(FREE_TEAM_ENTITLEMENTS:default=$$(inherited))'
 
 # xcbeautify makes xcodebuild output readable. brew install xcbeautify
 # Falls back to raw output if it isn't installed.
 PRETTY := $(shell command -v xcbeautify 2>/dev/null || echo cat)
 
-.PHONY: help project build test run clean sim logs reset-sim doctor devices device device-build
+.PHONY: help project build test run clean sim logs reset-sim doctor devices device device-build signing
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -112,9 +120,18 @@ device-build: project ## Build for a connected device (no install)
 		-scheme $(SCHEME) \
 		-destination 'platform=iOS,id=$(DEVICE)' \
 		-derivedDataPath $(DEVICE_DERIVED) \
-		CODE_SIGN_ENTITLEMENTS=$(FREE_ENTITLEMENTS) \
+		$(FREE_ENTITLEMENTS) \
 		-allowProvisioningUpdates \
 		build | $(PRETTY)
+
+signing: project ## Show which entitlements each target signs with in a device build
+	@xcodebuild \
+		-project Lift.xcodeproj \
+		-scheme $(SCHEME) \
+		-destination 'generic/platform=iOS' \
+		$(FREE_ENTITLEMENTS) \
+		-showBuildSettings 2>/dev/null \
+		| awk '/^Build settings for action build and target/ { t = $$NF; sub(/:$$/, "", t) } t != "" && /^ +CODE_SIGN_ENTITLEMENTS = / { printf "  %-14s %s\n", t, $$3 }'
 
 device: device-build ## Build, install and launch on a connected device
 	@echo "Installing on $(DEVICE)..."

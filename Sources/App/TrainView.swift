@@ -304,6 +304,7 @@ private struct DayEditor: View {
 private struct ExerciseBlock: View {
     @Environment(\.modelContext) private var context
     @AppStorage(PerSideLogging.storageKey) private var perSideRaw = "{}"
+    @AppStorage(PlanSides.storageKey) private var planSidesData = Data()
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
     let focus: TrainingFocus
@@ -315,6 +316,32 @@ private struct ExerciseBlock: View {
     private var perSide: Bool {
         PerSideLogging.effective(name: exercise.name,
                                  equipment: exercise.equipment, in: perSideRaw)
+    }
+
+    /// The coach's prescription this exercise was started from, when it said
+    /// something about sides (`PlanSides`). Nil for everything else.
+    private var prescription: Prescription? {
+        (try? JSONDecoder().decode(PlanSides.self, from: planSidesData))?.logged[exercise.id]
+    }
+
+    private var loggedSides: [SetSide?] { exercise.orderedSets.map(\.side) }
+
+    /// A named set from the coach on a lift not logged per side -- one right
+    /// set in a bench session -- still needs somewhere to be logged on that
+    /// side. Until it is, the L / R choice shows for this exercise without
+    /// changing the lifter's per-side preference for the lift.
+    private var pendingNamedSide: Bool {
+        guard !perSide, let prescription else { return false }
+        return prescription.nextSide(after: loggedSides) != nil
+    }
+
+    private var showsSide: Bool { perSide || pendingNamedSide }
+
+    /// "L 1/3 · R 0/3" against a prescription with sides in it, "L 4/3" when
+    /// over; otherwise the plain "L 3 · R 3" whenever sides are showing.
+    private var countLabel: String? {
+        if let label = prescription?.targetsLabel(logged: loggedSides), !label.isEmpty { return label }
+        return showsSide ? exercise.perSideCountLabel : nil
     }
 
     var body: some View {
@@ -338,8 +365,8 @@ private struct ExerciseBlock: View {
                     // "L 3 · R 3". A missed side is the failure this whole
                     // feature exists to make visible, so the count sits in
                     // the header rather than waiting to be counted by eye.
-                    if perSide {
-                        Text(exercise.perSideCountLabel)
+                    if let countLabel {
+                        Text(countLabel)
                             .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }
@@ -365,7 +392,7 @@ private struct ExerciseBlock: View {
 
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
-                       showsSide: perSide) {
+                       showsSide: showsSide) {
                     delete(set)
                 }
             }
@@ -388,14 +415,34 @@ private struct ExerciseBlock: View {
         // shortcut the spec asks for: most people match reps across limbs and
         // adjust the weight, so copying and editing beats typing from
         // nothing. One tap more than a normal set, not two.
-        let previous = exercise.orderedSets.last
-        exercise.sets.append(SetEntry(
-            orderIndex: exercise.sets.count,
-            weightKg: previous?.weightKg ?? 0,
-            reps: previous?.reps ?? focus.defaultReps ?? 0,
-            rpe: previous?.rpe,
-            side: perSide ? exercise.nextSide : nil
-        ))
+        //
+        // With a coach's prescription, the set lands on the side the next
+        // unfilled prescribed set names and takes that set's numbers; past the
+        // prescription, or with none, it lands on whichever side is behind and
+        // copies the set before, as it always has. The lifter can change both.
+        let logged = loggedSides
+        let side: SetSide? = showsSide
+            ? (prescription?.nextSide(after: logged) ?? exercise.nextSide) : nil
+        if let asked = prescription?.setFor(side: side, after: logged) {
+            exercise.sets.append(SetEntry(
+                orderIndex: exercise.sets.count,
+                weightKg: asked.weightKg ?? 0,
+                reps: asked.reps ?? 0,
+                rpe: asked.rpe,
+                durationSec: asked.durationSec,
+                distanceMeters: asked.distanceMeters,
+                side: side
+            ))
+        } else {
+            let previous = exercise.orderedSets.last
+            exercise.sets.append(SetEntry(
+                orderIndex: exercise.sets.count,
+                weightKg: previous?.weightKg ?? 0,
+                reps: previous?.reps ?? focus.defaultReps ?? 0,
+                rpe: previous?.rpe,
+                side: side
+            ))
+        }
         save()
     }
 

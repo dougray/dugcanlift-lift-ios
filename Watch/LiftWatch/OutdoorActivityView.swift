@@ -68,15 +68,18 @@ struct OutdoorActivityView: View {
     /// longer needed), not the session. The session — and the background
     /// runtime it grants — stays live until `library.finish(_:)`'s export
     /// attempt (success or failure) has actually completed, at which point
-    /// `endHealthKitSession(at:)` ends it. This closes the gap where dropping
+    /// `endFinishedSession(_:at:)` ends it. This closes the gap where dropping
     /// the wrist right after tapping Finish could suspend the app before an
     /// export in flight ever ran.
     private func finish() {
         guard let finished = recorder.finish() else { return }
+        // This recording's session, captured now: by the time the export
+        // settles a new run may have its own, which must be left alone.
+        let finishingSession = recorder.finishingSession
         recorder.resetAfterFinish()
         Task {
             await library.finish(finished)
-            recorder.endHealthKitSession(at: finished.endedAt ?? Date())
+            recorder.endFinishedSession(finishingSession, at: finished.endedAt ?? Date())
         }
     }
 

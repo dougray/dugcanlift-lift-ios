@@ -47,6 +47,13 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private let locationManager = CLLocationManager()
     private var session: HKWorkoutSession?
+    /// The finished recording's session, kept alive until its HealthKit
+    /// export settles (see `finish()`), and held apart from `session` so
+    /// that ending it can never end the next recording's. It used to stay in
+    /// `session`: Start again while an export was running, and the export's
+    /// `endHealthKitSession` then ended the *new* run's session, costing it
+    /// its background runtime (GPS stops when the wrist drops).
+    private(set) var finishingSession: HKWorkoutSession?
     private var tickTimer: Timer?
     private var recordingStartDate: Date?
 
@@ -74,18 +81,22 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
     func start(type: OutdoorActivityType) {
         guard activity == nil else { return }
 
-        // A previous recording's `session` can still be alive here even
+        // A previous recording's session can still be alive here even
         // though `activity` is already `nil`: `finish()` deliberately keeps
-        // the session running until that recording's HealthKit export
-        // settles (see `endHealthKitSession(at:)`), and the user is free to
-        // tap Start again before that finishes. Without ending it now,
-        // `startWorkoutSession`'s own `session == nil` guard correctly
-        // refuses to create a second session — but then this new recording
-        // would silently run with no session at all, never gaining
-        // background runtime and never flipping `isRecording` true. Ending
-        // the old one here, while the user is still foreground, hands the
-        // runtime grant to the new recording instead of leaving it stranded
-        // on the old, already-finished one.
+        // it running, as `finishingSession`, until that recording's
+        // HealthKit export settles (see `endFinishedSession(_:at:)`), and
+        // the user is free to tap Start again before that finishes. watchOS
+        // allows one live `HKWorkoutSession`, so without ending it now this
+        // new recording would run with no session at all and never gain
+        // background runtime. Ending the old one here, while the user is
+        // still foreground, hands the runtime grant to the new recording;
+        // the old export's later `endFinishedSession` then finds nothing to
+        // end, rather than ending this recording's session.
+        if let finishingSession {
+            finishingSession.stopActivity(with: Date())
+            finishingSession.end()
+            self.finishingSession = nil
+        }
         if session != nil {
             endHealthKitSession(at: Date())
         }
@@ -129,7 +140,7 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
     /// needed once the activity is finished). The session must keep running
     /// until the HealthKit export attempt completes (success or failure), so
     /// the app retains background runtime through the export; callers finish
-    /// that with `endHealthKitSession(at:)` once the export settles. See
+    /// that with `endFinishedSession(_:at:)` once the export settles. See
     /// `OutdoorActivityView.finish()` for the full sequencing and why.
     @discardableResult
     func finish() -> OutdoorActivity? {
@@ -139,6 +150,10 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
         activity = current
         teardownLocation()
         isRecording = false
+        // Left running for the export, but no longer this recorder's live
+        // session: `endFinishedSession(_:at:)` ends exactly this one.
+        finishingSession = session
+        session = nil
         return current
     }
 
@@ -178,6 +193,17 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
         session?.stopActivity(with: endDate)
         session?.end()
         session = nil
+    }
+
+    /// Ends the session a finished recording kept alive for its export —
+    /// `finishingSession` as it was when that recording finished, passed back
+    /// by the caller, never whatever is live now. A no-op if `start(type:)`
+    /// already ended it to make room for a new recording.
+    func endFinishedSession(_ finished: HKWorkoutSession?, at endDate: Date) {
+        guard let finished, finished === finishingSession else { return }
+        finished.stopActivity(with: endDate)
+        finished.end()
+        finishingSession = nil
     }
 
     // MARK: - HealthKit
@@ -323,6 +349,10 @@ extension OutdoorActivityRecorder: HKWorkoutSessionDelegate {
         date: Date
     ) {
         Task { @MainActor in
+            // Only the live recording's session speaks for `isRecording`: a
+            // finished one ending after a new run has started must not mark
+            // the new run as stopped.
+            guard workoutSession === self.session else { return }
             switch toState {
             case .running:
                 self.isRecording = true

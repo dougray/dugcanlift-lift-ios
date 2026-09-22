@@ -79,7 +79,14 @@ WATCH ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/Watch/ && !/si
 # defeats the target. A device that really is unreachable fails at the install
 # with a clear CoreDevice error, which is better than a build that declines to
 # start.
-DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/iPhone|iPad/ { for (i = 1; i <= NF; i++) if ($$i ~ /^[0-9A-Fa-f]{8}-[0-9A-Fa-f-]+$$/) { print $$i; exit } }')
+#
+# Rows marked "simulated" are skipped: devicectl lists simulators alongside
+# real devices now (its Reality column says which), sorted by name. Today's
+# phone, "Mjolnir", sorts ahead of every "iPad ..."/"iPhone ..." simulator
+# only because of its capital M; a device named "stormbringer" sorts after
+# them, and with no phone attached at all the first simulator was taken as
+# the device instead of the "No iPhone or iPad visible" message below.
+DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/iPhone|iPad/ && !/simulated/ { for (i = 1; i <= NF; i++) if ($$i ~ /^[0-9A-Fa-f]{8}-[0-9A-Fa-f-]+$$/) { print $$i; exit } }')
 
 # Signing on a free Apple Personal Team cannot include Associated Domains, and
 # the app declares it for Universal Links. Building for a device with the

@@ -1,0 +1,113 @@
+name: LiftWatch
+options:
+  bundleIdPrefix: com.dugcanlift
+  deploymentTarget:
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+packages:
+  LiftKit:
+    path: LiftKit
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "QG57FJM5C8"
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  LiftWatch:
+    # Single-target watchOS app (Xcode 14+). The legacy paired
+    # `application.watchapp2` type is not accepted by current Xcode.
+    type: application
+    platform: watchOS
+    sources:
+      - path: LiftWatch
+    dependencies:
+      - package: LiftKit
+        product: LiftKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.watch
+        PRODUCT_NAME: LIFT
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: NO
+    # A real generated Info.plist (not GENERATE_INFOPLIST_FILE: YES +
+    # INFOPLIST_KEY_* settings) because these background-mode keys need
+    # array values, which the INFOPLIST_KEY_* scalar mechanism can't
+    # express.
+    #
+    # Two SEPARATE background-mode declarations are required here — this
+    # was only discovered by actually launching the app and tapping Start
+    # Run in the Watch Simulator (a real crash, not a static-analysis
+    # guess), because the WKBackgroundModes-only fix that looked right by
+    # reading CLLocationManager.h's *type signature* still crashed at
+    # runtime with:
+    #   *** Terminating app due to uncaught exception
+    #   'NSInternalInconsistencyException', reason: 'Invalid parameter
+    #   not satisfying: !stayUp || CLClientIsBackgroundable(...)'
+    # in OutdoorActivityRecorder.start(type:) at
+    # `locationManager.allowsBackgroundLocationUpdates = true`. Re-reading
+    # CLLocationManager.h's actual prose (not just skimming for a plausible
+    # key name) confirms verbatim: "With UIBackgroundModes set to include
+    # 'location' in Info.plist, you must also set this property to YES...
+    # Setting this property to YES when UIBackgroundModes does not include
+    # 'location' is a fatal error." — the literal key CoreLocation's runtime
+    # check reads is UIBackgroundModes (the same iOS-style key), NOT
+    # WKBackgroundModes.
+    #   - `UIBackgroundModes: [location]`: required for
+    #     allowsBackgroundLocationUpdates = true (OutdoorActivityRecorder.swift)
+    #     not to be a fatal error at runtime — confirmed by reproducing the
+    #     crash in the Watch Simulator before this key was added, then
+    #     confirming Start Run no longer crashes after adding it.
+    #   - `WKBackgroundModes: [location, workout-processing]`: separately
+    #     required for HKWorkoutSession's background-runtime grant (the
+    #     premise behind skipping a foreground-service equivalent — GPS
+    #     staying alive while the wrist drops); confirmed via WatchKit.tbd
+    #     symbol inspection during the final whole-branch review.
+    info:
+      path: Config/LiftWatch-Info.plist
+      properties:
+        WKApplication: YES
+        WKWatchOnly: YES
+        CFBundleDisplayName: LIFT
+        # GENERATE_INFOPLIST_FILE: YES previously derived these from
+        # MARKETING_VERSION/CURRENT_PROJECT_VERSION automatically; a real
+        # Info.plist needs them spelled out explicitly or version bumps to
+        # those settings silently stop reaching the built app.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIBackgroundModes:
+          - location
+        WKBackgroundModes:
+          - location
+          - workout-processing
+        # HealthKit — both strings are required or the app is rejected. The
+        # watch never reads Health data today, but HKWorkoutSession itself
+        # requires the HealthKit capability + these usage strings to be
+        # present, and requesting share authorization for the workout type
+        # is how the system grants a session permission to run.
+        NSHealthShareUsageDescription: >-
+          LIFT uses HealthKit to run a workout session, which keeps GPS
+          active while recording a run or hike, and reads your heart rate
+          while you lift so the app can show it and record it with the
+          workout.
+        NSHealthUpdateUsageDescription: >-
+          LIFT saves the runs and hikes you record, and the workouts you
+          lift, to the Health app.
+        # CLLocationManager itself requires this key on watchOS too: there is
+        # no requestWhenInUseAuthorization/requestAlwaysAuthorization on
+        # watchOS (confirmed absent from CLLocationManager.h for this
+        # platform) — the system presents the location prompt automatically
+        # on first use of a location API, driven off this Info.plist key.
+        NSLocationWhenInUseUsageDescription: >-
+          LIFT uses your location to record the route of a run or hike.
+    entitlements:
+      path: Config/LiftWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []

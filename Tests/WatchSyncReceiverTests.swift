@@ -274,6 +274,88 @@ final class WatchSyncReceiverTests: XCTestCase {
         XCTAssertEqual(snapshot.items.first?.foodRefID, "usda:174608")
     }
 
+    // MARK: - Stored once, and acknowledged
+
+    private func isolatedDefaults(_ name: String = #function) -> UserDefaults {
+        let suite = "WatchSyncReceiverTests.\(name)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    /// The acknowledgement is what takes the food out of the watch's
+    /// standalone log, so a later export does not count it twice.
+    func testAStoredFoodIsAcknowledgedUnderItsOwnID() async throws {
+        let context = makeContext()
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+        let envelope = foodLoggedEnvelope()
+
+        let handled = await sut.handle(envelope)
+
+        XCTAssertTrue(handled)
+        let ack = try XCTUnwrap(sent.first { $0.event == .workoutSyncAck })
+        XCTAssertEqual(ack.workoutID, envelope.workoutID)
+        XCTAssertEqual(ack.revision, envelope.revision)
+        XCTAssertEqual(ack.origin, .ios)
+        XCTAssertNil(ack.foodLog)
+    }
+
+    /// The watch sends by `sendMessage` and falls back to `transferUserInfo`
+    /// on an error, and an error does not prove the message was lost. The
+    /// same food arriving twice is one entry, acknowledged both times.
+    func testTheSameFoodArrivingTwiceIsStoredOnce() async throws {
+        let context = makeContext()
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+        let envelope = foodLoggedEnvelope()
+
+        let first = await sut.handle(envelope)
+        let second = await sut.handle(envelope)
+
+        XCTAssertTrue(first)
+        XCTAssertTrue(second)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<FoodEntry>()).count, 1)
+        XCTAssertEqual(sent.filter { $0.event == .workoutSyncAck }.map(\.workoutID),
+                       [envelope.workoutID, envelope.workoutID])
+    }
+
+    /// Two different foods, even identical portions of the same one, are
+    /// two entries: only the id makes a repeat.
+    func testTwoFoodsWithTheSameContentAreBothStored() async throws {
+        let context = makeContext()
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+
+        _ = await sut.handle(foodLoggedEnvelope())
+        _ = await sut.handle(foodLoggedEnvelope())
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<FoodEntry>()).count, 2)
+    }
+
+    /// Not stored, not acknowledged: the watch keeps the food exportable.
+    func testAFoodThatCannotBeStoredIsNotAcknowledged() async throws {
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: makeContext(), defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+
+        let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "usda:does-not-exist"))
+
+        XCTAssertFalse(handled)
+        XCTAssertTrue(sent.isEmpty)
+    }
+
+    func testReceiptsAreCappedOldestFirst() {
+        let defaults = isolatedDefaults()
+        let ids = (0...WatchFoodLogReceipts.capacity).map { _ in UUID() }
+        for id in ids { WatchFoodLogReceipts.record(id, in: defaults) }
+        XCTAssertFalse(WatchFoodLogReceipts.contains(ids[0], in: defaults))
+        XCTAssertTrue(WatchFoodLogReceipts.contains(ids[1], in: defaults))
+        XCTAssertTrue(WatchFoodLogReceipts.contains(ids.last!, in: defaults))
+    }
+
     // MARK: - Per-100 g macros for the watch's own food log
 
     /// 150 g of the `usda:174608` fixture, as `handleFoodLogged` stores it:

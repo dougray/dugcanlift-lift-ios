@@ -60,6 +60,10 @@ targets:
         product: LiftReference
       - target: LiftWidgets
         embed: true
+      # Embedded in Lift.app/PlugIns. See the LiftShare target below for why
+      # a share extension exists at all.
+      - target: LiftShare
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift
@@ -191,6 +195,62 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
+  # ------------------------------------------------------ share extension
+  # "LIFT" in the share sheet for a coach's plan link shared from Safari,
+  # Messages, Mail or Notes. It decodes the link to say what plan it is, then
+  # queues the fragment in the App Group for the app to open on its next
+  # foreground -- see PendingPlanLinks for why it does not open the app, and
+  # why it never writes a routine itself.
+  #
+  # A second extension is a second App ID to register, which a free Personal
+  # Team rations (ten new ids per seven days). Worth it: without it, and
+  # without Associated Domains, a plan link tapped in Messages does nothing at
+  # all on a free-team build.
+  LiftShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/ShareExtension
+      # Only what the extension needs from Shared: no SwiftData, no views, no
+      # models. Listing the three files rather than the folder is what keeps
+      # that true -- a new file in Sources/Shared does not silently join a
+      # share sheet with a tight memory limit.
+      - path: Sources/Shared/PlanLinkExtractor.swift
+      - path: Sources/Shared/PlanLinkIntake.swift
+      - path: Sources/Shared/PendingPlanLinks.swift
+    dependencies:
+      # LiftCore only. LiftReference's GRDB and its reference databases have
+      # no business in a share sheet.
+      - package: LiftKit
+        product: LiftCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.share
+        APPLICATION_EXTENSION_API_ONLY: YES
+    entitlements:
+      path: Config/LiftShare.entitlements
+      properties:
+        # The app's existing group -- the same one the store and the widget
+        # use, so this adds no new capability, only a new bundle id.
+        com.apple.security.application-groups:
+          - group.com.dugcanlift.lift
+    info:
+      path: Config/LiftShare-Info.plist
+      properties:
+        CFBundleDisplayName: LIFT
+        ITSAppUsesNonExemptEncryption: false
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            # A web URL (Safari, Messages' link previews) or text (Notes, Mail,
+            # a message body) -- a plan link can arrive as either. Text means
+            # LIFT is offered for any text; the extension says plainly when it
+            # isn't a plan link.
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+
   # --------------------------------------------------------------- tests
   LiftTests:
     type: bundle.unit-test
@@ -220,6 +280,7 @@ schemes:
       targets:
         Lift: all
         LiftWidgets: all
+        LiftShare: all
     run:
       config: Debug
     test:

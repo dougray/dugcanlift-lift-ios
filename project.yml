@@ -70,6 +70,13 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift
+        # What `make device-build` signs this target with on the free
+        # Personal Team: Config/Lift.entitlements without Associated Domains,
+        # which a free team cannot sign. See FREE_ENTITLEMENTS in the Makefile.
+        # A target that leaves this unset keeps its own entitlements there,
+        # which is the point: the widgets and the watch app need nothing a
+        # free team refuses, and must not be signed with this app's.
+        FREE_TEAM_ENTITLEMENTS: Config/Lift-free.entitlements
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

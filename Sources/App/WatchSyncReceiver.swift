@@ -160,19 +160,20 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         return true
     }
 
-    /// **Measured, 2026-09-20: this very likely reaches nothing yet.** On a
-    /// paired iPhone 17 / Apple Watch Ultra 4 simulator pair with both apps
-    /// installed and running, `WCSession.default` on this side reports
-    /// `isPaired == true` but `isWatchAppInstalled == false` and
-    /// `isReachable == false` — LIFT watchOS is a `WKWatchOnly` app with its
-    /// own bundle id (`com.dugcanlift.watch`) rather than this app's
-    /// companion, and `WCSession` connects an iOS app to *its own* watch
-    /// app. The watch repo's complications design already suspected this
-    /// ("LIFT iOS and LiftWatch are very likely not `WCSession` peers"); the
-    /// numbers above are the first measurement of it. Everything below is
-    /// still correct and is what will run the day the watch app ships as a
-    /// companion target — and the same gap already applies to the food
-    /// snapshot and `FOOD_LOGGED`, so it is not this feature's to fix.
+    /// The watch app is this app's companion (`Watch/`, embedded at
+    /// `Lift.app/Watch/LIFT.app`), which is what makes the two `WCSession`
+    /// peers. It was a separate `WKWatchOnly` app until 2026-09, and on a
+    /// paired simulator pair this side then reported
+    /// `isWatchAppInstalled == false` and nothing it sent arrived; as a
+    /// companion both sides report the other installed, and a plan, the
+    /// recent-foods context and a food all make the round trip.
+    ///
+    /// One exception on the simulator only: `transferUserInfo` is never
+    /// delivered between a paired iPhone and Apple Watch *simulator*, in
+    /// either direction (Apple DTS: the watchOS Simulator does not support
+    /// it; the payload reaches the peer's `wcd` and is dropped there). So on
+    /// a simulator only the `sendMessage` fast path below is seen to work,
+    /// and the queued path can only be checked on real devices.
     ///
     /// `transferUserInfo` is the delivery that matters: the OS queues it and
     /// hands it over when the watch is next in range, which is the whole

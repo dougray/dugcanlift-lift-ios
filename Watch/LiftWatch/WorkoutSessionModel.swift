@@ -90,15 +90,18 @@ final class WorkoutSessionModel: ObservableObject {
     /// Accepts one `SyncEnvelope`, as JSON, from the launch environment:
     ///
     ///     SIMCTL_CHILD_LIFT_SYNC_ENVELOPE="$(cat plan.json)" \
-    ///       xcrun simctl launch booted com.dugcanlift.watch
+    ///       xcrun simctl launch "<watch simulator>" com.dugcanlift.lift.watchkitapp
     ///
-    /// DEBUG only, and it exists because a plan cannot otherwise be put in
-    /// front of this app on a simulator: LIFT iOS is very likely not this
-    /// app's `WCSession` peer at all (`WKWatchOnly`, a different bundle id,
-    /// no embedded watch target — see the transport note in
-    /// `docs/ARCHITECTURE.md`), and a paired simulator pair reports
-    /// `isWatchAppInstalled == false` from the phone, so every
-    /// `transferUserInfo` queues into nothing.
+    /// DEBUG only. It was written when this app was a separate `WKWatchOnly`
+    /// app that LIFT for iPhone could not reach at all; now it is that app's
+    /// companion and a reachable phone delivers a plan by `sendMessage`. It
+    /// stays for what the simulator still cannot do: `transferUserInfo` is
+    /// never delivered between a paired iPhone and Apple Watch simulator
+    /// (Apple DTS; the payload reaches the peer's `wcd` and is dropped), so a
+    /// plan the phone queued while this app was not running never arrives
+    /// there, and an envelope a test needs — an older revision, a plan with
+    /// blank sets, one the phone would not build — can be put in front of
+    /// the app without a phone at all.
     ///
     /// It deliberately goes through `receive(_:)`, the same method the
     /// transport calls, rather than assigning `plan` directly: the decode,

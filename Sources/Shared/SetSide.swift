@@ -88,26 +88,48 @@ enum ExerciseKey {
 /// the list and a walking lunge alternates without anyone caring to record
 /// which leg — which is exactly why the lifter, not this function, has the
 /// last word.
+///
+/// **The terms are matched as whole words, and the list is one list across
+/// four builds**: LIFT web's `UNILATERAL_TERMS` (`lift/sides.js`), LIFT for
+/// Android's `PerSideLogging.UNILATERAL_TERMS`, Coach iPhone's
+/// `UnilateralGuess` and this one. Change a term in all four or in none;
+/// `testTheTermListIsTheOneTheOtherThreeBuildsCarry` pins this copy.
+///
+/// This file carried a substring rule until now, and a substring fires on the
+/// inside of a longer word: "lunge" ticked "Cold Plunge", and "step up" would
+/// tick a stepmill spelled "Step Up Mill". A whole-word rule cannot see the
+/// shorter term inside the longer word either, which is why both numbers of
+/// each term are listed rather than matched by prefix ("lunge", "lunges") and
+/// why the "-ed" spellings are listed too — "One-Legged Deadlift" is the same
+/// lift as "One-Leg Deadlift".
 enum UnilateralGuess {
 
-    /// Lowercased substrings. Hyphen and space spellings both appear in the
-    /// database ("Single-Arm Row", "Single Arm Landmine Press").
-    static let markers = [
-        "single-arm", "single arm",
-        "one-arm", "one arm",
-        "single-leg", "single leg",
-        "one-leg", "one leg",
-        "bulgarian",
-        "split squat",
-        "pistol",
-        "lunge",
-        "step-up", "step up",
-        "unilateral"
+    /// Lowercased, single-spaced terms. Punctuation is not part of a name, so
+    /// "Single-Arm Row", "Single Arm Landmine Press" and "SINGLE_ARM ROW" all
+    /// carry the one term "single arm".
+    static let terms = [
+        "single arm", "one arm", "1 arm", "single handed",
+        "single leg", "one leg", "1 leg", "single limb",
+        "one legged", "single legged", "one armed", "single armed",
+        "bulgarian", "split squat", "split squats",
+        "pistol", "pistols", "lunge", "lunges",
+        "step up", "step ups", "stepup", "stepups",
+        "unilateral",
     ]
 
+    /// Letters and digits only, single-spaced, padded so a term can be
+    /// matched with a space on each side.
+    private static func normalise(_ name: String) -> String {
+        let cleaned = name.lowercased().unicodeScalars.map {
+            CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0)
+                ? String($0) : " "
+        }.joined()
+        return " " + cleaned.split(separator: " ").joined(separator: " ") + " "
+    }
+
     static func looksUnilateral(name: String) -> Bool {
-        let lowered = name.lowercased()
-        return markers.contains { lowered.contains($0) }
+        let padded = normalise(name)
+        return terms.contains { padded.contains(" \($0) ") }
     }
 }
 

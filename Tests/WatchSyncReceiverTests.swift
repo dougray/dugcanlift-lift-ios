@@ -323,6 +323,22 @@ final class WatchSyncReceiverTests: XCTestCase {
                        [envelope.workoutID, envelope.workoutID])
     }
 
+    /// The message and its queued fallback can arrive together, and storing
+    /// a food awaits the reference database. Both copies arriving while the
+    /// first is still being resolved must still make one entry.
+    func testTwoCopiesArrivingTogetherAreStoredOnce() async throws {
+        let context = makeContext()
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let envelope = foodLoggedEnvelope()
+
+        async let first = sut.handle(envelope)
+        async let second = sut.handle(envelope)
+        let results = await [first, second]
+
+        XCTAssertEqual(results, [true, true])
+        XCTAssertEqual(try context.fetch(FetchDescriptor<FoodEntry>()).count, 1)
+    }
+
     /// Two different foods, even identical portions of the same one, are
     /// two entries: only the id makes a repeat.
     func testTwoFoodsWithTheSameContentAreBothStored() async throws {

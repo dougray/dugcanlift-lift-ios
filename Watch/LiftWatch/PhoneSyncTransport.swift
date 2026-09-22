@@ -12,6 +12,11 @@ final class PhoneSyncTransport: NSObject {
     var onApplicationContext: (([String: Any]) -> Void)?
 
     private let session: WCSession?
+    /// Written from WatchConnectivity's delegate callbacks, which arrive on a
+    /// background queue Apple does not promise is one serial queue, hence
+    /// the lock.
+    private var reachability = ReachabilityTracker()
+    private let reachabilityLock = NSLock()
 
     init(session: WCSession? = WCSession.isSupported() ? .default : nil) {
         self.session = session
@@ -69,14 +74,26 @@ final class PhoneSyncTransport: NSObject {
 
 extension PhoneSyncTransport: WCSessionDelegate {
 
+    // Both report reachability, and when activation already finds the phone
+    // reachable the second reports the same value again. Passing both on
+    // flushed the outbox and asked for a plan twice on every launch, so only
+    // a change is reported (`ReachabilityTracker`).
     func session(_ session: WCSession,
                  activationDidCompleteWith state: WCSessionActivationState,
                  error: Error?) {
-        onReachabilityChange?(session.isReachable)
+        reportReachability(session.isReachable)
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {
-        onReachabilityChange?(session.isReachable)
+        reportReachability(session.isReachable)
+    }
+
+    private func reportReachability(_ reachable: Bool) {
+        reachabilityLock.lock()
+        let changed = reachability.update(reachable)
+        reachabilityLock.unlock()
+        guard let changed else { return }
+        onReachabilityChange?(changed)
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {

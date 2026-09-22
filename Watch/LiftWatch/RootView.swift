@@ -67,7 +67,7 @@ struct StartWorkoutView: View {
                 // Asking is cheap and the answer is queued by the OS, so this
                 // works with the phone in a locker — it just arrives later.
                 Button(session.plan == nil ? "Get Today's Plan" : "Refresh Plan") {
-                    session.requestPlan()
+                    session.requestPlan(force: true)
                 }
             }
             Section {

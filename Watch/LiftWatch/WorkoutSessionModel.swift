@@ -36,6 +36,9 @@ final class WorkoutSessionModel: ObservableObject {
     /// revision replaces, an older one is ignored.
     private var planID: UUID?
     private var planRevision = 0
+    /// Keeps the triggers that ask for a plan together — the app becoming
+    /// active, the phone becoming reachable — from asking twice.
+    private var planRequests = PlanRequestGate()
 
     /// What rest to start when the set just logged prescribed none. Matches
     /// `RestTimer`'s own default, so an unplanned session rests exactly as it
@@ -219,7 +222,13 @@ final class WorkoutSessionModel: ObservableObject {
     /// Asks the phone for today's plan. Fire and forget: the answer arrives
     /// as a `PLAN_PUSHED` whenever the phone next has a chance to send one,
     /// which may be after the app is suspended, so nothing here waits.
-    func requestPlan() {
+    ///
+    /// Automatic triggers go through `PlanRequestGate`, so the app becoming
+    /// active and the phone becoming reachable in the same moment ask once.
+    /// `force` is for the lifter's own tap, which always asks.
+    func requestPlan(force: Bool = false) {
+        guard planRequests.shouldRequest(reachable: transport.isReachable, now: .now, force: force)
+        else { return }
         transport.sendNow(SyncEnvelope(
             event: .planRequest,
             workoutID: UUID(),

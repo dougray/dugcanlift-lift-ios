@@ -207,11 +207,14 @@ struct SharePlanView: View {
         }
     }
 
+    /// A headline for the card. Deliberately not a shortening of the message
+    /// below it -- measured on the simulator, where "The plan isn't in this
+    /// address" appeared as both and read like a stutter.
     private func title(for refusal: PlanLinkIntake.Refusal) -> String {
         switch refusal {
         case .notAPlanLink:           return "That isn't a plan link"
-        case .ownLogLink:             return "That's your log, going the other way"
-        case .pageWithoutPlan:        return "The plan isn't in this address"
+        case .ownLogLink:             return "This link goes the other way"
+        case .pageWithoutPlan:        return "Shared from the open page"
         case .link(.notAddressedToThisDevice): return "This plan isn't for this phone"
         case .link:                   return "This plan link couldn't be read"
         }

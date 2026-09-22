@@ -39,7 +39,6 @@ struct CoachSection: View {
     @State private var linkSize: String?
     @State private var composing: Composition?
     @State private var problem: String?
-    @State private var pastingPlan = false
 
     private var unit: WeightUnit { WeightUnit(rawValue: unitRaw) ?? .pounds }
 
@@ -117,18 +116,21 @@ struct CoachSection: View {
             // coach's email has ever been typed in, and this is the row a
             // lifter looks for when their coach's link opened the browser
             // instead of LIFT. See PastePlanLinkView for why it usually does.
-            Button("Paste a Plan Link", systemImage: "square.and.arrow.down") {
-                pastingPlan = true
+            //
+            // A push, not a sheet. Settings is itself a sheet, and a second
+            // `.sheet` modifier on this same Section (there is already one for
+            // the mail composer) presented and then immediately dismissed
+            // itself -- measured on the simulator, not assumed.
+            NavigationLink {
+                PastePlanLinkView()
+            } label: {
+                Label("Paste a Plan Link", systemImage: "square.and.arrow.down")
             }
 
             Text("A plan your coach sends comes as a link. Tap it if it opens LIFT, "
                  + "share it to LIFT from the message it arrived in, or paste it here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-        .sheet(isPresented: $pastingPlan) {
-            PastePlanLinkView()
-                .liftAppearance()
         }
         .task(id: "\(weeks)-\(itemisedFood)-\(shareLastRoute)-\(days.count)-\(food.count)-\(outdoor.filter { $0.endedAt != nil }.count)") {
             steps = (try? await health.dailyStepCounts(days: weeks * 7)) ?? [:]

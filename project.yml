@@ -73,6 +73,12 @@ targets:
           - group.com.dugcanlift.lift
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        # Kept for the day this is signed by a paid team. A free Apple
+        # Personal Team cannot sign it at all, which is why `make device-build`
+        # swaps in Config/Lift-free.entitlements and why a coach's plan link
+        # also reaches LIFT three ways that need no entitlement: the
+        # dugcanliftlift:// scheme below, Paste a Plan Link, and the LiftShare
+        # extension.
         com.apple.developer.associated-domains:
           - applinks:www.dugcanlift.com
     info:
@@ -106,6 +112,17 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+
+        # dugcanliftlift://plan#1z... opens LIFT and shows a coach's plan, the
+        # same as Paste a Plan Link (LiftApp.onOpenURL -> PlanLinkIntake.open).
+        # A custom scheme needs no entitlement, so it works on a free team
+        # where Universal Links do not. Deliberately not `dugcanliftcoach`,
+        # which is Coach iOS's scheme: a scheme claimed by two apps on one
+        # phone goes to whichever iOS picks.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.dugcanlift.lift.plan
+            CFBundleURLSchemes:
+              - dugcanliftlift
 
         # The app uses only standard HTTPS (URLSession, fetching a recipe page
         # the person pastes), which is exempt from export documentation.

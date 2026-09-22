@@ -99,8 +99,8 @@ sim: ## Boot the simulator and open its window
 		|| echo "Booted $(SIM). No simulator window app found; the app still installs and launches."
 
 run: build sim ## Build, install and launch on the simulator
-	@xcrun simctl install booted "$(APP)"
-	@xcrun simctl launch booted $(BUNDLE_ID)
+	@xcrun simctl install "$(SIM)" "$(APP)"
+	@xcrun simctl launch "$(SIM)" $(BUNDLE_ID)
 
 devices: ## List connected iPhones and iPads
 	@xcrun devicectl list devices
@@ -127,12 +127,12 @@ device: device-build ## Build, install and launch on a connected device
 	@echo "before installing a build that changes the schema."
 
 logs: ## Tail the app's log output
-	@xcrun simctl spawn booted log stream \
+	@xcrun simctl spawn "$(SIM)" log stream \
 		--predicate 'subsystem CONTAINS "$(BUNDLE_ID)"' \
 		--level debug
 
 reset-sim: ## Wipe simulator data — the reliable way to test a fresh install
-	@xcrun simctl uninstall booted $(BUNDLE_ID) 2>/dev/null || true
+	@xcrun simctl uninstall "$(SIM)" $(BUNDLE_ID) 2>/dev/null || true
 
 clean: ## Remove build artifacts and the generated project
 	@rm -rf $(DERIVED) $(DEVICE_DERIVED) Lift.xcodeproj

@@ -17,6 +17,7 @@ struct ExerciseProgressionView: View {
 
     @AppStorage("weightUnit") private var unitRaw = WeightUnit.pounds.rawValue
     @State private var weeks = 8
+    @Environment(\.colorScheme) private var colorScheme
 
     @Query(sort: \WorkoutDay.date) private var days: [WorkoutDay]
 
@@ -111,6 +112,10 @@ struct ExerciseProgressionView: View {
                 // there is more than one line to tell apart.
                 .chartLegend(series.count > 1 ? .visible : .hidden)
                 .frame(height: 220)
+                // Charts keeps the axis labels it drew in the old appearance:
+                // after a switch to light the y-axis numbers stayed near-white
+                // on a cream card. A new identity per scheme redraws them.
+                .id(colorScheme)
 
                 ForEach(series) { line in
                     Text("\(label(for: line.side)) · \(line.sessionCount) session\(line.sessionCount == 1 ? "" : "s")"

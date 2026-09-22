@@ -253,6 +253,15 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
               let mealType = MealType(rawValue: payload.meal.lowercased())
         else { return false }
 
+        // Asked again after the await: a second copy of this food (the
+        // message and its queued fallback, arriving together) can have been
+        // stored while this one was being resolved. Nothing below suspends,
+        // so on the main actor this check and `record` cannot be split.
+        if WatchFoodLogReceipts.contains(envelope.workoutID, in: defaults) {
+            acknowledge(envelope)
+            return true
+        }
+
         let entry = FoodEntry(
             foodRefID: payload.foodRefID,
             name: resolved.name,

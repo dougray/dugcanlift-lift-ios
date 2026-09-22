@@ -18,6 +18,19 @@ final class WatchSyncReceiverTests: XCTestCase {
         return ModelContext(container)
     }
 
+    /// Its own `UserDefaults` suite per test, so food receipts never land in
+    /// the test host's real defaults. Every receiver built here also gets a
+    /// sender that goes nowhere: the test host is LIFT itself, whose
+    /// `WCSession` is really activated on a simulator paired with a watch,
+    /// and acknowledgements sent from a test would reach that watch.
+    private func isolatedDefaults(_ name: String = #function) -> UserDefaults {
+        let suite = "WatchSyncReceiverTests.\(name)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
     private func foodLoggedEnvelope(
         foodRefID: String = "usda:174608",
         amountGrams: Double = 150,
@@ -46,7 +59,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     /// roll, oven-roasted, 134.0 kcal/100g.
     func testFoodLoggedInsertsFoodEntryWithResolvedNutrition() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "usda:174608", amountGrams: 150, meal: "lunch")
 
         let handled = await sut.handle(envelope)
@@ -76,7 +89,7 @@ final class WatchSyncReceiverTests: XCTestCase {
         context.insert(recipe)
         try context.save()
 
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: recipe.foodRefID, amountGrams: 200, meal: "dinner")
 
         let handled = await sut.handle(envelope)
@@ -93,7 +106,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testUnknownFoodRefIDIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "not-a-real-ref-id")
 
         let handled = await sut.handle(envelope)
@@ -105,7 +118,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testUnknownMealTypeIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "usda:174608", meal: "brunch")
 
         let handled = await sut.handle(envelope)
@@ -117,7 +130,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testMissingFoodLogPayloadIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         // event is .foodLogged but foodLog itself is nil — malformed on the
         // wire, but SyncEnvelope's own decoding still lets it construct.
         let envelope = SyncEnvelope(
@@ -140,7 +153,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testNonFoodEventIsANoOp() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = SyncEnvelope(
             event: .sessionFinished,
             workoutID: UUID(),
@@ -276,13 +289,6 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     // MARK: - Stored once, and acknowledged
 
-    private func isolatedDefaults(_ name: String = #function) -> UserDefaults {
-        let suite = "WatchSyncReceiverTests.\(name)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
-        return defaults
-    }
 
     /// The acknowledgement is what takes the food out of the watch's
     /// standalone log, so a later export does not count it twice.

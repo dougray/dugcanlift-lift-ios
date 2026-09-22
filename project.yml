@@ -22,7 +22,14 @@ settings:
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: "QG57FJM5C8"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "1.0.0"
+    # The one version for everything this project ships: the app, its
+    # widgets and its watch app. App Store validation rejects an embedded
+    # watch app or extension whose CFBundleShortVersionString differs from
+    # the app's, so every target's Info.plist reads these two settings rather
+    # than carrying a literal. "1.0" is what the app has always reported:
+    # this said "1.0.0" while XcodeGen wrote a literal "1.0" into
+    # Lift-Info.plist, so the setting reached nothing.
+    MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     # SwiftData @Model classes are not Sendable. `complete` buries real errors
     # under concurrency warnings during scaffolding — tighten once it builds.
@@ -88,6 +95,8 @@ targets:
         # Xcode generates the Info.plist, and this target supplies its own.
         UILaunchScreen: {}
         CFBundleDisplayName: Lift
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
 
         # Declared rather than left to the default, because iPad multitasking
         # (Split View, Slide Over, Stage Manager) requires all four iPad
@@ -170,6 +179,8 @@ targets:
       path: Config/LiftWidgets-Info.plist
       properties:
         CFBundleDisplayName: Lift
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension

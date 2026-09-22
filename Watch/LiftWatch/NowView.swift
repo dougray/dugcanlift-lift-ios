@@ -1,5 +1,6 @@
 import LiftKit
 import SwiftUI
+import LiftSync
 
 /// The guided session's first page: what to lift, which set it is, what the
 /// prescription says in digits big enough to read mid-set, what was actually

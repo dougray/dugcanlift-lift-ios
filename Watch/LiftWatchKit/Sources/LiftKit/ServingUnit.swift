@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// Mirrors the phone app's `ServingUnit`. A logged amount is always stored
 /// canonically in grams (see `FoodLogPayload.amountGrams`); the unit is a

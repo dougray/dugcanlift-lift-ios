@@ -1,8 +1,8 @@
 import XCTest
-@testable import LiftKit
+@testable import LiftSync
 
-/// `shared/contracts/recent-foods-snapshot.schema.json` is the wire contract
-/// with the phone. These tests pin the encoding to that schema's field names
+/// `Watch/contracts/recent-foods-snapshot.schema.json` is the wire contract
+/// between the phone, which encodes this type, and the watch, which decodes it. These tests pin the encoding to that schema's field names
 /// and its `date-time` format for `generatedAt`, the same way
 /// `SyncEnvelopeTests` pins `SyncEnvelope`.
 final class RecentFoodsSnapshotTests: XCTestCase {
@@ -48,16 +48,36 @@ final class RecentFoodsSnapshotTests: XCTestCase {
             ],
             "generatedAt": "2026-09-10T08:00:00Z"
         ]
-        let snapshot = try RecentFoodsSnapshot(applicationContext: context)
+        let snapshot = try RecentFoodsSnapshot(messageBody: context)
         XCTAssertEqual(snapshot.items.count, 1)
         XCTAssertEqual(snapshot.items[0].foodRefID, "off:12345")
         XCTAssertEqual(snapshot.items[0].lastAmountGrams, 170.0)
         XCTAssertEqual(snapshot.generatedAt, Date(timeIntervalSince1970: 1_789_027_200))
     }
 
+    func testMessageBodyRoundTrips() throws {
+        // The phone's half: what `WatchSyncReceiver.pushRecentFoodsSnapshot`
+        // hands to `updateApplicationContext` must come back out equal.
+        let snapshot = RecentFoodsSnapshot(
+            items: [RecentFoodsSnapshot.Item(foodRefID: "usda:174608",
+                                             displayName: "Chicken breast, roll, oven-roasted",
+                                             lastAmountGrams: 150)],
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        XCTAssertEqual(try RecentFoodsSnapshot(messageBody: try snapshot.messageBody()), snapshot)
+    }
+
+    func testEncodesGeneratedAtAsISO8601NotNumericTimestamp() throws {
+        // The bug already caught once for SyncEnvelope: a bare JSONEncoder()
+        // has no .iso8601 strategy and would send `generatedAt` as a number.
+        let body = try RecentFoodsSnapshot(items: [], generatedAt: Date(timeIntervalSince1970: 0))
+            .messageBody()
+        XCTAssertEqual(body["generatedAt"] as? String, "1970-01-01T00:00:00Z")
+    }
+
     func testEmptyItemsListDecodes() throws {
         let context: [String: Any] = ["items": [], "generatedAt": "2026-09-10T08:00:00Z"]
-        let snapshot = try RecentFoodsSnapshot(applicationContext: context)
+        let snapshot = try RecentFoodsSnapshot(messageBody: context)
         XCTAssertTrue(snapshot.items.isEmpty)
     }
 
@@ -85,7 +105,7 @@ final class RecentFoodsSnapshotTests: XCTestCase {
             "generatedAt": "2026-09-10T08:00:00Z",
             "extra": true
         ]
-        let snapshot = try RecentFoodsSnapshot(applicationContext: context)
+        let snapshot = try RecentFoodsSnapshot(messageBody: context)
         XCTAssertNil(snapshot.items[0].lastAmountGrams)
     }
 
@@ -117,7 +137,7 @@ final class RecentFoodsSnapshotTests: XCTestCase {
         // present. The other tests either build an Item directly or decode a
         // hand-written literal, so neither would notice if the Swift property
         // names drifted away from the names
-        // `shared/contracts/recent-foods-snapshot.schema.json` pins — the
+        // `Watch/contracts/recent-foods-snapshot.schema.json` pins — the
         // encoder and the literal would simply drift together. This is the
         // test that fails when that happens.
         let macros = WatchFood(name: "Oats, rolled, dry", kcal: 379, protein: 13.2,

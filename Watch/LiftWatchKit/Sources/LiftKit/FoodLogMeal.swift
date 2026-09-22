@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// Convenience type over `FoodLogPayload.meal`'s plain wire string — the
 /// schema doesn't constrain `meal` to an enum, but a `CaseIterable` type

@@ -1,5 +1,6 @@
 import LiftKit
 import SwiftUI
+import LiftSync
 
 /// Digital Crown entry, mirroring `LogSetView`'s weight stepper exactly —
 /// the user is dialing in an amount by feel, not typing a number.

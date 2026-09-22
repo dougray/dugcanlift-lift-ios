@@ -1,9 +1,11 @@
 import XCTest
-@testable import LiftKit
+@testable import LiftSync
 
-/// `shared/contracts/workout-sync.schema.json` is the wire contract shared with
-/// Wear OS. These tests pin the encoding to the field names and enum values in
-/// that schema so the two platforms cannot drift apart silently.
+/// `Watch/contracts/workout-sync.schema.json` is the wire contract between
+/// the phone and the watch. Both compile this one `SyncEnvelope`, but a phone
+/// and a watch can be running different builds, so these tests pin the
+/// encoding to the field names and enum values in that schema: a rename here
+/// is a break with every build already installed.
 final class SyncEnvelopeTests: XCTestCase {
 
     private func json(_ envelope: SyncEnvelope) throws -> [String: Any] {
@@ -153,6 +155,17 @@ final class SyncEnvelopeTests: XCTestCase {
         let data = try SyncEnvelope.encoder.encode(envelope)
         let decoded = try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
         XCTAssertEqual(decoded, envelope)
+        XCTAssertNil(decoded.foodLog)
+    }
+
+    func testExplicitNullFoodLogDecodesAsNil() throws {
+        // Another encoder might send `"foodLog": null` rather than omitting
+        // the key. decodeIfPresent must treat that the same as an absent key.
+        let data = Data("""
+        {"event":"WORKOUT_SYNC_ACK","workoutId":"6A2A8B6E-3D2F-4E77-9B4E-2C6A5E8C1D01",
+         "revision":2,"updatedAt":"1970-01-01T00:00:00Z","origin":"ios","foodLog":null}
+        """.utf8)
+        let decoded = try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
         XCTAssertNil(decoded.foodLog)
     }
 

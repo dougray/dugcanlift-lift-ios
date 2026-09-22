@@ -1,5 +1,6 @@
 import XCTest
 @testable import LiftKit
+import LiftSync
 
 /// The two ways this store used to destroy a whole log, and the guarantees that
 /// replaced them. Issue #4: a watch that has never been paired holds the only

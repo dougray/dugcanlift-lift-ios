@@ -1,5 +1,6 @@
 import LiftKit
 import SwiftUI
+import LiftSync
 
 /// Digital Crown entry rather than a keyboard — the user is holding a bar.
 struct LogSetView: View {

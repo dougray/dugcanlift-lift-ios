@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// One food the user logged on the watch, complete enough to stand alone.
 public struct LoggedFood: Codable, Equatable, Hashable, Sendable {

@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// The USDA SR Legacy library the PWA bundles (`lift/foods.json`), carried on
 /// the watch so a user who has never paired a LIFT iPhone can still log food.

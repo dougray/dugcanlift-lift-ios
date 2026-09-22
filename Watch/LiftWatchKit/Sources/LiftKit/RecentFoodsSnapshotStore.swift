@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// Caches the most recent `RecentFoodsSnapshot` the phone has pushed, so the
 /// watch's recent-foods list has something to show even before it talks to

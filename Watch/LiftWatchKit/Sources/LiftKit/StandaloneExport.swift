@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// Encodes the standalone food log into QR-sized base64url strings.
 ///

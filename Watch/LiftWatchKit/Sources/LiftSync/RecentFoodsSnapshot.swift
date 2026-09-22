@@ -2,11 +2,10 @@ import Foundation
 
 /// Pushed phone -> watch via `WCSession.updateApplicationContext` so the
 /// watch's local "recent foods" cache stays warm without a round trip.
-/// Matches `shared/contracts/recent-foods-snapshot.schema.json` field-for-
+/// Matches `Watch/contracts/recent-foods-snapshot.schema.json` field-for-
 /// field — not part of `SyncEnvelope`'s event shape, since this is a
-/// replace-in-place snapshot, not a discrete event. The phone side's own
-/// `RecentFoodsSnapshot` (a separate repo, `lift-ios`) is the counterpart
-/// this type must stay byte-for-byte compatible with.
+/// replace-in-place snapshot, not a discrete event. The phone encodes this
+/// same type (`WatchSyncReceiver.makeSnapshot`) and the watch decodes it.
 public struct RecentFoodsSnapshot: Codable, Equatable, Sendable {
     public struct Item: Codable, Equatable, Hashable, Sendable {
         public var foodRefID: String
@@ -45,12 +44,23 @@ public struct RecentFoodsSnapshot: Codable, Equatable, Sendable {
 }
 
 extension RecentFoodsSnapshot {
+    /// The `[String: Any]` dictionary `updateApplicationContext` sends, encoded
+    /// with `SyncEnvelope`'s own `.iso8601` encoder so `generatedAt` travels
+    /// as a date-time string like every other date in this contract, never
+    /// as a numeric `timeIntervalSinceReferenceDate`.
+    public func messageBody() throws -> [String: Any] {
+        let data = try SyncEnvelope.encoder.encode(self)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw SyncTransportError.malformedPayload
+        }
+        return object
+    }
+
     /// Bridges the `[String: Any]` dictionary `WCSessionDelegate.session(_:
-    /// didReceiveApplicationContext:)` actually hands over, reusing
-    /// `SyncEnvelope`'s own `.iso8601`-configured decoder so `generatedAt`
-    /// decodes the same way every date in this wire contract does.
-    public init(applicationContext: [String: Any]) throws {
-        let data = try JSONSerialization.data(withJSONObject: applicationContext)
+    /// didReceiveApplicationContext:)` actually hands over, decoding with
+    /// `SyncEnvelope`'s own `.iso8601` decoder.
+    public init(messageBody: [String: Any]) throws {
+        let data = try JSONSerialization.data(withJSONObject: messageBody)
         self = try SyncEnvelope.decoder.decode(RecentFoodsSnapshot.self, from: data)
     }
 }

@@ -58,8 +58,10 @@ final class PhoneSyncTransport: NSObject {
     /// takes, which matters for a plan request made as the app opens — the
     /// lifter is looking at the screen waiting for an answer. Anything else
     /// falls back to the queue, so being out of range costs latency rather
-    /// than the request.
-    func sendNow(_ envelope: SyncEnvelope) {
+    /// than the request. `onQueued` hears about the fall back from a failed
+    /// `sendMessage` (on WatchConnectivity's queue), so a caller that counted
+    /// on the fast answer knows it is not coming.
+    func sendNow(_ envelope: SyncEnvelope, onQueued: (() -> Void)? = nil) {
         guard let session else { return }
         guard let body = try? envelope.messageBody() else { return }
         guard session.isReachable else {
@@ -68,6 +70,7 @@ final class PhoneSyncTransport: NSObject {
         }
         session.sendMessage(body, replyHandler: nil) { _ in
             session.transferUserInfo(body)
+            onQueued?()
         }
     }
 }

@@ -238,7 +238,9 @@ final class WorkoutSessionModel: ObservableObject {
             revision: 1,
             updatedAt: .now,
             origin: .watchOS
-        ))
+        ), onQueued: { [weak self] in
+            Task { @MainActor in self?.planRequests.liveRequestFellBackToQueue() }
+        })
     }
 
     /// Applies a local edit, persists it, and tells the phone — in that order,

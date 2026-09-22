@@ -21,6 +21,10 @@ import Foundation
 ///   queued request may not be delivered for a long time.
 /// - A deliberate tap always goes (`force`). No plan today gets no reply at
 ///   all, so nothing here can know the earlier request was answered.
+/// - A request sent while reachable whose `sendMessage` then failed, and was
+///   queued instead (`liveRequestFellBackToQueue()`), counts as queued: the
+///   phone going out of reach mid-send and straight back is common on a
+///   wrist, and the reply the live request promised is not coming.
 ///
 /// A value type with no WatchConnectivity in it, so the rule is testable.
 public struct PlanRequestGate: Equatable, Sendable {
@@ -49,6 +53,12 @@ public struct PlanRequestGate: Equatable, Sendable {
         lastSentAt = now
         lastWasLive = reachable
         return true
+    }
+
+    /// The last request went out by `sendMessage`, which then failed and was
+    /// handed to `transferUserInfo`. It no longer holds off a reachable one.
+    public mutating func liveRequestFellBackToQueue() {
+        lastWasLive = false
     }
 }
 

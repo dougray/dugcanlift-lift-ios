@@ -24,6 +24,23 @@ extension PlanExercise {
     }
 }
 
+extension WorkoutPlan {
+
+    /// Whether this is a plan for `date`'s local calendar day. A plan with no
+    /// `scheduledFor` is not tied to a day and always is.
+    ///
+    /// The phone sends a plan when there is one and nothing when there is
+    /// not, so without this a plan received on Monday was still offered as
+    /// "Today" on Tuesday for as long as the app stayed alive, and a queued
+    /// Monday push that arrived on Tuesday would put it back.
+    public func isScheduled(for date: Date, calendar: Calendar = .current) -> Bool {
+        guard let scheduledFor else { return true }
+        let day = calendar.dateComponents([.year, .month, .day], from: date)
+        guard let year = day.year, let month = day.month, let dayOfMonth = day.day else { return false }
+        return scheduledFor == String(format: "%04d-%02d-%02d", year, month, dayOfMonth)
+    }
+}
+
 extension PrescribedSet {
 
     /// The weight alone — "185" — or `nil` when none is prescribed. Rounded

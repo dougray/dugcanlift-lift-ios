@@ -157,4 +157,36 @@ final class WorkoutPlanTests: XCTestCase {
         )
         XCTAssertEqual(LastPerformed(reps: 12).summary(unit: .pounds), "12 reps")
     }
+
+    // MARK: - Which day a plan is for
+
+    private var chicago: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        return calendar
+    }
+
+    private func plan(for day: String?) -> WorkoutPlan {
+        WorkoutPlan(name: "Push", source: .routine, scheduledFor: day, exercises: [])
+    }
+
+    func testAPlanIsForItsOwnLocalDayOnly() {
+        // 2026-09-22 08:00 in Chicago.
+        let tuesdayMorning = Date(timeIntervalSince1970: 1_790_082_000)
+        XCTAssertTrue(plan(for: "2026-09-22").isScheduled(for: tuesdayMorning, calendar: chicago))
+        XCTAssertFalse(plan(for: "2026-09-21").isScheduled(for: tuesdayMorning, calendar: chicago))
+        XCTAssertFalse(plan(for: "2026-09-23").isScheduled(for: tuesdayMorning, calendar: chicago))
+    }
+
+    /// The day is the wearer's local one, not UTC's: 23:30 on Monday in
+    /// Chicago is already Tuesday in UTC.
+    func testTheDayIsLocalNotUTC() {
+        let mondayLateEvening = Date(timeIntervalSince1970: 1_790_051_400) // 2026-09-21 23:30 CDT
+        XCTAssertTrue(plan(for: "2026-09-21").isScheduled(for: mondayLateEvening, calendar: chicago))
+        XCTAssertFalse(plan(for: "2026-09-22").isScheduled(for: mondayLateEvening, calendar: chicago))
+    }
+
+    func testAPlanWithNoDayIsAlwaysCurrent() {
+        XCTAssertTrue(plan(for: nil).isScheduled(for: .now))
+    }
 }

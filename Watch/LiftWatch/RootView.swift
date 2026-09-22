@@ -32,7 +32,7 @@ struct StartWorkoutView: View {
             // Today's plan, when the phone has pushed one. Everything below
             // it is unchanged: a day with no plan is the free-entry flow this
             // app has always had, in the same place on the same screen.
-            if let plan = session.plan {
+            if let plan = session.todaysPlan {
                 Section {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(plan.name)
@@ -66,7 +66,7 @@ struct StartWorkoutView: View {
                 }
                 // Asking is cheap and the answer is queued by the OS, so this
                 // works with the phone in a locker — it just arrives later.
-                Button(session.plan == nil ? "Get Today's Plan" : "Refresh Plan") {
+                Button(session.todaysPlan == nil ? "Get Today's Plan" : "Refresh Plan") {
                     session.requestPlan(force: true)
                 }
             }

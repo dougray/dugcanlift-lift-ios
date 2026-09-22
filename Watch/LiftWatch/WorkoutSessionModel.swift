@@ -27,6 +27,14 @@ final class WorkoutSessionModel: ObservableObject {
     /// Today's plan, as the phone last pushed it. `nil` is not a failure —
     /// it is the free-entry flow this app has always had, unchanged.
     @Published private(set) var plan: WorkoutPlan?
+
+    /// `plan`, when it is today's. The phone sends nothing on a day with no
+    /// plan, so a plan received yesterday is still held here and must not be
+    /// offered as today's workout.
+    var todaysPlan: WorkoutPlan? {
+        guard let plan, plan.isScheduled(for: .now) else { return nil }
+        return plan
+    }
     /// Where the lifter is inside that plan. Non-nil only while a planned
     /// workout is actually being trained.
     @Published private(set) var guided: GuidedSession?
@@ -103,6 +111,9 @@ final class WorkoutSessionModel: ObservableObject {
     /// blank sets, one the phone would not build — can be put in front of
     /// the app without a phone at all.
     ///
+    /// A plan's `scheduledFor` must be today, or absent, or `receivePlan`
+    /// sets it aside as yesterday's.
+    ///
     /// It deliberately goes through `receive(_:)`, the same method the
     /// transport calls, rather than assigning `plan` directly: the decode,
     /// the revision rule and the guided start are then the real ones, and
@@ -133,7 +144,7 @@ final class WorkoutSessionModel: ObservableObject {
     /// the outbox and `SESSION_FINISHED` behave exactly as they do for a
     /// workout typed in from nothing.
     func startPlannedWorkout() {
-        guard let plan, !plan.exercises.isEmpty else { return }
+        guard let plan = todaysPlan, !plan.exercises.isEmpty else { return }
         let exercises = plan.exercises.enumerated().map { index, exercise in
             DraftExercise(
                 // The plan carries no exercise ids (PLAN-FORMAT gives
@@ -387,6 +398,9 @@ final class WorkoutSessionModel: ObservableObject {
     /// effect the next time a planned workout is started.
     private func receivePlan(_ envelope: SyncEnvelope) {
         guard let pushed = envelope.plan else { return }
+        // A queued push can arrive a day late. It is not today's plan, and
+        // accepting it would replace one that is.
+        guard pushed.isScheduled(for: .now) else { return }
         if envelope.workoutID == planID, envelope.revision <= planRevision { return }
         planID = envelope.workoutID
         planRevision = envelope.revision

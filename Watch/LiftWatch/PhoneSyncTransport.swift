@@ -10,6 +10,9 @@ final class PhoneSyncTransport: NSObject {
     var onEnvelope: ((SyncEnvelope) -> Void)?
     var onReachabilityChange: ((Bool) -> Void)?
     var onApplicationContext: (([String: Any]) -> Void)?
+    /// A `transferUserInfo` that finished with an error, on WatchConnectivity's
+    /// queue, so its sender can hand it over again later.
+    var onTransferFailed: ((SyncEnvelope) -> Void)?
 
     private let session: WCSession?
     /// Written from WatchConnectivity's delegate callbacks, which arrive on a
@@ -97,6 +100,13 @@ extension PhoneSyncTransport: WCSessionDelegate {
         reachabilityLock.unlock()
         guard let changed else { return }
         onReachabilityChange?(changed)
+    }
+
+    func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer,
+                 error: Error?) {
+        guard error != nil,
+              let envelope = try? SyncEnvelope(messageBody: userInfoTransfer.userInfo) else { return }
+        onTransferFailed?(envelope)
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {

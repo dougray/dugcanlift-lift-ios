@@ -88,7 +88,11 @@ enum PlanImporter {
         return (try? context.fetch(descriptor).isEmpty) == false
     }
 
-    static func accept(_ payload: PlanPayload, hash: String, in context: ModelContext) throws {
+    /// - Parameter defaults: where the plan's sides and the per-side logging
+    ///   choice are kept (`PlanSides`, `PerSideLogging`). Written only once
+    ///   the store has saved, so a failed accept leaves neither behind.
+    static func accept(_ payload: PlanPayload, hash: String, in context: ModelContext,
+                       defaults: UserDefaults = .standard) throws {
         guard !isAlreadyImported(hash, in: context) else { return }
 
         var createdRecipeIDs: [UUID] = []
@@ -155,6 +159,11 @@ enum PlanImporter {
         }
 
         var createdRoutineIDs: [UUID] = []
+        // PLAN-FORMAT "Sides": `b: 1` and a set's sixth tuple position. Kept
+        // beside the routine rather than on it -- see `PlanSides`.
+        var sides = PlanSides.load(from: defaults)
+        var sidesChanged = false
+        var eachSideLifts: [String] = []
 
         for planWorkout in payload.w ?? [] {
             let routine = Routine(name: planWorkout.n)
@@ -166,7 +175,7 @@ enum PlanImporter {
                     note: planExercise.c
                 )
                 exercise.prescribedSets = planExercise.s.enumerated().map { setIndex, tuple in
-                    RoutinePrescribedSet(
+                    let set = RoutinePrescribedSet(
                         orderIndex: setIndex,
                         targetWeightKg: value(tuple, 0).map { WeightUnit.pounds.toKilograms($0) },
                         targetReps: value(tuple, 1).map { Int($0) },
@@ -174,6 +183,18 @@ enum PlanImporter {
                         targetDurationSec: value(tuple, 3).map { Int($0) },
                         targetDistanceMeters: value(tuple, 4)
                     )
+                    // Masked, never compared: no sixth position, 0 or 3 in
+                    // bits 1-2 is both.
+                    if let side = SetSide(planSideBits: PlanSetFlags.sideBits(of: tuple)) {
+                        sides.sides[set.id] = side
+                        sidesChanged = true
+                    }
+                    return set
+                }
+                if planExercise.isEachSide {
+                    sides.eachSide.insert(exercise.id)
+                    sidesChanged = true
+                    eachSideLifts.append(ExerciseKey.make(name: planExercise.n, equipment: planExercise.q))
                 }
                 return exercise
             }
@@ -208,6 +229,16 @@ enum PlanImporter {
             // call, even though nothing was actually persisted.
             context.rollback()
             throw error
+        }
+
+        if sidesChanged { sides.save(to: defaults) }
+        // An each-side exercise turns on "Log left and right separately" for
+        // that lift when the plan is accepted, as LIFT web does. The lifter can
+        // turn it back off; that choice is theirs from then on.
+        if !eachSideLifts.isEmpty {
+            var raw = defaults.string(forKey: PerSideLogging.storageKey) ?? "{}"
+            for key in eachSideLifts { raw = PerSideLogging.setting(true, for: key, in: raw) }
+            defaults.set(raw, forKey: PerSideLogging.storageKey)
         }
     }
 

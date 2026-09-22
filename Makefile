@@ -117,7 +117,7 @@ FREE_ENTITLEMENTS := CODE_SIGN_ENTITLEMENTS='$$(FREE_TEAM_ENTITLEMENTS:default=$
 # Falls back to raw output if it isn't installed.
 PRETTY := $(shell command -v xcbeautify 2>/dev/null || echo cat)
 
-.PHONY: help project build test watch-test run clean sim logs reset-sim doctor devices device device-build signing watch watch-sim watch-run watch-device
+.PHONY: help project build test app-test watch-test run clean sim logs reset-sim doctor devices device device-build signing watch watch-sim watch-run watch-device
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -134,7 +134,9 @@ build: project ## Build for the simulator
 		-derivedDataPath $(DERIVED) \
 		build | $(PRETTY)
 
-test: project watch-test ## Run unit tests: the app's, then the watch package's
+test: app-test watch-test ## Run every unit test: the app's and the watch package's
+
+app-test: project ## Run the app's unit tests on the iPhone simulator
 	@set -o pipefail && xcodebuild \
 		-project Lift.xcodeproj \
 		-scheme $(SCHEME) \

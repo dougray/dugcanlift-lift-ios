@@ -110,7 +110,17 @@ backfilled: every set logged before this is two-sided, which is honest, and no
 decoder anywhere should guess a side from an exercise name. Whether a lift is
 logged per limb is the lifter's choice, kept in `perSideExercises` keyed
 `name|equipment` — `UnilateralGuess` only pre-ticks the box, and a "no" on a
-name it says yes to must stick.
+name it says yes to must stick. **Its terms are matched as whole words**, over
+a name with everything that is not a letter or a digit turned into a space:
+one list, shared term for term with LIFT web's `UNILATERAL_TERMS`
+(`lift/sides.js`), LIFT for Android's `PerSideLogging` and Coach iPhone's
+`UnilateralGuess`, so change a term in all four or in none. It was a substring
+match until 2026-09, which pre-ticked a cold plunge for "lunge" — every
+singular and plural is listed rather than matched by prefix, and the "-ed"
+spellings too ("One-Legged Deadlift"), precisely because whole words cannot
+see a shorter term inside a longer word. No bundled exercise name reads
+differently either way; the names this gets wrong are the ones a coach types
+into a plan.
 
 **A lift's identity is name, equipment *and* side** wherever sets are grouped
 or charted (`LiftKey`), for the same reason equipment joined it: a left-arm row

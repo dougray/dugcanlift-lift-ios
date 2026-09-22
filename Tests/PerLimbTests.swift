@@ -491,12 +491,59 @@ final class PerLimbTests: XCTestCase {
     // MARK: - The per-exercise preference
 
     func testTheNamesGuessIsOnlyADefault() {
-        XCTAssertTrue(UnilateralGuess.looksUnilateral(name: "Bulgarian Split Squat"))
-        XCTAssertTrue(UnilateralGuess.looksUnilateral(name: "Single-Arm Dumbbell Row"))
-        XCTAssertTrue(UnilateralGuess.looksUnilateral(name: "Walking Lunge"))
-        XCTAssertTrue(UnilateralGuess.looksUnilateral(name: "Smith Single-Leg Split Squat"))
-        XCTAssertFalse(UnilateralGuess.looksUnilateral(name: "Barbell Bench Press"))
-        XCTAssertFalse(UnilateralGuess.looksUnilateral(name: "Deadlift"))
+        for name in ["Bulgarian Split Squat", "Single-Arm Dumbbell Row", "One-Arm Cable Row",
+                     "Single Leg Deadlift", "Split Squat", "Split Squats", "Pistol Squat",
+                     "Walking Lunge", "Reverse Lunges", "Step-Up", "Step Ups", "Stepups",
+                     "Smith Single-Leg Split Squat", "Unilateral Leg Press",
+                     "Single Handed Farmer Carry", "Single Limb Press", "1 Arm Row", "1-Leg Bridge"] {
+            XCTAssertTrue(UnilateralGuess.looksUnilateral(name: name), name)
+        }
+        for name in ["Barbell Bench Press", "Back Squat", "Deadlift", "Lat Pulldown", "Plank",
+                     "Leg Press", "Arm Curl", "Armed Forces Press"] {
+            XCTAssertFalse(UnilateralGuess.looksUnilateral(name: name), name)
+        }
+    }
+
+    /// Why the terms are matched as whole words, and why both numbers of each
+    /// are listed rather than looked for anywhere in the name. A substring
+    /// rule ticks a cold plunge for "lunge" and a stepmill for "step up" --
+    /// and "Left and right separately" arriving pre-ticked on an ice bath is
+    /// what sent us here. Ported case for case from LIFT web's
+    /// `lift/sides.test.mjs` and LIFT for Android's `PerSideLoggingTest`.
+    func testATermInsideALongerWordIsNotThatTerm() {
+        for name in ["Cold Plunge", "Stepmill", "Plunger Press", "Bulgarianesque"] {
+            XCTAssertFalse(UnilateralGuess.looksUnilateral(name: name), name)
+        }
+    }
+
+    func testTheEdSpellingsCountToo() {
+        for name in ["Kettlebell One-Legged Deadlift", "One-Legged Cable Kickback",
+                     "Single-Legged Press", "One-Armed Row", "Single-Armed Carry"] {
+            XCTAssertTrue(UnilateralGuess.looksUnilateral(name: name), name)
+        }
+    }
+
+    func testPunctuationAndCaseAreNotPartOfTheName() {
+        for name in ["SINGLE_ARM ROW", "single-arm row", "Single  Arm   Row", "  Single Arm Row  "] {
+            XCTAssertTrue(UnilateralGuess.looksUnilateral(name: name), name)
+        }
+        XCTAssertFalse(UnilateralGuess.looksUnilateral(name: ""))
+    }
+
+    /// The term list is one list across four builds: LIFT web's
+    /// `UNILATERAL_TERMS` (`lift/sides.js`), LIFT for Android's
+    /// `PerSideLogging.UNILATERAL_TERMS`, Coach iPhone's `UnilateralGuess` and
+    /// this. Pinned here so a term added to one is noticed by the others.
+    func testTheTermListIsTheOneTheOtherThreeBuildsCarry() {
+        XCTAssertEqual(UnilateralGuess.terms, [
+            "single arm", "one arm", "1 arm", "single handed",
+            "single leg", "one leg", "1 leg", "single limb",
+            "one legged", "single legged", "one armed", "single armed",
+            "bulgarian", "split squat", "split squats",
+            "pistol", "pistols", "lunge", "lunges",
+            "step up", "step ups", "stepup", "stepups",
+            "unilateral",
+        ])
     }
 
     func testTheLiftersOwnAnswerOutranksTheGuessInBothDirections() {
@@ -526,6 +573,35 @@ final class PerLimbTests: XCTestCase {
                        "a cable row and a machine row are not the same lift")
         // Capitalisation is a spelling, not an identity.
         XCTAssertTrue(PerSideLogging.effective(name: "ROW", equipment: "Cable", in: raw))
+    }
+
+    /// A preference written by the build with the substring rule is a real
+    /// answer and is read back unchanged: narrowing the guess re-keys nothing
+    /// and forgets nothing. The blob below is exactly what `perSideExercises`
+    /// held after a lifter tapped the box on those two lifts.
+    func testALiftTheLifterHasAlreadySetIsUntouchedByTheNarrowerGuess() {
+        let writtenByTheOldBuild =
+            #"{"cold plunge|body only":true,"walking lunge|dumbbell":false,"bench press|barbell":true}"#
+        XCTAssertTrue(
+            PerSideLogging.effective(name: "Cold Plunge", equipment: "body only",
+                                     in: writtenByTheOldBuild),
+            "a yes the lifter gave survives the name no longer guessing yes")
+        XCTAssertFalse(
+            PerSideLogging.effective(name: "Walking Lunge", equipment: "dumbbell",
+                                     in: writtenByTheOldBuild),
+            "and a no on a name the guess still says yes to")
+        XCTAssertTrue(
+            PerSideLogging.effective(name: "Bench Press", equipment: "barbell",
+                                     in: writtenByTheOldBuild))
+
+        // Only a lift with no saved answer follows the guess, and that is the
+        // only thing this change moves.
+        XCTAssertFalse(PerSideLogging.effective(name: "Cold Plunge", equipment: "body only",
+                                                in: "{}"))
+
+        // The keys themselves are untouched: same blob out, same blob in.
+        XCTAssertEqual(PerSideLogging.decode(writtenByTheOldBuild).keys.sorted(),
+                       ["bench press|barbell", "cold plunge|body only", "walking lunge|dumbbell"])
     }
 
     func testAnUnreadablePreferenceBlobIsEmptyRatherThanFatal() {

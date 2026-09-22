@@ -17,6 +17,7 @@ struct OutdoorActivityListView: View {
             ForEach(activities) { activity in
                 NavigationLink {
                     OutdoorActivityReviewView(activity: activity)
+                        .followsWindowAppearance()
                 } label: {
                     row(for: activity)
                 }

@@ -117,9 +117,11 @@ struct ExportFoodsView: View {
     }
 
     /// "Nothing logged" and "nothing exportable" are different states: a
-    /// paired user can log foods every one of which lacks macros today
-    /// (LIFT iOS doesn't populate `nutritionPer100g` yet), and telling them
-    /// their log is empty would contradict what they just did.
+    /// paired user can log foods every one of which lacks macros (LIFT for
+    /// iPhone sends none for a food with no gram amount or no fibre figure),
+    /// and telling them their log is empty would contradict what they just
+    /// did. A skipped food the phone has acknowledged no longer counts: it
+    /// is in LIFT for iPhone, so nothing was lost.
     private var emptyStateMessage: String {
         exportEmptyMessage(skippedCount: session.foodLog.skippedCount)
     }

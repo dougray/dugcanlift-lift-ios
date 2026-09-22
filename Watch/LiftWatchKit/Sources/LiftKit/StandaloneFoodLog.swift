@@ -7,12 +7,21 @@ public struct LoggedFood: Codable, Equatable, Hashable, Sendable {
     public var grams: Double
     public var meal: FoodLogMeal
     public var loggedAt: Date
+    /// The `workoutId` of the `FOOD_LOGGED` envelope that carried this food
+    /// to the phone, so the phone's acknowledgement can find it again
+    /// (`StandaloneFoodLog.acknowledge`). `nil` for a food that was never
+    /// sent — one from the bundled library, which has no `foodRefID` the
+    /// phone could resolve — and for everything logged before this existed.
+    /// Optional, so a log written by an older build still decodes.
+    public var syncID: UUID?
 
-    public init(food: WatchFood, grams: Double, meal: FoodLogMeal, loggedAt: Date) {
+    public init(food: WatchFood, grams: Double, meal: FoodLogMeal, loggedAt: Date,
+                syncID: UUID? = nil) {
         self.food = food
         self.grams = grams
         self.meal = meal
         self.loggedAt = loggedAt
+        self.syncID = syncID
     }
 }
 
@@ -40,6 +49,18 @@ public func exportEmptyMessage(skippedCount: Int) -> String {
 /// `UserDefaults`-backed, following `RecentFoodsSnapshotStore` — the repo's
 /// only persistence pattern.
 ///
+/// **A food the phone has stored leaves this log.** A food logged from the
+/// phone's recent list goes to LIFT for iPhone as `FOOD_LOGGED` *and* is kept
+/// here. Once the phone has stored it, it answers with a `WORKOUT_SYNC_ACK`
+/// carrying the same id, and `acknowledge(syncID:)` removes it: left here, a
+/// later QR export would put the same meal into the web app a second time,
+/// and the lifter's totals would count it twice. Nothing is removed on the
+/// strength of having *sent* it. `transferUserInfo` can sit in the OS queue
+/// for hours, or for ever if LIFT is deleted from the phone first, and a
+/// food only this watch knows about must stay exportable until the phone
+/// says it has it. If an acknowledgement is lost the food stays here, which
+/// can at worst export it twice; the opposite rule could lose it.
+///
 /// **Nothing here deletes data it does not understand.** Until a code is
 /// scanned, this store is the only copy of the log that exists anywhere, so an
 /// overwrite is permanent. Two rules follow from that, and both were defects
@@ -62,6 +83,9 @@ public final class StandaloneFoodLog {
     private let defaults: UserDefaults
     private let key = "com.dugcanlift.lift.standaloneFoodLog"
     private let skippedCountKey = "com.dugcanlift.lift.standaloneFoodLog.skippedCount"
+    /// The sync ids of skipped foods that went to the phone, so the phone's
+    /// acknowledgement can take them back out of `skippedCount`.
+    private let skippedPendingKey = "com.dugcanlift.lift.standaloneFoodLog.skippedPending"
     /// Where a blob that could not be parsed at all is set aside, so that
     /// replacing it is never the same thing as destroying it.
     private let quarantineKey = "com.dugcanlift.lift.standaloneFoodLog.unreadable"
@@ -100,13 +124,51 @@ public final class StandaloneFoodLog {
         defaults.integer(forKey: skippedCountKey)
     }
 
-    public func recordSkipped() {
+    /// `syncID` is the `FOOD_LOGGED` id when the food also went to the
+    /// phone. Once the phone acknowledges it, the food is in LIFT for iPhone
+    /// and nothing was lost, so it stops counting as skipped.
+    public func recordSkipped(syncID: UUID? = nil) {
         defaults.set(skippedCount + 1, forKey: skippedCountKey)
+        if let syncID {
+            var pending = skippedPending
+            pending.append(syncID.uuidString)
+            defaults.set(Array(pending.suffix(maxEntries)), forKey: skippedPendingKey)
+        }
+    }
+
+    private var skippedPending: [String] {
+        defaults.stringArray(forKey: skippedPendingKey) ?? []
+    }
+
+    /// The phone has stored the food sent under `syncID`: remove it from the
+    /// log, or from the skipped count if it was never retained here. Returns
+    /// whether anything changed. An id this log does not hold — a workout's
+    /// acknowledgement, or a repeat of one already applied — changes nothing.
+    @discardableResult
+    public func acknowledge(syncID: UUID) -> Bool {
+        var changed = false
+
+        var stored = load()
+        if let index = stored.entries.firstIndex(where: { $0.syncID == syncID }) {
+            stored.entries.remove(at: index)
+            write(stored)
+            changed = true
+        }
+
+        var pending = skippedPending
+        if let index = pending.firstIndex(of: syncID.uuidString) {
+            pending.remove(at: index)
+            defaults.set(pending, forKey: skippedPendingKey)
+            defaults.set(max(0, skippedCount - 1), forKey: skippedCountKey)
+            changed = true
+        }
+        return changed
     }
 
     public func clear() {
         defaults.removeObject(forKey: key)
         defaults.removeObject(forKey: skippedCountKey)
+        defaults.removeObject(forKey: skippedPendingKey)
         defaults.removeObject(forKey: quarantineKey)
     }
 

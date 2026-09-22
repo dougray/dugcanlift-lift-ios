@@ -50,21 +50,26 @@ struct FoodAmountEntryView: View {
 
             Section {
                 Button("Log") {
-                    session.enqueueFoodLogged(
+                    let syncID = session.enqueueFoodLogged(
                         foodRefID: item.foodRefID,
                         amountGrams: unit.toGrams(amount),
                         meal: meal
                     )
-                    // Also retain it locally. An item cached before macros
-                    // were added has none, and an entry with unknown macros
-                    // is skipped rather than exported as a zero-calorie meal.
-                    // The skip is still counted, so Export Foods can tell the
-                    // user "nothing exportable yet" apart from "nothing
-                    // logged" -- see `StandaloneFoodLog.skippedCount`.
+                    // Also retain it locally, until the phone acknowledges
+                    // it under `syncID` (see `StandaloneFoodLog`): delivery
+                    // can take hours, or never come, and until then this
+                    // watch may hold the only copy. An item without macros
+                    // (the phone sends none when it has no gram amount or no
+                    // fibre figure) is skipped rather than exported as a
+                    // zero-calorie meal. The skip is still counted, so
+                    // Export Foods can tell the user "nothing exportable
+                    // yet" apart from "nothing logged" -- see
+                    // `StandaloneFoodLog.skippedCount`.
                     if let food = item.watchFood {
-                        session.recordLocally(food: food, grams: unit.toGrams(amount), meal: meal)
+                        session.recordLocally(food: food, grams: unit.toGrams(amount),
+                                              meal: meal, syncID: syncID)
                     } else {
-                        session.foodLog.recordSkipped()
+                        session.foodLog.recordSkipped(syncID: syncID)
                     }
                     dismiss()
                 }

@@ -34,9 +34,17 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     static private(set) var shared: WatchSyncReceiver?
 
     private let context: ModelContext
+    private let defaults: UserDefaults
+    /// Where an outgoing envelope goes. `nil` is WatchConnectivity
+    /// (`sendOverSession`); a test passes a closure to see what was sent,
+    /// since no `WCSession` activates in a unit test process.
+    private let sender: ((SyncEnvelope) -> Void)?
 
-    init(context: ModelContext) {
+    init(context: ModelContext, defaults: UserDefaults = .standard,
+         sender: ((SyncEnvelope) -> Void)? = nil) {
         self.context = context
+        self.defaults = defaults
+        self.sender = sender
         super.init()
         if WCSession.isSupported() {
             WCSession.default.delegate = self
@@ -173,7 +181,16 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// fast path for a watch that is awake right now, and its failure falls
     /// back to the queue rather than dropping the plan.
     private func send(_ envelope: SyncEnvelope) {
-        guard let body = try? envelope.messageBody() else { return }
+        if let sender {
+            sender(envelope)
+        } else {
+            Self.sendOverSession(envelope)
+        }
+    }
+
+    private static func sendOverSession(_ envelope: SyncEnvelope) {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated,
+              let body = try? envelope.messageBody() else { return }
         let session = WCSession.default
         guard session.isReachable else {
             session.transferUserInfo(body)
@@ -206,9 +223,30 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         return true
     }
 
+    /// Stores a food the watch logged, once, and tells the watch it has.
+    ///
+    /// **Once**: the envelope's `workoutId` is the food's one-shot id, and an
+    /// id already stored is not stored again. The watch sends a food by
+    /// `sendMessage` when this phone is reachable and falls back to
+    /// `transferUserInfo` if that reports an error, and an error does not
+    /// prove the message was not delivered.
+    ///
+    /// **Tells the watch**: a `WORKOUT_SYNC_ACK` under the same id, revision
+    /// and all, the way `FOOD_LOGGED` already borrows the workout fields.
+    /// That takes the food out of the watch's standalone log, which it keeps
+    /// until then in case this phone never receives it; left there, a QR
+    /// export of that log would put the meal into the web app a second time.
+    /// A repeat is acknowledged again, since the first acknowledgement may
+    /// be the thing that was lost. An older watch build files the
+    /// acknowledgement under its outbox, finds no such workout, and ignores
+    /// it.
     @MainActor
     @discardableResult
     private func handleFoodLogged(_ envelope: SyncEnvelope) async -> Bool {
+        if WatchFoodLogReceipts.contains(envelope.workoutID, in: defaults) {
+            acknowledge(envelope)
+            return true
+        }
         guard let payload = envelope.foodLog,
               let resolved = await FoodRefResolver.nutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context),
               let mealType = MealType(rawValue: payload.meal.lowercased())
@@ -225,10 +263,30 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
             loggedAt: payload.loggedAt
         )
         context.insert(entry)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Not stored, so not acknowledged: the watch keeps the food
+            // exportable, which is the point of asking before it lets go.
+            context.delete(entry)
+            return false
+        }
+        WatchFoodLogReceipts.record(envelope.workoutID, in: defaults)
+        acknowledge(envelope)
         WidgetCenter.shared.reloadAllTimelines()
         pushRecentFoodsSnapshot()
         return true
+    }
+
+    @MainActor
+    private func acknowledge(_ envelope: SyncEnvelope) {
+        send(SyncEnvelope(
+            event: .workoutSyncAck,
+            workoutID: envelope.workoutID,
+            revision: envelope.revision,
+            updatedAt: .now,
+            origin: .ios
+        ))
     }
 
     /// Pushed on activation and after every watch-originated food log, so
@@ -272,7 +330,8 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// keep a food it logs from this list in its standalone log, so a food
     /// whose `FOOD_LOGGED` never reached this phone was in neither place;
     /// the watch counted it as "can't be exported yet. Update LIFT on your
-    /// iPhone." With them, the watch keeps it in that log for export.
+    /// iPhone." With them, the watch keeps it until this app acknowledges it
+    /// (`handleFoodLogged`).
     ///
     /// `nil` rather than a guess whenever the entry cannot say: no gram
     /// amount to divide by, or no fibre figure, because `WatchFood.fibre` is
@@ -288,5 +347,30 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         guard values.allSatisfy(\.isFinite) else { return nil }
         return WatchFood(name: entry.displayName, kcal: values[0], protein: values[1],
                          fat: values[2], carbs: values[3], fibre: values[4])
+    }
+}
+
+// MARK: - Foods already stored
+
+/// The one-shot ids of the watch-logged foods this phone has stored, so a
+/// `FOOD_LOGGED` that arrives twice is stored once (`handleFoodLogged`).
+///
+/// `UserDefaults`, newest last, capped: a repeat arrives within seconds (a
+/// message and its queued fallback) or, for a `transferUserInfo` the OS
+/// replays, within days, and a watch logs a handful of foods a day, so the
+/// last 500 cover months.
+enum WatchFoodLogReceipts {
+    static let defaultsKey = "watchFoodLogReceipts"
+    static let capacity = 500
+
+    static func contains(_ id: UUID, in defaults: UserDefaults = .standard) -> Bool {
+        (defaults.stringArray(forKey: defaultsKey) ?? []).contains(id.uuidString)
+    }
+
+    static func record(_ id: UUID, in defaults: UserDefaults = .standard) {
+        var ids = defaults.stringArray(forKey: defaultsKey) ?? []
+        guard !ids.contains(id.uuidString) else { return }
+        ids.append(id.uuidString)
+        defaults.set(Array(ids.suffix(capacity)), forKey: defaultsKey)
     }
 }

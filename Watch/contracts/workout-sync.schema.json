@@ -33,7 +33,7 @@
     },
     "foodLog": {
       "type": "object",
-      "description": "Present only when event is FOOD_LOGGED.",
+      "description": "Present only when event is FOOD_LOGGED (watch -> phone). The envelope's `workoutId` is a fresh one-shot id for this food and `revision` is 1. A phone that has stored the food answers with a WORKOUT_SYNC_ACK carrying the same `workoutId` and `revision`, and stores a `workoutId` it has already stored only once (acknowledging it again). The watch keeps the food in its standalone, exportable log until that acknowledgement arrives, then removes it there, so the food is never in both the phone's log and an export.",
       "properties": {
         "foodRefID": {
           "type": "string"

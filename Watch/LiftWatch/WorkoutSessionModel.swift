@@ -274,23 +274,34 @@ final class WorkoutSessionModel: ObservableObject {
         enqueue(.outdoorActivityFinished, workoutID: id, revision: revision, updatedAt: updatedAt)
     }
 
-    /// Fire-and-forget, exactly like `enqueueOutdoorActivityFinished`: the
-    /// phone computes and persists the actual `FoodEntry`, so there is
-    /// nothing here to reconcile a revision against. `workoutID` is a fresh,
-    /// one-shot UUID (per `FoodLogPayload`'s doc comment) — since it is
-    /// unique per call, `SyncOutbox`'s per-`workoutID` collapsing never
-    /// merges two distinct food logs together.
-    func enqueueFoodLogged(foodRefID: String, amountGrams: Double, meal: FoodLogMeal, loggedAt: Date = .now) {
+    /// Sends a food to the phone: the phone computes and persists the actual
+    /// `FoodEntry`, so there is nothing here to reconcile a revision against.
+    /// `workoutID` is a fresh, one-shot UUID (per `FoodLogPayload`'s doc
+    /// comment) — since it is unique per call, `SyncOutbox`'s per-`workoutID`
+    /// collapsing never merges two distinct food logs together.
+    ///
+    /// Returns that id. The phone acknowledges a stored food with a
+    /// `WORKOUT_SYNC_ACK` carrying it, which is what takes the food back out
+    /// of the standalone log (`recordLocally(syncID:)`, `receive(_:)`).
+    @discardableResult
+    func enqueueFoodLogged(foodRefID: String, amountGrams: Double, meal: FoodLogMeal,
+                           loggedAt: Date = .now) -> UUID {
+        let syncID = UUID()
         let payload = FoodLogPayload(foodRefID: foodRefID, amountGrams: amountGrams,
                                       meal: meal.rawValue, loggedAt: loggedAt)
-        enqueue(.foodLogged, workoutID: UUID(), revision: 1, updatedAt: loggedAt, foodLog: payload)
+        enqueue(.foodLogged, workoutID: syncID, revision: 1, updatedAt: loggedAt, foodLog: payload)
+        return syncID
     }
 
     /// Records a food in the retained local log. Called alongside
-    /// `enqueueFoodLogged` when a `foodRefID` exists, and on its own when the
-    /// food came from the bundled library and has no reference id at all.
-    func recordLocally(food: WatchFood, grams: Double, meal: FoodLogMeal, loggedAt: Date = .now) {
-        foodLog.append(LoggedFood(food: food, grams: grams, meal: meal, loggedAt: loggedAt))
+    /// `enqueueFoodLogged`, with the id it returned, when a `foodRefID`
+    /// exists — the entry then leaves the log once the phone acknowledges
+    /// it — and on its own, with no id, when the food came from the bundled
+    /// library and never goes to the phone at all.
+    func recordLocally(food: WatchFood, grams: Double, meal: FoodLogMeal,
+                       loggedAt: Date = .now, syncID: UUID? = nil) {
+        foodLog.append(LoggedFood(food: food, grams: grams, meal: meal,
+                                  loggedAt: loggedAt, syncID: syncID))
     }
 
     private func enqueue(_ event: SyncEnvelope.Event, workoutID: UUID, revision: Int,
@@ -309,27 +320,37 @@ final class WorkoutSessionModel: ObservableObject {
         flushOutbox()
     }
 
-    /// Always attempts delivery via `transport.send`, regardless of current
-    /// reachability — `PhoneSyncTransport.send` uses `transferUserInfo`,
-    /// which the OS queues and delivers once the phone comes back in range,
-    /// even across this app being suspended or terminated in the meantime.
-    /// Gating this on `transport.isReachable` (as this used to) would only
-    /// have delayed delivery to the next explicit flush trigger for no
-    /// benefit, since the in-memory `SyncOutbox` itself is what can't survive
-    /// termination — the OS-level queue `transferUserInfo` hands off to can.
+    /// Always attempts delivery, regardless of current reachability —
+    /// `PhoneSyncTransport.send` uses `transferUserInfo`, which the OS queues
+    /// and delivers once the phone comes back in range, even across this app
+    /// being suspended or terminated in the meantime. Gating this on
+    /// `transport.isReachable` (as this used to) would only have delayed
+    /// delivery to the next explicit flush trigger for no benefit, since the
+    /// in-memory `SyncOutbox` itself is what can't survive termination — the
+    /// OS-level queue `transferUserInfo` hands off to can.
     private func flushOutbox() {
         guard !outbox.isEmpty else { return }
         // Entries stay queued until the phone acknowledges the revision; a send
         // that silently fails must not look like a delivery. `.foodLogged` is
         // the one exception: it's a one-shot request with nothing to
-        // reconcile (see `enqueueFoodLogged`'s doc comment), and the phone
-        // never sends a `WORKOUT_SYNC_ACK` for it — so it must be removed
-        // right after sending, or it resends (and re-inserts a duplicate
-        // `FoodEntry`) on every later flush.
+        // reconcile (see `enqueueFoodLogged`'s doc comment), so it is removed
+        // right after sending, or it would resend on every later flush. Its
+        // acknowledgement matters to the standalone log, not to this queue:
+        // the OS queue behind `transferUserInfo` already holds it durably.
+        //
+        // A food goes by `sendNow`: `sendMessage` when the phone is reachable,
+        // so it is in LIFT for iPhone — and acknowledged, and out of the
+        // standalone log — within a second or two rather than whenever the
+        // OS gets round to the queue, falling back to `transferUserInfo`
+        // otherwise. The phone ignores a food id it has already stored, so a
+        // message that arrived but reported an error, and was then queued as
+        // well, is not logged twice.
         for envelope in outbox.pending {
-            transport.send(envelope)
             if envelope.event == .foodLogged {
+                transport.sendNow(envelope)
                 outbox.remove(workoutID: envelope.workoutID)
+            } else {
+                transport.send(envelope)
             }
         }
     }
@@ -362,6 +383,11 @@ final class WorkoutSessionModel: ObservableObject {
         switch envelope.event {
         case .workoutSyncAck:
             outbox.acknowledge(envelope)
+            // The phone acknowledges a stored `FOOD_LOGGED` the same way,
+            // under the food's one-shot id. It is in LIFT for iPhone now, so
+            // it leaves the standalone log, or an export would count it a
+            // second time. A workout's id matches nothing there.
+            foodLog.acknowledge(syncID: envelope.workoutID)
         case .foodLogged:
             // The phone never echoes this back — it refreshes the watch via a
             // separate, non-`SyncEnvelope` channel (`RecentFoodsSnapshot` via

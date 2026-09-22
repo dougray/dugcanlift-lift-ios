@@ -125,9 +125,31 @@ sodium are: no threshold, no colour, no prompt to fix anything.
 2 right) and a named `side` field in a backup, omitted when both. Bits in the
 link so the tuple stays six fields and an older decoder still reads the weight
 and the reps; a name in the backup because that file is read by people and by
-three platforms. `PLAN-FORMAT` is unchanged — prescriptions stay two-sided in
-v1. The documents in the `dugcanlift-coach` repo are the contract; `PerLimbTests`
-pins this side of it.
+three platforms. The documents in the `dugcanlift-coach` repo are the contract;
+`PerLimbTests` pins this side of it.
+
+**A coach's plan can carry sides** (PLAN-FORMAT.md "Sides"): `b: 1` on an
+exercise done each side, and a sixth set-tuple position naming a side, read
+masked through LiftKit's `PlanSetFlags`. Accepting an each-side exercise turns
+per-side logging on for that lift. Starting it keeps the prescription with the
+logged exercise: the header counts against it (`L 0/3 · R 0/3`, `L 4/3` when
+over, never capped), Add set lands on the side the next unfilled prescribed set
+names and takes its numbers, and sided sets are logged as they are done rather
+than pre-filled; two-sided sets are copied in as before. A named set on a lift
+not logged per side shows L / R until it is logged, without touching
+`perSideExercises`. Progression, imbalance and volume read the log, never the
+plan. The rules are `Prescription` (a port of LIFT web's `sides.js`).
+**Where it is kept: `PlanSides`, a `UserDefaults` side-car**, keyed by the
+routine's exercise and set ids and by the logged `ExerciseEntry` id -- not
+properties on LiftKit's shared routine `@Model`s, which would mean freezing
+`Routine`, `RoutineExercise` and `RoutinePrescribedSet` in every schema version
+since V3, and not a V9 on `ExerciseEntry` for a suggestion. It is not in the
+backup file: a restored session loses only its targets, never a set.
+`PlanSidesDegradationTests` pins how a build without any of this reads such a
+plan (as two-sided sets, weights intact) against Coach web's fixture
+`Tests/Fixtures/web-plan-per-side.txt`; never regenerate it from Swift. The
+watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
+companion move.
 
 **A struct a model stores is part of the schema.** SwiftData flattens
 `NutritionFacts` into one column per field on FoodEntry, Recipe and

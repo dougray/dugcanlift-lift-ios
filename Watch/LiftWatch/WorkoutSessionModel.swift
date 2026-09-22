@@ -82,6 +82,9 @@ final class WorkoutSessionModel: ObservableObject {
                 }
             }
         }
+        transport.onTransferFailed = { [weak self] envelope in
+            Task { @MainActor in self?.outbox.handoverFailed(envelope) }
+        }
         transport.onApplicationContext = { [weak self] context in
             Task { @MainActor in self?.receiveApplicationContext(context) }
         }
@@ -370,12 +373,19 @@ final class WorkoutSessionModel: ObservableObject {
         // otherwise. The phone ignores a food id it has already stored, so a
         // message that arrived but reported an error, and was then queued as
         // well, is not logged twice.
-        for envelope in outbox.pending {
+        //
+        // Everything else is handed over once per revision (`unsent`,
+        // `markHandedOver`): `transferUserInfo`'s own queue keeps it from
+        // there, and handing it over again on every flush only queued
+        // duplicates. A transfer that finishes with an error is handed over
+        // again on the next flush (`onTransferFailed`).
+        for envelope in outbox.unsent {
             if envelope.event == .foodLogged {
                 transport.sendNow(envelope)
                 outbox.remove(workoutID: envelope.workoutID)
             } else {
                 transport.send(envelope)
+                outbox.markHandedOver(envelope)
             }
         }
     }

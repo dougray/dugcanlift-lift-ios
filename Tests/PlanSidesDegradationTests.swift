@@ -14,9 +14,13 @@ import LiftCore
 /// Never regenerate the fixture from Swift; its value is that a different
 /// implementation wrote it.
 ///
-/// This runs the fixture through `PlanLinkCodec.decode` (LiftKit 1.9.0),
-/// `PlanImporter.accept` and `Routine.startSession` exactly as they stand on
-/// main before plan sides, and asserts what a lifter would get.
+/// First committed (fcd9c71) running the fixture through `PlanLinkCodec.decode`
+/// (LiftKit 1.9.0), `PlanImporter.accept` and `Routine.startSession` exactly as
+/// they stood on main, and it passed unmodified: the unknown `b` is ignored,
+/// the sixth position unread. Since this branch teaches all three about sides,
+/// the parts that changed are frozen below, verbatim from main, so the check
+/// keeps describing a build that has never heard of them. The tuple mapping in
+/// `accept` did not change and is still read from the real importer.
 final class PlanSidesDegradationTests: XCTestCase {
 
     static func fixtureFragment() throws -> String {
@@ -36,7 +40,11 @@ final class PlanSidesDegradationTests: XCTestCase {
         XCTAssertEqual(payload.v, 1, "no version bump, so an old build does not refuse the link")
 
         let context = ModelContext(LiftStore.makeContainer(inMemory: true))
-        try PlanImporter.accept(payload, hash: PlanImporter.hash(of: payload), in: context)
+        let suite = "degradation-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try PlanImporter.accept(payload, hash: PlanImporter.hash(of: payload), in: context,
+                                defaults: defaults)
 
         let routine = try XCTUnwrap(try context.fetch(FetchDescriptor<Routine>()).first)
         XCTAssertEqual(routine.name, "Per-side A")
@@ -65,13 +73,34 @@ final class PlanSidesDegradationTests: XCTestCase {
         XCTAssertEqual(exercises[2].note, "Extra set on the left.")
 
         // Started, every set lands as an ordinary two-sided set.
-        let day = routine.startSession(on: .now, in: context)
-        let logged = day.orderedExercises
-        XCTAssertEqual(logged.map { $0.sets.count }, [3, 3, 4, 3, 1])
-        XCTAssertEqual(logged[3].orderedSets.map(\.reps), [8, 8, 10])
-        XCTAssertEqual(logged[3].orderedSets.map(\.weightKg), [kg(60), kg(60), kg(40)])
-        for set in logged.flatMap(\.sets) {
+        let logged = exercises.map(Self.mainStartSessionSets)
+        XCTAssertEqual(logged.map(\.count), [3, 3, 4, 3, 1])
+        XCTAssertEqual(logged[3].map(\.reps), [8, 8, 10])
+        XCTAssertEqual(logged[3].map(\.weightKg), [kg(60), kg(60), kg(40)])
+        for set in logged.flatMap({ $0 }) {
             XCTAssertNil(set.side, "nothing about a side leaks through")
         }
+    }
+
+    /// `Routine.startSession`'s set copy as it stood on main (f5ef5e2,
+    /// RoutineSession.swift), verbatim but for returning the sets instead of
+    /// appending them to a day.
+    private static func mainStartSessionSets(_ exercise: RoutineExercise) -> [SetEntry] {
+        exercise.orderedSets
+            .filter {
+                $0.targetWeightKg != nil || $0.targetReps != nil
+                    || $0.targetDurationSec != nil || $0.targetDistanceMeters != nil
+            }
+            .enumerated()
+            .map { index, prescribed in
+                SetEntry(
+                    orderIndex: index,
+                    weightKg: prescribed.targetWeightKg ?? 0,
+                    reps: prescribed.targetReps ?? 0,
+                    rpe: prescribed.targetRPE,
+                    durationSec: prescribed.targetDurationSec,
+                    distanceMeters: prescribed.targetDistanceMeters
+                )
+            }
     }
 }

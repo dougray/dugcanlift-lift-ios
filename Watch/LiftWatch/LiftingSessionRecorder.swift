@@ -38,6 +38,12 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
+    /// Set while a start is waiting on the HealthKit permission sheet, and
+    /// cleared by `finish()` / `discard()`, so a workout finished or
+    /// abandoned during that wait does not get a session afterwards. The
+    /// old guard, `session == nil`, could not tell: `session` is nil for
+    /// the whole wait, finished or not.
+    private var pendingStart: UUID?
 
     /// Starts a strength-training session. Safe to call when HealthKit is
     /// unavailable or authorization is refused: the lifting session itself
@@ -45,14 +51,16 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
     /// either way — so a failure here costs the heart rate and the
     /// background runtime, not the workout.
     func start() {
-        guard session == nil, HKHealthStore.isHealthDataAvailable() else { return }
+        guard session == nil, pendingStart == nil, HKHealthStore.isHealthDataAvailable() else { return }
         currentBpm = nil
         averageBpm = nil
         maxBpm = nil
         lastError = nil
         let startDate = Date()
+        let token = UUID()
+        pendingStart = token
         Task { [weak self] in
-            await self?.begin(at: startDate)
+            await self?.begin(at: startDate, token: token)
         }
     }
 
@@ -62,6 +70,7 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
     /// anyone could mistake for a measurement.
     @discardableResult
     func finish() -> SessionHeartRate? {
+        pendingStart = nil
         guard let session, let builder else { return nil }
         let endDate = Date()
         let summary = heartRateSummary
@@ -90,6 +99,7 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
     /// Ends the session and saves nothing — for a workout abandoned rather
     /// than finished.
     func discard() {
+        pendingStart = nil
         guard let session, let builder else { return }
         session.stopActivity(with: Date())
         session.end()
@@ -109,7 +119,7 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
 
     // MARK: - Starting
 
-    private func begin(at startDate: Date) async {
+    private func begin(at startDate: Date, token: UUID) async {
         do {
             // Share the workout, read the heart rate. Both usage strings are
             // in the Info.plist already; the read set is what the live data
@@ -127,9 +137,10 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
             // If the workout was finished or abandoned while it was in
             // flight, creating a session now would leave one live forever —
             // watchOS allows exactly one, so every later start would quietly
-            // fail. Same guard, for the same reason, as
-            // `OutdoorActivityRecorder.startWorkoutSession`.
-            guard session == nil else { return }
+            // fail. `finish()` and `discard()` clear `pendingStart`, which is
+            // what says so; `session` is nil either way until this line.
+            guard pendingStart == token, session == nil else { return }
+            pendingStart = nil
 
             let configuration = HKWorkoutConfiguration()
             configuration.activityType = .traditionalStrengthTraining
@@ -150,6 +161,7 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
             try await newBuilder.beginCollection(at: startDate)
         } catch {
             lastError = error
+            if pendingStart == token { pendingStart = nil }
             // A half-built session is worse than none: it holds the one slot
             // watchOS allows without ever delivering a sample.
             session = nil

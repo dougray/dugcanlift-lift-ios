@@ -274,6 +274,58 @@ final class WatchSyncReceiverTests: XCTestCase {
         XCTAssertEqual(snapshot.items.first?.foodRefID, "usda:174608")
     }
 
+    // MARK: - Per-100 g macros for the watch's own food log
+
+    /// 150 g of the `usda:174608` fixture, as `handleFoodLogged` stores it:
+    /// `nutrition` scaled to the amount eaten. Per 100 g that is the
+    /// database's own 134 kcal row back again.
+    func testMakeSnapshotCarriesMacrosPer100Grams() throws {
+        let entry = FoodEntry(
+            foodRefID: "usda:174608",
+            name: "Chicken breast, roll, oven-roasted",
+            quantity: 150,
+            servingUnit: "g",
+            amountGrams: 150,
+            nutrition: NutritionFacts(calories: 201, proteinG: 21.885, carbsG: 2.685,
+                                      fatG: 11.475, fiberG: 0.15),
+            mealType: .lunch
+        )
+        let item = try XCTUnwrap(WatchSyncReceiver.makeSnapshot(from: [entry]).items.first)
+        let macros = try XCTUnwrap(item.nutritionPer100g)
+        XCTAssertEqual(macros.name, "Chicken breast, roll, oven-roasted")
+        XCTAssertEqual(macros.kcal, 134, accuracy: 0.001)
+        XCTAssertEqual(macros.protein, 14.59, accuracy: 0.001)
+        XCTAssertEqual(macros.carbs, 1.79, accuracy: 0.001)
+        XCTAssertEqual(macros.fat, 7.65, accuracy: 0.001)
+        XCTAssertEqual(macros.fibre, 0.1, accuracy: 0.001)
+        // ...and the watch reads them under the name it shows.
+        XCTAssertEqual(item.watchFood?.kcal, macros.kcal)
+    }
+
+    /// No gram amount to divide by: no macros, rather than a guess.
+    func testMakeSnapshotOmitsMacrosWithoutAGramAmount() throws {
+        let entry = FoodEntry(
+            foodRefID: "usda:174608", name: "Chicken breast, roll, oven-roasted",
+            quantity: 1, servingUnit: "serving", amountGrams: nil,
+            nutrition: NutritionFacts(calories: 201, proteinG: 21.885, carbsG: 2.685,
+                                      fatG: 11.475, fiberG: 0.15),
+            mealType: .lunch
+        )
+        XCTAssertNil(WatchSyncReceiver.makeSnapshot(from: [entry]).items.first?.nutritionPer100g)
+    }
+
+    /// Fibre unknown: `WatchFood.fibre` cannot say so, and a zero would be a
+    /// made-up number in an export, so the macros are left out entirely.
+    func testMakeSnapshotOmitsMacrosWhenFibreIsUnknown() throws {
+        let entry = FoodEntry(
+            foodRefID: "off:3017620422003", name: "Nutella", brand: "Ferrero",
+            quantity: 15, servingUnit: "g", amountGrams: 15,
+            nutrition: NutritionFacts(calories: 80, proteinG: 1, carbsG: 8.7, fatG: 4.6),
+            mealType: .snack
+        )
+        XCTAssertNil(WatchSyncReceiver.makeSnapshot(from: [entry]).items.first?.nutritionPer100g)
+    }
+
     // MARK: - Message-dictionary decoding path (deliver's own responsibility)
 
     /// Exercises the same `SyncEnvelope(messageBody:)` decode that

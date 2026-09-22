@@ -259,8 +259,34 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         let items = entries
             .filter { !$0.foodRefID.isEmpty && !$0.foodRefID.hasPrefix(RoadFoodRanking.foodRefPrefix) }
             .map {
-                RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName, lastAmountGrams: $0.amountGrams)
+                RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName,
+                                         lastAmountGrams: $0.amountGrams,
+                                         nutritionPer100g: nutritionPer100g(of: $0))
             }
         return RecentFoodsSnapshot(items: items, generatedAt: generatedAt)
+    }
+
+    /// The entry's macros per 100 g, which the snapshot schema has carried
+    /// (`nutritionPer100g`) since the watch learned to export its own food
+    /// log, and which this app never filled in. Without them the watch cannot
+    /// keep a food it logs from this list in its standalone log, so a food
+    /// whose `FOOD_LOGGED` never reached this phone was in neither place;
+    /// the watch counted it as "can't be exported yet. Update LIFT on your
+    /// iPhone." With them, the watch keeps it in that log for export.
+    ///
+    /// `nil` rather than a guess whenever the entry cannot say: no gram
+    /// amount to divide by, or no fibre figure, because `WatchFood.fibre` is
+    /// not optional and an unknown must never travel as a zero. `nutrition`
+    /// is already scaled to the amount eaten, so dividing by `amountGrams`
+    /// gives the per-100 g figure back.
+    static func nutritionPer100g(of entry: FoodEntry) -> WatchFood? {
+        guard let grams = entry.amountGrams, grams > 0, grams.isFinite,
+              let fibre = entry.nutrition.fiberG else { return nil }
+        let facts = entry.nutrition
+        func per100(_ value: Double) -> Double { (value * 100 / grams * 100).rounded() / 100 }
+        let values = [facts.calories, facts.proteinG, facts.fatG, facts.carbsG, fibre].map(per100)
+        guard values.allSatisfy(\.isFinite) else { return nil }
+        return WatchFood(name: entry.displayName, kcal: values[0], protein: values[1],
+                         fat: values[2], carbs: values[3], fibre: values[4])
     }
 }

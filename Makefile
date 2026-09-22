@@ -17,6 +17,32 @@ DERIVED     := .build/DerivedData
 APP         := $(DERIVED)/Build/Products/Debug-iphonesimulator/Lift.app
 DEST        := platform=iOS Simulator,name=$(SIM)
 
+# --- The watch app -----------------------------------------------------------
+#
+# LIFT for Apple Watch is a target of this project (Watch/, scheme LiftWatch),
+# embedded in Lift.app at Lift.app/Watch/LIFT.app. The product is LIFT.app,
+# not LiftWatch.app.
+#
+# The watch simulator is the one paired with $(SIM), because the watch app
+# only reaches the phone app through WatchConnectivity, and that only runs
+# between a pair. Failing a pair, a booted watch, then the first available
+# one. Override for a specific model:
+#   make watch-run WATCH_SIM="Apple Watch Ultra 4 (49mm)"
+#
+# A watch's name has its own parentheses ("Apple Watch Series 12 (46mm)"), so
+# a name is everything before the " (UDID)", not before the first "(".
+WATCH_SIM   := $(shell sim='$(SIM)'; xcrun simctl list pairs 2>/dev/null | awk -v sim="$$sim" 'function nm(l) { sub(/^ +(Watch|Phone): /, "", l); return match(l, / \([0-9A-Fa-f-]{36}\)/) ? substr(l, 1, RSTART - 1) : "" } /^ +Watch: / { w = nm($$0) } /^ +Phone: / && nm($$0) == sim { print w; exit }')
+ifeq ($(strip $(WATCH_SIM)),)
+WATCH_SIM   := $(shell xcrun simctl list devices available 2>/dev/null | awk '/^ +Apple Watch/ { l = $$0; sub(/^ +/, "", l); if (!match(l, / \([0-9A-Fa-f-]{36}\)/)) next; n = substr(l, 1, RSTART - 1); if (!f) f = n; if (l ~ /Booted/) { print n; d = 1; exit } } END { if (!d) print f }')
+endif
+WATCH_SCHEME := LiftWatch
+WATCH_BUNDLE_ID := com.dugcanlift.lift.watchkitapp
+WATCH_DEST  := platform=watchOS Simulator,name=$(WATCH_SIM)
+# Built inside the iPhone app by `make build`. The simulator does not install
+# an embedded watch app on the paired watch the way a real iPhone's Watch app
+# does, so watch-run installs it by hand, as Xcode itself does.
+EMBEDDED_WATCH_APP := $(APP)/Watch/LIFT.app
+
 # --- Real hardware -----------------------------------------------------------
 #
 # A separate derived-data path, because a device build and a simulator build
@@ -24,6 +50,20 @@ DEST        := platform=iOS Simulator,name=$(SIM)
 # rebuild.
 DEVICE_DERIVED := .build/DerivedData-device
 DEVICE_APP     := $(DEVICE_DERIVED)/Build/Products/Debug-iphoneos/Lift.app
+
+# The watch app a device build embeds, for installing on a real watch.
+DEVICE_WATCH_APP := $(DEVICE_APP)/Watch/LIFT.app
+
+# The paired Apple Watch, as devicectl identifies it. Override for a specific
+# one:  make watch-device WATCH=4D719BE4-2671-5442-9549-24676B854EB2
+#
+# There are TWO ids for the same watch and they are not interchangeable:
+# devicectl uses a CoreDevice UUID (4D719BE4-...), xcodebuild's -destination
+# the hardware UDID (00008310-...). This wants the first.
+#
+# devicectl lists simulators too, with "simulated" in its Reality column, and
+# a watch simulator is no place for a device build, so those rows are skipped.
+WATCH ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/Watch/ && !/simulated/ { for (i = 1; i <= NF; i++) if ($$i ~ /^[0-9A-Fa-f]{8}-[0-9A-Fa-f-]+$$/) { print $$i; exit } }')
 
 # The first iPhone or iPad devicectl knows about. Override for a specific one:
 #   make device DEVICE=901D197D-95D6-5FA6-B188-6C827D7B0109
@@ -70,7 +110,7 @@ FREE_ENTITLEMENTS := CODE_SIGN_ENTITLEMENTS='$$(FREE_TEAM_ENTITLEMENTS:default=$
 # Falls back to raw output if it isn't installed.
 PRETTY := $(shell command -v xcbeautify 2>/dev/null || echo cat)
 
-.PHONY: help project build test run clean sim logs reset-sim doctor devices device device-build signing
+.PHONY: help project build test watch-test run clean sim logs reset-sim doctor devices device device-build signing watch watch-sim watch-run watch-device
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -87,13 +127,19 @@ build: project ## Build for the simulator
 		-derivedDataPath $(DERIVED) \
 		build | $(PRETTY)
 
-test: project ## Run unit tests
+test: project watch-test ## Run unit tests: the app's, then the watch package's
 	@set -o pipefail && xcodebuild \
 		-project Lift.xcodeproj \
 		-scheme $(SCHEME) \
 		-destination '$(DEST)' \
 		-derivedDataPath $(DERIVED) \
 		test | $(PRETTY)
+
+# The watch app's domain logic, plain Swift with no simulator. Read the
+# "Executed N tests" line: the last line is swift-testing's own summary, which
+# says "0 tests in 0 suites" because every test here is XCTest.
+watch-test: ## Run the watch package's tests (swift test, no simulator)
+	swift test --package-path Watch/LiftWatchKit
 
 sim: ## Boot the simulator and open its window
 	@xcrun simctl boot "$(SIM)" 2>/dev/null || true
@@ -109,6 +155,26 @@ sim: ## Boot the simulator and open its window
 run: build sim ## Build, install and launch on the simulator
 	@xcrun simctl install "$(SIM)" "$(APP)"
 	@xcrun simctl launch "$(SIM)" $(BUNDLE_ID)
+
+watch: project ## Build the watch app alone for the watch simulator
+	@set -o pipefail && xcodebuild \
+		-project Lift.xcodeproj \
+		-scheme $(WATCH_SCHEME) \
+		-destination '$(WATCH_DEST)' \
+		-derivedDataPath $(DERIVED) \
+		build | $(PRETTY)
+
+watch-sim: ## Boot the watch simulator paired with $(SIM)
+	@test -n "$(WATCH_SIM)" || { echo "No Apple Watch simulator found. Create one paired with $(SIM) in Xcode's Devices window."; exit 1; }
+	@xcrun simctl boot "$(WATCH_SIM)" 2>/dev/null || true
+
+# `run` builds Lift, which builds and embeds the watch app, and installs it on
+# the phone. The paired watch simulator then needs the embedded app installed
+# by hand. Both apps end up running, so WCSession on each side sees the other.
+watch-run: run watch-sim ## Build, install and launch on the phone and its paired watch
+	@test -d "$(EMBEDDED_WATCH_APP)" || { echo "$(EMBEDDED_WATCH_APP) is missing: Lift was built without its watch app."; exit 1; }
+	@xcrun simctl install "$(WATCH_SIM)" "$(EMBEDDED_WATCH_APP)"
+	@xcrun simctl launch "$(WATCH_SIM)" $(WATCH_BUNDLE_ID)
 
 devices: ## List connected iPhones and iPads
 	@xcrun devicectl list devices
@@ -127,11 +193,10 @@ device-build: project ## Build for a connected device (no install)
 signing: project ## Show which entitlements each target signs with in a device build
 	@xcodebuild \
 		-project Lift.xcodeproj \
-		-scheme $(SCHEME) \
-		-destination 'generic/platform=iOS' \
+		-alltargets \
 		$(FREE_ENTITLEMENTS) \
 		-showBuildSettings 2>/dev/null \
-		| awk '/^Build settings for action build and target/ { t = $$NF; sub(/:$$/, "", t) } t != "" && /^ +CODE_SIGN_ENTITLEMENTS = / { printf "  %-14s %s\n", t, $$3 }'
+		| awk '/^Build settings for action build and target/ { t = $$NF; sub(/:$$/, "", t) } t != "" && /^ +CODE_SIGN_ENTITLEMENTS = / && !seen[t]++ { printf "  %-14s %s\n", t, $$3 }'
 
 device: device-build ## Build, install and launch on a connected device
 	@echo "Installing on $(DEVICE)..."
@@ -142,6 +207,34 @@ device: device-build ## Build, install and launch on a connected device
 	@echo "starts fresh if the container fails to open -- fine on a simulator,"
 	@echo "your real training history on a phone. Save a backup from Settings"
 	@echo "before installing a build that changes the schema."
+
+# The watch app comes from `make device-build`: Lift's device build embeds it,
+# signed with its own entitlements. The watch has no link of its own to this
+# Mac; the install rides the paired iPhone's connection.
+watch-device: device-build ## Install the embedded watch app on the paired Apple Watch
+	@test -n "$(WATCH)" || { echo "No paired Apple Watch visible. 'make devices' lists what devicectl can see."; exit 1; }
+	@echo "Installing $(DEVICE_WATCH_APP) on $(WATCH)..."
+	@xcrun devicectl device install app --device $(WATCH) "$(DEVICE_WATCH_APP)" || { \
+		echo ""; \
+		echo "Install failed. Try it again first -- then check the PAIRED IPHONE,"; \
+		echo "not the watch. The watch has no independent link to this Mac:"; \
+		echo "deployment rides the phone's connection, and when the phone drops"; \
+		echo "every error still describes the watch."; \
+		echo ""; \
+		echo "  * Reconnect the iPhone: plug it in, unlock it, trust this Mac."; \
+		echo "  * 'available (paired)' in devicectl's State column does NOT mean"; \
+		echo "    unreachable. 'xcrun xctrace list devices' is the reliable view."; \
+		echo "  * Still stuck: Xcode > Window > Devices and Simulators shows the"; \
+		echo "    real error, which devicectl never does."; \
+		echo "  * Then the watch: unlocked, on the wrist, on this Mac's Wi-Fi,"; \
+		echo "    Developer Mode on."; \
+		echo ""; \
+		echo "The build above already succeeded -- nothing needs rebuilding."; \
+		exit 1; }
+	@echo
+	@echo "Installed. Launching is refused while the watch is on its charger or"
+	@echo "wrist-down ('Navigation away from clock is not allowed'); open LIFT"
+	@echo "from the watch's app list instead."
 
 logs: ## Tail the app's log output
 	@xcrun simctl spawn "$(SIM)" log stream \
@@ -161,4 +254,6 @@ doctor: ## Check that required tooling is present
 	@command -v claude    >/dev/null && echo "claude      ok" || echo "claude      MISSING  → curl -fsSL https://claude.ai/install.sh | bash"
 	@xcodebuild -version | head -1
 	@xcrun simctl list devices available | grep -q "$(SIM)" && echo "simulator   ok ($(SIM))" || echo "simulator   '$(SIM)' not found — set SIM in Makefile"
+	@test -n "$(WATCH_SIM)" && echo "watch sim   ok ($(WATCH_SIM))" || echo "watch sim   none — pair an Apple Watch simulator with $(SIM)"
 	@test -n "$(DEVICE)" && echo "device      ok ($(DEVICE))" || echo "device      none connected — 'make device' needs one"
+	@test -n "$(WATCH)" && echo "watch       ok ($(WATCH))" || echo "watch       none paired — 'make watch-device' needs one"

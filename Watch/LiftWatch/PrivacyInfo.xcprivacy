@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The watch app is its own bundle inside Lift.app, so it carries its own
+	     manifest; the app's (Resources/PrivacyInfo.xcprivacy) does not cover it. -->
+	<!-- No tracking, no SDKs that track, no tracking domains. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<!-- Empty on purpose, and only while it stays true that nothing leaves the
+	     wearer's own devices. In this app:
+	     - Workouts, runs, routes and heart rate go to HealthKit on the watch.
+	     - Foods, plans and workout notices go to LIFT on the wearer's own
+	       iPhone over WatchConnectivity. There is no backend and no account.
+	     - The food log export is a QR code on the watch's screen, scanned by
+	       the wearer with their own phone.
+	     - The watch makes no network request of its own, and links no
+	       analytics or crash-reporting SDK.
+	     If any of that changes, this array must list what is sent. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- StandaloneFoodLog and RecentFoodsSnapshotStore (LiftWatchKit) read
+		     and write UserDefaults.standard, this app's own, never a shared App
+		     Group suite, so CA92.1 applies. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -48,6 +48,12 @@ packages:
   LiftKit:
     url: https://github.com/dougray/dugcanlift-kit
     exactVersion: 1.9.0
+  # The watch app's own domain package, in this repo (Watch/LiftWatchKit).
+  # Its package is named LiftWatchKit, not LiftKit, so Xcode does not take it
+  # for a local override of dugcanlift-kit above, whose package is also named
+  # LiftKit. Its product and module are still called LiftKit.
+  LiftWatchKit:
+    path: Watch/LiftWatchKit
 
 targets:
 
@@ -66,6 +72,11 @@ targets:
       - package: LiftKit
         product: LiftReference
       - target: LiftWidgets
+        embed: true
+      # The watch app ships inside this one, under Lift.app/Watch. Being
+      # embedded is what makes WCSession treat the two as peers
+      # (isWatchAppInstalled on this side, isCompanionAppInstalled on that).
+      - target: LiftWatch
         embed: true
     settings:
       base:
@@ -192,6 +203,110 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
+  # --------------------------------------------------------------- watch
+  # LIFT for Apple Watch, this app's companion (Watch/). A single-target
+  # watchOS app (Xcode 14+); the legacy application.watchapp2 pair is not
+  # accepted by current Xcode.
+  #
+  # com.dugcanlift.lift.watchkitapp, a child of this app's id, with
+  # WKCompanionAppBundleIdentifier naming this app. It was a WKWatchOnly app,
+  # com.dugcanlift.watch, in dugcanlift-lift-watch until 2026-09; a watch-only
+  # app is not an iPhone app's WCSession peer, so nothing either side sent
+  # ever arrived. WKRunsIndependentlyOfCompanionApp keeps it installable and
+  # usable with no iPhone nearby: it logs food and records runs on its own.
+  #
+  # No MARKETING_VERSION or CURRENT_PROJECT_VERSION here: it inherits the
+  # project's, because an embedded watch app whose version differs from its
+  # container's fails App Store validation.
+  LiftWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: Watch/LiftWatch
+    dependencies:
+      - package: LiftWatchKit
+        product: LiftKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.watchkitapp
+        # The product is LIFT.app, not LiftWatch.app: the scheme and the
+        # bundle name differ, which is worth knowing before hand-writing an
+        # install path (Lift.app/Watch/LIFT.app).
+        PRODUCT_NAME: LIFT
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "4"
+        # Embedded in Lift.app; it is archived as part of that, never alone.
+        SKIP_INSTALL: YES
+    # A real generated Info.plist (not GENERATE_INFOPLIST_FILE: YES +
+    # INFOPLIST_KEY_* settings) because the background-mode keys need array
+    # values, which the INFOPLIST_KEY_* scalar mechanism can't express.
+    #
+    # Two SEPARATE background-mode declarations are required, and this was
+    # found by launching the app and tapping Start Run in the Watch Simulator
+    # (a real crash, not a static-analysis guess). The WKBackgroundModes-only
+    # version still crashed at runtime:
+    #   *** Terminating app due to uncaught exception
+    #   'NSInternalInconsistencyException', reason: 'Invalid parameter
+    #   not satisfying: !stayUp || CLClientIsBackgroundable(...)'
+    # in OutdoorActivityRecorder.start(type:), at
+    # `locationManager.allowsBackgroundLocationUpdates = true`.
+    # CLLocationManager.h says so in its prose: "With UIBackgroundModes set to
+    # include 'location' in Info.plist, you must also set this property to
+    # YES... Setting this property to YES when UIBackgroundModes does not
+    # include 'location' is a fatal error." The key CoreLocation checks is
+    # UIBackgroundModes, the iOS-style key, not WKBackgroundModes.
+    #   - UIBackgroundModes: [location] -- so allowsBackgroundLocationUpdates
+    #     is not a fatal error (OutdoorActivityRecorder.swift).
+    #   - WKBackgroundModes: [location, workout-processing] -- separately
+    #     required for HKWorkoutSession's background runtime, which is what
+    #     keeps GPS alive while the wrist drops.
+    info:
+      path: Config/LiftWatch-Info.plist
+      properties:
+        WKApplication: YES
+        WKCompanionAppBundleIdentifier: com.dugcanlift.lift
+        WKRunsIndependentlyOfCompanionApp: YES
+        CFBundleDisplayName: LIFT
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Standard HTTPS only, like the app: the watch makes no network
+        # request of its own at all.
+        ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes:
+          - location
+        WKBackgroundModes:
+          - location
+          - workout-processing
+        # HealthKit -- both strings are required or the app is rejected, and
+        # HealthKit authorization is per bundle id, so the move to
+        # com.dugcanlift.lift.watchkitapp asks again on first launch.
+        # HKWorkoutSession itself requires the capability and these strings,
+        # and requesting share authorization for the workout type is how the
+        # system grants a session permission to run.
+        NSHealthShareUsageDescription: >-
+          LIFT uses HealthKit to run a workout session, which keeps GPS
+          active while recording a run or hike, and reads your heart rate
+          while you lift so the app can show it and record it with the
+          workout.
+        NSHealthUpdateUsageDescription: >-
+          LIFT saves the runs and hikes you record, and the workouts you
+          lift, to the Health app.
+        # CLLocationManager requires this key on watchOS too. There is no
+        # requestWhenInUseAuthorization on watchOS; the system asks on first
+        # use of a location API, driven off this key.
+        NSLocationWhenInUseUsageDescription: >-
+          LIFT uses your location to record the route of a run or hike.
+    # HealthKit only: WatchConnectivity needs no entitlement, and the watch
+    # shares no App Group with the phone (they talk over WCSession, never a
+    # shared container). Nothing here a free Personal Team cannot sign.
+    entitlements:
+      path: Config/LiftWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+
   # --------------------------------------------------------------- tests
   LiftTests:
     type: bundle.unit-test
@@ -227,5 +342,18 @@ schemes:
       config: Debug
       targets:
         - LiftTests
+    archive:
+      config: Release
+
+  # The watch app on its own, for building and running it on a watch
+  # simulator without the phone (make watch, make watch-run). Its domain logic
+  # is tested by `swift test` in Watch/LiftWatchKit, which make test runs; the
+  # app target itself has no test bundle.
+  LiftWatch:
+    build:
+      targets:
+        LiftWatch: all
+    run:
+      config: Debug
     archive:
       config: Release

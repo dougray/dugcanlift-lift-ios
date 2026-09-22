@@ -326,6 +326,7 @@ private struct ExerciseBlock: View {
                     NavigationLink {
                         ExerciseProgressionView(name: exercise.name,
                                                 equipment: exercise.equipment)
+                            .followsWindowAppearance()
                     } label: {
                         Text(exercise.displayName)
                             .font(.system(size: 17, weight: .bold))
@@ -645,6 +646,7 @@ private struct OutdoorDaySection: View {
                 Spacer()
                 NavigationLink("See all") {
                     OutdoorActivityListView()
+                        .followsWindowAppearance()
                 }
                 .foregroundStyle(Theme.textSecondary)
             }
@@ -654,6 +656,7 @@ private struct OutdoorDaySection: View {
             ForEach(activities) { activity in
                 NavigationLink {
                     OutdoorActivityReviewView(activity: activity)
+                        .followsWindowAppearance()
                 } label: {
                     HStack {
                         Text(activity.activityType.displayName)
@@ -699,6 +702,7 @@ private struct OutdoorHighlights: View {
             LiftCard(title: "Last route") {
                 NavigationLink {
                     OutdoorActivityReviewView(activity: last)
+                        .followsWindowAppearance()
                 } label: {
                     VStack(alignment: .leading, spacing: 10) {
                         RouteMap(points: last.routePoints)

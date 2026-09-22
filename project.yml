@@ -38,12 +38,9 @@ packages:
   # apps at once, and `@Model` types are shared, so a property change in the
   # package is a schema change for both. Upgrading is a deliberate edit to
   # this line, never something that happens on a `swift package update`.
-  # TEMPORARY: pinned to a commit on the kit's `per-side-prescriptions` branch
-  # (PlanWorkoutExercise.b, PlanSetFlags) until it is released as 1.10.0.
-  # Replace with `exactVersion: 1.10.0` before this merges.
   LiftKit:
     url: https://github.com/dougray/dugcanlift-kit
-    revision: 62baa82a13d2ec193b0c588af5b86ac2c95f590e
+    exactVersion: 1.10.0
 
 targets:
 

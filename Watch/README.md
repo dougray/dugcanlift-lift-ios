@@ -24,6 +24,11 @@ follows it back through the subtree merge).
     activities, and `PlanRequestGate`.
 
   Unit tested with `swift test`, no simulator (`make watch-test`).
+- `docs/` — the watch-face complications design and plan (2026-09-13,
+  approved, not built yet). Written while the app lived in
+  `dugcanlift-lift-watch`, so their paths (`apple/...`, `LiftWatch.xcodeproj`)
+  are that repo's: `apple/LiftKit` is `Watch/LiftWatchKit` here, and the
+  build is `make watch`.
 - `contracts/` — `workout-sync.schema.json` and
   `recent-foods-snapshot.schema.json`, the wire contract between the two apps.
   `LiftSyncTests/SchemaConformanceTests` reads them from here and checks the

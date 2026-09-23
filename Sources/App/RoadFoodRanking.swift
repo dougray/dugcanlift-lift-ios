@@ -27,6 +27,10 @@ import LiftCore
 /// known. Unknown sodium loses a tie to any known sodium rather than winning
 /// it as a zero. An item with no calorie figure cannot be said to fit, so it
 /// is left out when there is a goal and ranked last when there is not.
+///
+/// A coach's road picks (`withPicks`) sort to the top of a group and change
+/// nothing else: not the order underneath them, not which items fit, not what
+/// is hidden. See `coach/PLAN-FORMAT.md` "Road picks".
 enum RoadFoodRanking {
 
     enum Mode: Equatable { case goal, noGoal }
@@ -37,6 +41,19 @@ enum RoadFoodRanking {
         let fits: [RoadFoodItem]
         /// More than what is left, but no more than 10% over. Empty with no goal.
         let over: [RoadFoodItem]
+        /// The coach's picks that are actually on this screen, by id. Empty
+        /// until `withPicks` floats them, and an id this copy of the file does
+        /// not have is never in it -- nothing counts a row nobody can see.
+        let picked: Set<String>
+
+        init(mode: Mode, fits: [RoadFoodItem], over: [RoadFoodItem], picked: Set<String> = []) {
+            self.mode = mode
+            self.fits = fits
+            self.over = over
+            self.picked = picked
+        }
+
+        func isPicked(_ item: RoadFoodItem) -> Bool { picked.contains(item.id) }
     }
 
     /// Grams of protein per 100 kcal, or nil when it cannot honestly be said.
@@ -82,6 +99,47 @@ enum RoadFoodRanking {
             }
         }
         return Ranked(mode: .goal, fits: fits.sorted(by: areInOrder), over: over.sorted(by: areInOrder))
+    }
+
+    // MARK: - A coach's picks
+
+    /// A ranked result with the coach's picks floated to the top of each
+    /// group, and nothing else changed: not the order underneath them, not
+    /// which items fit, not what is hidden. A pick is an opinion sitting
+    /// beside the numbers, never in front of them, so a pick that is "a little
+    /// over" stays in the little-over group where the arithmetic put it, and
+    /// one more than 10% over stays hidden -- picked or not.
+    ///
+    /// An id this copy of `road-food.json` does not have is **skipped,
+    /// silently**: the coach's file and this one are two builds updated at
+    /// different times, and an item withdrawn since the plan was sent must
+    /// leave no row, no gap and no error. It is not counted either, so no card
+    /// promises a row that is not there.
+    static func withPicks(_ ranked: Ranked, ids: [String]) -> Ranked {
+        guard !ids.isEmpty else { return ranked }
+        let wanted = Set(ids)
+        let onScreen = Set((ranked.fits + ranked.over).map(\.id)).intersection(wanted)
+        guard !onScreen.isEmpty else { return ranked }
+        return Ranked(mode: ranked.mode,
+                      fits: pickedFirst(ranked.fits, onScreen),
+                      over: pickedFirst(ranked.over, onScreen),
+                      picked: onScreen)
+    }
+
+    /// A stable partition: the picked ones first, each part in exactly the
+    /// order it already had. Sorting on a "picked" key would do the same thing
+    /// today and is not written that way on purpose -- the promise is that the
+    /// nutrition order is untouched, and a partition cannot quietly stop
+    /// keeping it.
+    private static func pickedFirst(_ list: [RoadFoodItem], _ picked: Set<String>) -> [RoadFoodItem] {
+        list.filter { picked.contains($0.id) } + list.filter { !picked.contains($0.id) }
+    }
+
+    /// How many of `items` are picked -- for a tile, which draws no list.
+    static func pickCount(_ items: [RoadFoodItem], ids: [String]) -> Int {
+        guard !ids.isEmpty else { return 0 }
+        let wanted = Set(ids)
+        return Set(items.map(\.id)).intersection(wanted).count
     }
 
     // MARK: - How old the numbers are

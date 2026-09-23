@@ -269,6 +269,20 @@ blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
 missing one of the four core macros is not logged at all, because
 `NutritionFacts` would store it as zero. No location, ever.
 
+**Two dates, and the warning keys off the chain's.** `checkedOn` is the day a
+person read a chain's chart; `publishedOn` is the date the chart **states about
+itself**, optional and only as precise as the document is -- `"2021-03-29"`
+where Whataburger's says "as of March 29, 2021", `"2022-11"` where Burger
+King's says only "NOVEMBER 2022", and absent where the document states none.
+`RoadFoodRanking.ageDate` picks the first over the second and `isStale`
+measures six calendar months from it, so a 2021 chart read this morning says
+so: "These numbers are from the chain's chart dated Mar 29, 2021." A chain with
+no document date keeps the older sentence word for word. Both dates are on
+screen ("Published Nov 2022 · checked Sep 23, 2026"), because what a chain
+published and when someone read it are different facts. `publishedText` never
+prints a date more precisely than the document wrote it: "Nov 2022", never
+"Nov 1, 2022".
+
 **A coach's road picks arrive in the plan link and only reorder.** `rf`
 (PLAN-FORMAT.md "Road picks") is a flat list of Road Food item ids. It is read
 **app-side**, by `RoadPickLink`, off the same fragment `PlanLinkCodec` just

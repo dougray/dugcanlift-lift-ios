@@ -21,6 +21,7 @@ enum RoadFoodSample {
       "id": "sample-burger-co",
       "name": "Sample Burger Co",
       "kind": "burgers",
+      "publishedOn": "2026-09-02",
       "checkedOn": "2026-09-20",
       "source": "https://example.com/sample-burger-co/nutrition",
       "items": [
@@ -63,6 +64,7 @@ enum RoadFoodSample {
       "id": "fictional-taco-stand",
       "name": "Fictional Taco Stand",
       "kind": "mexican",
+      "publishedOn": "2024-10",
       "checkedOn": "2026-06-01",
       "source": "https://example.com/fictional-taco-stand/nutrition",
       "items": [

@@ -89,18 +89,24 @@ struct RoadFoodChain: Decodable, Equatable, Identifiable, Hashable {
     let name: String
     /// Optional: "burgers", "mexican"... Matched against a rule's `kinds`.
     let kind: String?
+    /// The date the chain's own document states about itself, as precise as
+    /// the document is: "YYYY-MM-DD", or "YYYY-MM" where a chart names only a
+    /// month. Nil where the document states no date at all, and then the
+    /// warning falls back to `checkedOn`.
+    let publishedOn: String?
     /// "YYYY-MM-DD", when the numbers were checked against the chain's page.
     let checkedOn: String?
     let source: String?
     let items: [RoadFoodItem]
 
-    enum CodingKeys: String, CodingKey { case id, name, kind, checkedOn, source, items }
+    enum CodingKeys: String, CodingKey { case id, name, kind, publishedOn, checkedOn, source, items }
 
-    init(id: String, name: String, kind: String? = nil, checkedOn: String? = nil,
-         source: String? = nil, items: [RoadFoodItem]) {
+    init(id: String, name: String, kind: String? = nil, publishedOn: String? = nil,
+         checkedOn: String? = nil, source: String? = nil, items: [RoadFoodItem]) {
         self.id = id
         self.name = name
         self.kind = kind
+        self.publishedOn = publishedOn
         self.checkedOn = checkedOn
         self.source = source
         self.items = items
@@ -114,6 +120,7 @@ struct RoadFoodChain: Decodable, Equatable, Identifiable, Hashable {
         }
         name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? id
         kind = try? c.decodeIfPresent(String.self, forKey: .kind)
+        publishedOn = try? c.decodeIfPresent(String.self, forKey: .publishedOn)
         checkedOn = try? c.decodeIfPresent(String.self, forKey: .checkedOn)
         source = try? c.decodeIfPresent(String.self, forKey: .source)
         items = try c.decode([Lenient<RoadFoodItem>].self, forKey: .items).compactMap(\.value)

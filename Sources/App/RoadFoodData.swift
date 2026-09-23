@@ -205,8 +205,17 @@ struct RoadFoodItem: Decodable, Equatable, Identifiable, Hashable {
 
     /// Brand and name for a product ("Jack Link's Original Beef Jerky"); the
     /// name alone for a menu item, whose chain is the screen's title.
+    ///
+    /// **The curated snack names already lead with their brand**, so
+    /// prefixing it again printed "Jack Link's Jack Link's Original Beef
+    /// Jerky" on every gas-station row -- seen on screen, not in a test.
+    /// `RoadFoodRanking.entry(for:)` already dropped a repeated brand from a
+    /// logged entry for the same reason; this is the same rule where the row
+    /// is drawn. The brand is still carried when the name does not say it, so
+    /// a future entry that leaves it out reads as it was meant to.
     var displayName: String {
-        guard let brand else { return name }
+        guard let brand, !brand.isEmpty,
+              !name.localizedCaseInsensitiveContains(brand) else { return name }
         return "\(brand) \(name)"
     }
 }

@@ -92,7 +92,8 @@ struct RoadFoodView: View {
             }
 
             Text("Numbers come from each chain's own published nutrition, checked by hand, and each "
-                 + "place shows the date they were checked. LIFT never asks where you are.")
+                 + "place shows when the chain published them and when they were checked. LIFT "
+                 + "never asks where you are.")
                 .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .padding(.top, 4)
@@ -148,6 +149,7 @@ struct RoadFoodView: View {
         let count = chain.items.count
         var detail = appendingPicked(to: "\(count) \(count == 1 ? "item" : "items")",
                                      count: RoadFoodRanking.pickCount(chain.items, ids: pickIDs))
+        if let published = RoadFoodRanking.publishedText(chain.publishedOn) { detail += " · published \(published)" }
         if let date = RoadFoodRanking.dateText(chain.checkedOn) { detail += " · checked \(date)" }
         return placeTile(title: chain.name, detail: detail, place: .chain(chain.id))
     }
@@ -281,6 +283,18 @@ struct RoadFoodPlaceView: View {
         return items.compactMap(\.checkedOn).filter { CalendarDay($0) != nil }.min()
     }
 
+    /// The date the chain's own document states about itself, where it states
+    /// one. No gas-station snack does, so that screen never shows it.
+    private var publishedOn: String? { chain?.publishedOn }
+
+    /// What the warning measures: the document's own date first, the day a
+    /// person read it second -- a 2021 chart read yesterday is old, whoever
+    /// read it and whenever.
+    private var ageDate: String? {
+        if let chain { return RoadFoodRanking.ageDate(chain) }
+        return checkedOn
+    }
+
     private var rules: [String] {
         if let chain { return RoadFoodRanking.rulesFor(catalog.rules, kind: chain.kind) }
         return RoadFoodRanking.gasStationRules(catalog.rules)
@@ -362,9 +376,17 @@ struct RoadFoodPlaceView: View {
                 .font(Theme.figure)
                 .foregroundStyle(Theme.textPrimary)
 
+            // What the chain published, and when a person last read it: two
+            // different facts, both on screen.
             HStack(spacing: 4) {
-                if let date = RoadFoodRanking.dateText(checkedOn) {
-                    Text("Checked on \(date)")
+                let published = RoadFoodRanking.publishedText(publishedOn)
+                let checked = RoadFoodRanking.dateText(checkedOn)
+                if let published, let checked {
+                    Text("Published \(published) · checked \(checked)")
+                } else if let published {
+                    Text("Published \(published)")
+                } else if let checked {
+                    Text("Checked on \(checked)")
                 } else {
                     Text("No check date on file for these numbers.")
                 }
@@ -377,11 +399,18 @@ struct RoadFoodPlaceView: View {
             .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
 
-            if RoadFoodRanking.isStale(checkedOn: checkedOn, today: DayKey.today) == true {
-                Text("These numbers are more than six months old. Menus change, so check them "
-                     + "against the board before you count on them.")
-                    .font(Theme.body)
-                    .foregroundStyle(Theme.textPrimary)
+            if RoadFoodRanking.isStale(checkedOn: ageDate, today: DayKey.today) == true {
+                if let published = RoadFoodRanking.publishedText(publishedOn) {
+                    Text("These numbers are from the chain's chart dated \(published). Menus "
+                         + "change, so check them against the board before you count on them.")
+                        .font(Theme.body)
+                        .foregroundStyle(Theme.textPrimary)
+                } else {
+                    Text("These numbers are more than six months old. Menus change, so check them "
+                         + "against the board before you count on them.")
+                        .font(Theme.body)
+                        .foregroundStyle(Theme.textPrimary)
+                }
             }
         }
     }

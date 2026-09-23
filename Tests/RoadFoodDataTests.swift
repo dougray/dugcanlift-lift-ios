@@ -22,6 +22,19 @@ final class RoadFoodDataTests: XCTestCase {
         XCTAssertEqual(catalog.chains.first?.kind, "burgers")
         XCTAssertEqual(catalog.rules.last, RoadFoodRule(text: "Ask for a bowl instead of a tortilla", kinds: ["mexican"]))
         XCTAssertEqual(catalog.rules.first, RoadFoodRule(text: "Grilled over fried"))
+        // One chain of each kind, so the sample shows all three states: a
+        // document dated to the day, one that names only a month, and one that
+        // states none.
+        let by = { (id: String) in catalog.chains.first { $0.id == id } }
+        XCTAssertEqual(by("sample-burger-co")?.publishedOn, "2026-09-02")
+        XCTAssertEqual(by("fictional-taco-stand")?.publishedOn, "2024-10")
+        XCTAssertNil(by("example-chicken-shack")?.publishedOn)
+        // And the month-only one is old on its document date while its checked
+        // date is recent, which is the whole point of the field.
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: RoadFoodRanking.ageDate(by("fictional-taco-stand")),
+                                               today: "2026-09-23"), true)
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: by("fictional-taco-stand")?.checkedOn,
+                                               today: "2026-09-23"), false)
     }
 
     func testBlankStaysBlankOnTheWayIn() throws {
@@ -107,8 +120,33 @@ final class RoadFoodDataTests: XCTestCase {
                          "\(chain.name) looks like sample data")
             XCTAssertNotNil(CalendarDay(chain.checkedOn), "\(chain.id) has no usable checkedOn")
             XCTAssertFalse(chain.items.isEmpty, "\(chain.id) has no items")
+            // A document cannot have been published after the day someone read it.
+            if let published = chain.publishedOn {
+                guard let day = RoadFoodRanking.docDay(published) else {
+                    return XCTFail("\(chain.id) has an unusable publishedOn")
+                }
+                XCTAssertLessThanOrEqual(day, CalendarDay(chain.checkedOn)!,
+                                         "\(chain.id) claims a document published after it was read")
+            }
         }
         XCTAssertFalse(catalog.rules.isEmpty)
+        // The three charts this field exists for: each looks fresh by the day
+        // it was read and is old by its own date.
+        for id in ["burgerking", "whataburger", "chipotle"] {
+            guard let chain = catalog.chains.first(where: { $0.id == id }) else {
+                return XCTFail("the curated file has no \(id)")
+            }
+            XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: chain.checkedOn, today: "2026-09-23"), false,
+                           "\(id) looks fresh by checkedOn alone")
+            XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: RoadFoodRanking.ageDate(chain), today: "2026-09-23"), true,
+                           "\(id) should be old by its own chart")
+        }
+        XCTAssertEqual(catalog.chains.first(where: { $0.id == "burgerking" })?.publishedOn, "2022-11")
+        XCTAssertEqual(catalog.chains.first(where: { $0.id == "whataburger" })?.publishedOn, "2021-03-29")
+        XCTAssertEqual(catalog.chains.first(where: { $0.id == "chipotle" })?.publishedOn, "2024-10")
+        // Blank stays blank: a chain whose document states no date has no key.
+        XCTAssertNil(catalog.chains.first(where: { $0.id == "sonic" })?.publishedOn)
+        XCTAssertNil(catalog.chains.first(where: { $0.id == "quiktrip" })?.publishedOn)
     }
 
     /// Seen on a gas-station row before it was fixed: the curated names lead

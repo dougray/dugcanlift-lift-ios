@@ -177,10 +177,10 @@ final class PlanLinkIntakeTests: XCTestCase {
 
     func testAValidPlanURLOpensThePlan() throws {
         let url = try XCTUnwrap(PlanLinkExtractor.openURL(for: try fixtureFragment()))
-        guard case .plan(let payload) = PlanLinkIntake.open(url, expectedLifterID: lifterID) else {
+        guard case .plan(let incoming) = PlanLinkIntake.open(url, expectedLifterID: lifterID) else {
             return XCTFail("a real plan link should open")
         }
-        XCTAssertEqual(payload.n, "Doug")
+        XCTAssertEqual(incoming.payload.n, "Doug")
     }
 
     func testJunkInTheSchemeIsRefusedRatherThanIgnored() {
@@ -265,7 +265,7 @@ final class PlanLinkIntakeTests: XCTestCase {
     /// same routine on the other side.
     @MainActor
     func testAPastedLinkImportsThroughTheOrdinaryPlanPath() throws {
-        guard case .plan(let payload) = PlanLinkIntake.read(
+        guard case .plan(let incoming) = PlanLinkIntake.read(
             "From Coach: \(try PlanLinkExtractorTests.fixtureLink())", expectedLifterID: lifterID)
         else { return XCTFail("the fixture link should decode") }
 
@@ -274,7 +274,7 @@ final class PlanLinkIntakeTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        try PlanImporter.accept(payload, hash: PlanImporter.hash(of: payload),
+        try PlanImporter.accept(incoming, hash: PlanImporter.hash(of: incoming.payload),
                                 in: context, defaults: defaults)
         let routines = try context.fetch(FetchDescriptor<Routine>())
         XCTAssertEqual(routines.map(\.name), ["Per-side A"])
@@ -343,8 +343,8 @@ final class PendingPlanLinksTests: XCTestCase {
         }
         XCTAssertEqual(outcomes.count, 2)
         XCTAssertEqual(outcomes.first, .refused(.link(.corruptPayload)))
-        guard case .plan(let payload) = outcomes.last else { return XCTFail("the real plan should survive the queue") }
-        XCTAssertEqual(payload.n, "Doug")
+        guard case .plan(let incoming) = outcomes.last else { return XCTFail("the real plan should survive the queue") }
+        XCTAssertEqual(incoming.payload.n, "Doug")
         XCTAssertEqual(inbox.takeAll(), [])
     }
 }

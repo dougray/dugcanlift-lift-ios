@@ -25,7 +25,7 @@ final class PlanImporterTests: XCTestCase {
     )
 
     func testSummaryCountsEverything() {
-        let summary = PlanImporter.summary(for: examplePayload)
+        let summary = PlanImporter.summary(for: PlanLinkIntake.IncomingPlan(payload: examplePayload, roadPickIDs: []))
         XCTAssertEqual(summary.coachName, "Coach Dana")
         XCTAssertEqual(summary.recipeCount, 1)
         XCTAssertEqual(summary.mealCount, 1)

@@ -269,6 +269,33 @@ blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
 missing one of the four core macros is not logged at all, because
 `NutritionFacts` would store it as zero. No location, ever.
 
+**A coach's road picks arrive in the plan link and only reorder.** `rf`
+(PLAN-FORMAT.md "Road picks") is a flat list of Road Food item ids. It is read
+**app-side**, by `RoadPickLink`, off the same fragment `PlanLinkCodec` just
+accepted -- not by a field on LiftKit's `PlanPayload`, because the kit is
+pinned to an exact tag Coach iOS shares and a list of strings is not worth a
+tag plus a bump in two shipped apps. `PlanLinkIntake.IncomingPlan` carries the
+payload and the picks together from every door, so no screen can accept a plan
+and drop its picks, and `rf` is **in `PlanImporter.hash`** or a coach resending
+the same week with a different answer would have the link refused as already
+imported. An empty list writes no key into the hashed mirror, so every plan
+without picks hashes exactly as it did before (`PlanRoadPicksTests`).
+
+They are stored in `RoadPicks`, a `UserDefaults` side-car like `PlanSides`, and
+are **not in the backup** -- the coach still holds them. A plan carrying picks
+replaces them whole; a plan with no `rf` changes nothing, because that is also
+what every older Coach and every recipe-only send looks like, so **clearing is
+this phone's own action** on the Road Food screen. What they do is
+`RoadFoodRanking.withPicks`: a **stable partition**, picks first inside each
+group. The same items fit, in the same order among themselves; a pick that is a
+little over stays in that group and one more than 10% over stays hidden. An id
+this build's `road-food.json` does not have is **skipped silently and not
+counted**, and is kept in storage rather than filtered on arrival. Rows say
+"Doug's pick" in weight, never colour: shown, never targeted, like the nutrient
+lines. `RoadPicksDegradationTests` pins what a build without any of this makes
+of the same link, against Coach web's own fixture
+`Tests/Fixtures/web-plan-road-picks.txt`; never regenerate it from Swift.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

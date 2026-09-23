@@ -217,6 +217,12 @@ targets:
       # share sheet with a tight memory limit.
       - path: Sources/Shared/PlanLinkExtractor.swift
       - path: Sources/Shared/PlanLinkIntake.swift
+      # `rf`, read from the same fragment the intake just accepted, so the
+      # share sheet can say "6 Road Food picks" instead of describing a
+      # picks-only plan as empty. LiftCore only: no SwiftData, no store.
+      # RoadPicks.swift, which writes them, is deliberately NOT here -- the
+      # extension still imports nothing.
+      - path: Sources/Shared/RoadPickLink.swift
       - path: Sources/Shared/PendingPlanLinks.swift
     dependencies:
       # LiftCore only. LiftReference's GRDB and its reference databases have

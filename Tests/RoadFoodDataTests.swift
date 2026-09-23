@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import Lift
 
@@ -106,13 +107,17 @@ final class RoadFoodDataTests: XCTestCase {
         XCTAssertThrowsError(try RoadFoodCatalog.decode(Data(#"{"version":1}"#.utf8)))
     }
 
-    /// Runs only once `Resources/road-food.json` is in the app (the test
-    /// bundle builds `Resources/` too). It is the curated file, so it must
-    /// decode, and nothing from the sample may have slipped into it.
+    /// The curated file is in `Resources/`, so it must decode, and nothing from
+    /// the sample may have slipped into it.
+    ///
+    /// This used to skip itself when the resource was absent, from when the
+    /// curated file had not been written yet. A skip is indistinguishable from
+    /// a pass on a CI summary, so a build that dropped the resource from the
+    /// target would have gone unnoticed -- exactly the silence
+    /// `testTheBundledCuratedFileIsTheKitsBytes` below exists to break.
     func testTheCuratedFileWhenPresentDecodesAndIsNotTheSample() throws {
-        guard let url = Bundle(for: Self.self).url(forResource: "road-food", withExtension: "json") else {
-            throw XCTSkip("Resources/road-food.json is not in this build yet")
-        }
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "road-food", withExtension: "json"),
+                                "Resources/road-food.json is not in this build")
         let catalog = try RoadFoodCatalog.decode(Data(contentsOf: url))
         XCTAssertFalse(catalog.chains.isEmpty)
         for chain in catalog.chains {
@@ -164,5 +169,63 @@ final class RoadFoodDataTests: XCTestCase {
         // A brand the name does not say is still carried.
         XCTAssertEqual(RoadFoodItem(id: "x", name: "Bar", brand: "Brandname").displayName,
                        "Brandname Bar")
+    }
+
+    // MARK: - The copies are the same bytes
+
+    /// road-food.json is curated once in `dugcanlift-kit/data/` and copied byte
+    /// for byte into five app repos. Nothing used to check that they matched:
+    /// CLAUDE.md says "copied unchanged, never edit it here alone", and every
+    /// other check in this file is on the data's *shape* -- it decodes, the
+    /// dates are usable, no fake name got in -- all of which a copy several
+    /// chains behind passes cleanly.
+    ///
+    /// Item ids are the contract a coach's road picks travel on, and an id the
+    /// receiving build does not have is skipped in silence, by design. So the
+    /// kit writes the sha256 of the bytes to road-food.sha256, that file is
+    /// copied across with the JSON, and this hashes one against the other.
+    ///
+    /// **It hashes what the bundle holds, not what sits in the repo.** Reading
+    /// the file off disk would pass just as happily in a build that had dropped
+    /// the resource from the target, which is a different way to ship no Road
+    /// Food at all.
+    private func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The pinned hash, read from the bundle beside the file it pins, and
+    /// rejected if it is anything but one bare sha256.
+    private func pinnedSum(_ name: String) throws -> String {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: name, withExtension: "sha256"),
+                                "\(name).sha256 is not in this build -- copy it from the kit beside the JSON")
+        let sum = try String(contentsOf: url, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertNotNil(sum.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression),
+                        "\(name).sha256 should be one bare sha256 and nothing else")
+        return sum
+    }
+
+    func testTheBundledCuratedFileIsTheKitsBytes() throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "road-food", withExtension: "json"),
+                                "Resources/road-food.json is not in this build")
+        XCTAssertEqual(sha256(try Data(contentsOf: url)), try pinnedSum("road-food"), """
+            The bundled road-food.json does not match road-food.sha256.
+            Copy dugcanlift-kit/data/road-food.json AND data/road-food.sha256 over together.
+            Never edit either file here, and never re-write the checksum by hand to make this
+            pass: the kit writes it with `node data/validate-road-food.mjs --write-checksum`,
+            and the other four app repos pin the same one, so a hand-written hash only moves
+            the failure somewhere further away.
+            """)
+    }
+
+    func testTheBundledSampleFixtureIsTheSameBytesTheOtherAppsHold() throws {
+        // Shared with LIFT web's lift/fixtures/road-food-sample.json and
+        // dugcanlift-lift's src/debug asset. testTheDebugSampleIsTheWebFixture
+        // above pins RoadFoodSample.swift's inline copy against this file, so
+        // the three repos and the Swift string are held to one set of bytes.
+        XCTAssertEqual(sha256(try fixture()), try pinnedSum("road-food-sample"), """
+            Tests/Fixtures/road-food-sample.json does not match its checksum.
+            The fixture is shared with dugcanlift-site and dugcanlift-lift. Change it in all
+            three, re-write all three checksums, and update RoadFoodSample.swift to match.
+            """)
     }
 }

@@ -110,4 +110,21 @@ final class RoadFoodDataTests: XCTestCase {
         }
         XCTAssertFalse(catalog.rules.isEmpty)
     }
+
+    /// Seen on a gas-station row before it was fixed: the curated names lead
+    /// with the brand, so prefixing it again said it twice.
+    func testABrandTheNameAlreadySaysIsNotSaidTwice() throws {
+        let catalog = try XCTUnwrap(RoadFoodCatalog.bundled(in: Bundle(for: RoadFoodDataTests.self))?.catalog)
+        let jerky = try XCTUnwrap(catalog.snacks.first { $0.id == "snack-jack-links-original-beef-jerky" })
+        XCTAssertEqual(jerky.brand, "Jack Link's")
+        XCTAssertEqual(jerky.displayName, "Jack Link's Original Beef Jerky")
+        for snack in catalog.snacks {
+            guard let brand = snack.brand, !brand.isEmpty else { continue }
+            XCTAssertFalse(snack.displayName.localizedCaseInsensitiveContains("\(brand) \(brand)"),
+                           snack.displayName)
+        }
+        // A brand the name does not say is still carried.
+        XCTAssertEqual(RoadFoodItem(id: "x", name: "Bar", brand: "Brandname").displayName,
+                       "Brandname Bar")
+    }
 }

@@ -28,10 +28,81 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
   `LiftReference` product (see "Shared code lives in LiftKit" below), not a
   local `Sources/Reference/` — that directory no longer exists here.
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
+- **`Sources/ShareExtension/`** — the `LiftShare` share extension (see "A
+  coach's plan link, and why Universal Links are not the answer" below).
 
 The SwiftData store lives in the App Group container
 (`group.com.dugcanlift.lift`) so the widget extension can read it. Do not move it
 to the app's private container.
+
+## A coach's plan link, and why Universal Links are not the answer
+
+A coach sends a plan as a link. `Config/Lift.entitlements` declares
+`com.apple.developer.associated-domains: applinks:www.dugcanlift.com` and it
+stays there for the day this is signed by a paid team -- but **a free Apple
+Personal Team cannot sign Associated Domains at all**, which is why
+`make device-build` swaps in `Config/Lift-free.entitlements`, and
+dugcanlift.com serves no apple-app-site-association file. On Doug's own phone
+a plan link therefore opens the browser, and nothing reaches the app.
+
+Coach iOS hit this wall first and answered it with three doors that need no
+entitlement. LIFT now has the same three, and they all ask **`PlanLinkIntake`**,
+so a link that opens one way opens every way and one that fails, fails alike:
+
+1. **`dugcanliftlift://plan#1z...`**, a custom URL scheme (`CFBundleURLTypes` in
+   project.yml, `LiftApp.onOpenURL`). Exactly that spelling: not
+   `dugcanliftcoach`, which is Coach iOS's, because a scheme claimed by two
+   apps on one phone goes to whichever iOS picks.
+2. **Paste a Plan Link** (`PastePlanLinkView`), in Settings under Coach -- the
+   section that already holds the coach's email and Send to Coach. It is a
+   push, not a sheet: Settings is itself a sheet, and a second `.sheet` on
+   `CoachSection` opened the screen and closed both again.
+3. **The share extension** (`LiftShare`, `Sources/ShareExtension/`). "LIFT"
+   appears in the share sheet for a URL or text; it says what the plan is
+   ("Plan from Doug · 1 workout · 1 scheduled day") or why it will not take it,
+   and on Add queues the *fragment* in the existing App Group
+   `group.com.dugcanlift.lift` (`PendingPlanLinks`). `LiftApp` drains the queue
+   whenever the scene becomes active.
+
+`LiftApp.onOpenURL` still handles the Universal Link unchanged, so the day
+there is a paid team nothing has to be rewritten.
+
+**Accepting a plan is still only `PlanPreviewView`.** No door imports
+anything; each one ends at the same preview and the same `PlanImporter`.
+The extension in particular **does not open the app and does not write
+SwiftData** -- iOS gives a share extension no supported way to open its
+containing app, and a routine appearing in someone's library from a share
+sheet is not a decision the share sheet gets to make. It compiles only
+`PlanLinkExtractor.swift`, `PlanLinkIntake.swift` and `PendingPlanLinks.swift`
+from `Sources/Shared`, listed file by file, and links `LiftCore` only: never
+SwiftData models, never `LiftReference`. It has its own
+`PrivacyInfo.xcprivacy`, because an extension is its own bundle. It is a new
+bundle id, `com.dugcanlift.lift.share`, so the next free-team device build
+registers one more App ID (ten per seven days is the cap).
+
+**`PlanLinkExtractor` is the one rule for finding a plan link in text**, and it
+is a deliberate port of Coach iOS's `ShareLinkExtractor` -- **change one, change
+both.** The first `www.dugcanlift.com/lift/#1z...`/`#1u...` (or
+`dugcanliftlift:` URL) anywhere in the text wins, whatever surrounds it;
+otherwise the whole text may be a bare fragment. Another site's URL carrying a
+`#1z...` fragment is refused, and so is the lifter's own `/coach/#1z...` log
+link, which travels the other way and gets its own sentence rather than "not a
+link". It is not in LiftKit because moving it there is a kit tag plus a pinned
+bump in two shipped apps, and Coach's copy is compiled into a shipped share
+extension; a third app needing the rule is when to pay that cost.
+
+**The lifter's id is mirrored into the App Group.** An extension has its own
+`UserDefaults.standard` and cannot read `coachLifterID`, which
+`PlanLinkCodec.decode` needs before it will return a payload at all.
+`LiftApp.init` writes it to the group suite once. Before LIFT has ever been
+opened there is nothing to mirror, and the extension says so rather than
+queueing a plan it could not check.
+
+**Safari shares the address without the plan**: `lift/app.js` strips the
+fragment with `history.replaceState` as soon as it has read it, exactly as the
+Coach web app does, so sharing from Safari after the page loaded sends
+`https://www.dugcanlift.com/lift/`. `isLiftPageWithoutPlan` recognises that and
+says to share from the message it arrived in instead.
 
 ## Conventions that matter
 

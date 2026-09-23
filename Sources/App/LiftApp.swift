@@ -15,15 +15,16 @@ import LiftCore
 /// exactly as unique as `.sheet(item:)` needs: every distinct decode gets its
 /// own identity, so a second plan link arriving while the first's preview
 /// sheet is still open is never mistaken for the same item.
-private struct IdentifiablePlan: Identifiable {
+struct IdentifiablePlan: Identifiable {
     let id = UUID()
     let payload: PlanPayload
 }
 
 @main
 struct LiftApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var incomingPlan: IdentifiablePlan?
-    @State private var planLinkError: PlanLinkError?
+    @State private var refusal: PlanLinkIntake.Refusal?
 
     // `WatchSyncReceiver` doesn't drive any UI, so it isn't `@State` — it
     // just needs to exist for the app's lifetime so its `WCSessionDelegate`
@@ -33,58 +34,66 @@ struct LiftApp: App {
     // SwiftUI itself, which `LiftStore.shared.mainContext` needs.
     init() {
         WatchSyncReceiver.activate(context: LiftStore.shared.mainContext)
+        // The share extension has its own defaults and cannot read this id,
+        // which it needs before `PlanLinkCodec` will hand it a payload at all.
+        // Written once; a no-op on every launch after the first.
+        PendingPlanLinks.shared?.mirror(lifterID: CoachShare.Settings.lifterID)
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                // `dugcanliftlift://plan#1z...`, LIFT's own scheme, which
+                // needs no entitlement — and, on a paid team where Associated
+                // Domains can be signed, a `www.dugcanlift.com/lift/#...`
+                // Universal Link. Both go through the same intake, so a link
+                // that opens one way opens the other.
                 .onOpenURL { url in
-                    handleIncomingURL(url)
+                    handle(PlanLinkIntake.open(url, expectedLifterID: CoachShare.Settings.lifterID))
+                }
+                // `.active` covers both a cold launch and returning from the
+                // share sheet, which is when the extension's queue has
+                // something in it.
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    guard phase == .active else { return }
+                    drainSharedPlans()
                 }
                 .sheet(item: $incomingPlan) { identifiablePlan in
                     PlanPreviewView(payload: identifiablePlan.payload)
                 }
-                .alert("Couldn't open this plan", isPresented: .constant(planLinkError != nil), presenting: planLinkError) { _ in
-                    Button("OK") { planLinkError = nil }
-                } message: { error in
-                    Text(message(for: error))
+                .alert("Couldn't open this plan", isPresented: .constant(refusal != nil), presenting: refusal) { _ in
+                    Button("OK") { refusal = nil }
+                } message: { refusal in
+                    Text(refusal.message)
                 }
         }
         .modelContainer(LiftStore.shared)
     }
 
-    private func handleIncomingURL(_ url: URL) {
-        // The Associated Domains entitlement covers the whole
-        // www.dugcanlift.com host (not just /lift/*), so a coach's own
-        // `/coach/#...` log link — a different link type/destination
-        // (CoachShare.swift) — also lands here once Universal Links
-        // verification is live. Only a `/lift/...` path is meant for LIFT to
-        // handle; anything else is silently left alone, same as "no
-        // fragment" below, since it isn't an error, just not ours.
-        guard url.path.hasPrefix("/lift") else { return }
-        guard let fragment = url.fragment else { return }
-        do {
-            let payload = try PlanLinkCodec.decode(
-                fragment: fragment,
-                expectedLifterID: CoachShare.Settings.lifterID
-            )
-            incomingPlan = IdentifiablePlan(payload: payload)
-            planLinkError = nil
-        } catch let error as PlanLinkError {
-            incomingPlan = nil
-            planLinkError = error
-        } catch {
-            incomingPlan = nil
-            planLinkError = .corruptPayload
+    /// Plans the share extension queued while LIFT was not running. Each goes
+    /// through the same intake a pasted link does. There is one preview sheet,
+    /// so when several are waiting the last one that decodes is the one shown
+    /// — the rest stay out of the library, which is the safe direction: a plan
+    /// is only ever added by tapping Accept.
+    private func drainSharedPlans() {
+        guard let inbox = PendingPlanLinks.shared else { return }
+        let queued = inbox.takeAll()
+        guard !queued.isEmpty else { return }
+        for fragment in queued {
+            handle(PlanLinkIntake.read(fragment, expectedLifterID: CoachShare.Settings.lifterID))
         }
     }
 
-    private func message(for error: PlanLinkError) -> String {
-        switch error {
-        case .notAddressedToThisDevice:
-            return "This plan isn't addressed to you."
-        default:
-            return "This plan link couldn't be read."
+    private func handle(_ outcome: PlanLinkIntake.Outcome) {
+        switch outcome {
+        case .ignored:
+            return
+        case .plan(let payload):
+            incomingPlan = IdentifiablePlan(payload: payload)
+            refusal = nil
+        case .refused(let reason):
+            incomingPlan = nil
+            refusal = reason
         }
     }
 }

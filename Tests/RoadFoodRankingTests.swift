@@ -132,6 +132,56 @@ final class RoadFoodRankingTests: XCTestCase {
         XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: "2027-08-31", today: "2028-02-29"), false)
     }
 
+    func testTheWarningKeysOffTheChainsOwnDocumentDateAndFallsBackToWhenItWasRead() {
+        // Burger King: a NOVEMBER 2022 chart read this morning. The day it was
+        // read says nothing about how old the numbers are, so it is not what
+        // is measured.
+        let bk = chain(publishedOn: "2022-11", checkedOn: "2026-09-23")
+        XCTAssertEqual(RoadFoodRanking.ageDate(bk), "2022-11")
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: RoadFoodRanking.ageDate(bk), today: "2026-09-23"), true)
+        // A chain whose document states no date is exactly as it was before
+        // this: the day a person read it is all there is to go on.
+        let undated = chain(checkedOn: "2026-09-20")
+        XCTAssertEqual(RoadFoodRanking.ageDate(undated), "2026-09-20")
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: RoadFoodRanking.ageDate(undated), today: "2026-09-23"), false)
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: RoadFoodRanking.ageDate(chain(checkedOn: "2025-12-01")),
+                                               today: "2026-09-23"), true)
+        // A fresh document read long ago is not stale, and a stale document
+        // read this morning is: the document is the fact, not the reading.
+        let fresh = chain(publishedOn: "2026-09-02", checkedOn: "2025-01-01")
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: RoadFoodRanking.ageDate(fresh), today: "2026-09-23"), false)
+        // Neither date is no date, which the screen says in its own words.
+        XCTAssertNil(RoadFoodRanking.ageDate(chain()))
+        XCTAssertNil(RoadFoodRanking.ageDate(nil))
+    }
+
+    func testAMonthOnlyDocumentDateIsReadAsTheFirstOfThatMonth() {
+        // "NOVEMBER 2022" is all Burger King's chart says, so no day is
+        // invented: the first of the month can only make a document look
+        // older, never fresher.
+        XCTAssertEqual(RoadFoodRanking.docDay("2022-11"), CalendarDay(year: 2022, month: 11, day: 1))
+        XCTAssertEqual(RoadFoodRanking.docDay("2021-03-29"), CalendarDay(year: 2021, month: 3, day: 29))
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: "2026-03", today: "2026-09-01"), false,
+                       "exactly six months is not over")
+        XCTAssertEqual(RoadFoodRanking.isStale(checkedOn: "2026-03", today: "2026-09-02"), true)
+        XCTAssertNil(RoadFoodRanking.docDay("2022-13"))
+        XCTAssertNil(RoadFoodRanking.docDay("2022"))
+        XCTAssertNil(RoadFoodRanking.docDay(nil))
+        XCTAssertNil(RoadFoodRanking.isStale(checkedOn: "2022-13", today: "2026-09-23"))
+    }
+
+    func testADocumentDateIsPrintedNoMorePreciselyThanItWasWritten() {
+        let us = Locale(identifier: "en_US")
+        XCTAssertEqual(RoadFoodRanking.publishedText("2021-03-29", locale: us), "Mar 29, 2021")
+        XCTAssertEqual(RoadFoodRanking.publishedText("2022-11", locale: us), "Nov 2022")
+        XCTAssertEqual(RoadFoodRanking.publishedText(nil, locale: us), nil)
+        XCTAssertEqual(RoadFoodRanking.publishedText("2022-13", locale: us), nil)
+    }
+
+    private func chain(publishedOn: String? = nil, checkedOn: String? = nil) -> RoadFoodChain {
+        RoadFoodChain(id: "c", name: "Chain", publishedOn: publishedOn, checkedOn: checkedOn, items: [])
+    }
+
     // MARK: - Rules, picker
 
     func testPlainRulesApplyEverywhereKindedOnesOnlyToTheirKind() {

@@ -48,8 +48,23 @@ enum PlanLinkIntake {
         /// Not ours and not an error: some other link opened LIFT, or a bare
         /// `/lift/` address with nothing in it. Say nothing.
         case ignored
-        case plan(PlanPayload)
+        case plan(IncomingPlan)
         case refused(Refusal)
+    }
+
+    /// A plan that opened, and the road picks riding in the same link.
+    ///
+    /// `rf` is not a field on LiftKit's `PlanPayload` -- it is read from the
+    /// same fragment by `RoadPickLink`, app-side, so the pinned kit two
+    /// shipped apps share does not move for a list of strings. Pairing them
+    /// here is what keeps the pair together: every door ends at
+    /// `PlanPreviewView` with both halves, and no call site can accept a plan
+    /// and quietly drop its picks.
+    struct IncomingPlan: Equatable {
+        let payload: PlanPayload
+        /// `rf`, normalised. Empty when the key was absent, which
+        /// PLAN-FORMAT calls silence about picks rather than a retraction.
+        let roadPickIDs: [String]
     }
 
     /// A URL handed to `onOpenURL`: LIFT's own `dugcanliftlift://plan#...`
@@ -89,8 +104,13 @@ enum PlanLinkIntake {
 
     private static func decode(_ fragment: String, expectedLifterID: String) -> Outcome {
         do {
-            return .plan(try PlanLinkCodec.decode(fragment: fragment,
-                                                  expectedLifterID: expectedLifterID))
+            let payload = try PlanLinkCodec.decode(fragment: fragment,
+                                                   expectedLifterID: expectedLifterID)
+            // Only once the codec has accepted the link: `RoadPickLink` is
+            // lenient by design and would answer "no picks" for anything,
+            // including a fragment that is not a plan at all.
+            return .plan(IncomingPlan(payload: payload,
+                                      roadPickIDs: RoadPickLink.ids(inFragment: fragment)))
         } catch let error as PlanLinkError {
             return .refused(.link(error))
         } catch {

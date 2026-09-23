@@ -50,17 +50,23 @@ struct PlanImportSummary: Equatable {
     var mealCount: Int
     var workoutCount: Int
     var scheduledSessionCount: Int
+    /// `rf`, which is not a field on `PlanPayload` -- it rides beside it from
+    /// the link (see `RoadPickLink`), so it is counted from what the caller
+    /// was handed rather than from the payload.
+    var roadPickCount: Int = 0
 }
 
 enum PlanImporter {
 
-    static func summary(for payload: PlanPayload) -> PlanImportSummary {
-        PlanImportSummary(
+    static func summary(for plan: PlanLinkIntake.IncomingPlan) -> PlanImportSummary {
+        let payload = plan.payload
+        return PlanImportSummary(
             coachName: payload.n,
             recipeCount: payload.r?.count ?? 0,
             mealCount: payload.m?.count ?? 0,
             workoutCount: payload.w?.count ?? 0,
-            scheduledSessionCount: payload.k?.count ?? 0
+            scheduledSessionCount: payload.k?.count ?? 0,
+            roadPickCount: plan.roadPickIDs.count
         )
     }
 
@@ -73,10 +79,16 @@ enum PlanImporter {
     /// `encode(to:)` does not promise the key order a hand-written one
     /// produced. Sorting normalises that away, so a plan already imported
     /// still hashes the same and is not re-imported as if it were new.
-    static func hash(of payload: PlanPayload) throws -> String {
+    /// - Parameter roadPickIDs: `rf`. **Part of the hash**, or a coach who
+    ///   sends the same week again with different picks would have the second
+    ///   link refused as already imported and their new picks silently lost.
+    ///   An empty list writes no key at all, so every plan without picks
+    ///   hashes exactly as it did before road picks existed --
+    ///   `PlanRoadPicksTests` pins that against a value recorded on main.
+    static func hash(of payload: PlanPayload, roadPickIDs: [String] = []) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(HashableMirror(of: payload))
+        let data = try encoder.encode(HashableMirror(of: payload, roadPickIDs: roadPickIDs))
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
@@ -88,10 +100,20 @@ enum PlanImporter {
         return (try? context.fetch(descriptor).isEmpty) == false
     }
 
-    /// - Parameter defaults: where the plan's sides and the per-side logging
-    ///   choice are kept (`PlanSides`, `PerSideLogging`). Written only once
-    ///   the store has saved, so a failed accept leaves neither behind.
-    static func accept(_ payload: PlanPayload, hash: String, in context: ModelContext,
+    /// - Parameter roadPickIDs: `rf`, the Road Food items the coach is happy
+    ///   with (PLAN-FORMAT.md "Road picks"). A non-empty list **replaces**
+    ///   whatever is stored, whole; an empty one leaves it alone, because a
+    ///   plan with no `rf` is silence about picks rather than a retraction.
+    ///   Nothing is checked against `road-food.json` here: an id this build
+    ///   does not have is skipped where the list is drawn, so a later release
+    ///   that has the item again shows the pick rather than having thrown it
+    ///   away on arrival.
+    /// - Parameter defaults: where the plan's sides, the per-side logging
+    ///   choice and the road picks are kept (`PlanSides`, `PerSideLogging`,
+    ///   `RoadPicks`). Written only once the store has saved, so a failed
+    ///   accept leaves none of them behind.
+    static func accept(_ payload: PlanPayload, roadPickIDs: [String] = [], hash: String,
+                       in context: ModelContext,
                        defaults: UserDefaults = .standard) throws {
         guard !isAlreadyImported(hash, in: context) else { return }
 
@@ -240,6 +262,16 @@ enum PlanImporter {
             for key in eachSideLifts { raw = PerSideLogging.setting(true, for: key, in: raw) }
             defaults.set(raw, forKey: PerSideLogging.storageKey)
         }
+        RoadPicks.accept(ids: roadPickIDs, from: payload.n, in: defaults)
+    }
+
+    /// The whole accept, from what came in through a door. The one call site
+    /// a view should use: it cannot pass the payload and forget the picks.
+    static func accept(_ plan: PlanLinkIntake.IncomingPlan, hash: String,
+                       in context: ModelContext,
+                       defaults: UserDefaults = .standard) throws {
+        try accept(plan.payload, roadPickIDs: plan.roadPickIDs, hash: hash, in: context,
+                   defaults: defaults)
     }
 
     private static func value(_ tuple: [Double?], _ index: Int) -> Double? {
@@ -271,9 +303,15 @@ private struct HashableMirror: Encodable {
     let w: [PlanWorkout]?
     let k: [PlanSession]?
 
-    init(of payload: PlanPayload) {
+    /// Nil rather than `[]` when there are no picks: a synthesised
+    /// `encode(to:)` leaves a nil optional out entirely, so the bytes hashed
+    /// for a plan without picks are the bytes main hashed.
+    let rf: [String]?
+
+    init(of payload: PlanPayload, roadPickIDs: [String] = []) {
         v = payload.v; t = payload.t; l = payload.l; n = payload.n
         r = payload.r; m = payload.m; w = payload.w; k = payload.k
+        rf = roadPickIDs.isEmpty ? nil : roadPickIDs
     }
 }
 

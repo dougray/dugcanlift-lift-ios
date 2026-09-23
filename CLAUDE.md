@@ -333,9 +333,11 @@ wraps the five tabs in `.tabViewStyle(.page(...))`, which takes every
 horizontal drag for itself -- a swipe on Home turns to Food, and on Routines,
 the last page, it does nothing at all. Swipe-to-delete inside any tab is
 therefore unreachable, however correct the code reads. A row that can be
-deleted needs a button (`RoutinesView`) rather than `.onDelete`, and a new
-`.onDelete` anywhere in this app is dead code. `OutdoorActivityListView` still
-has one.
+deleted needs a button (`RoutinesView`, `OutdoorActivityListView`) rather than
+`.onDelete`, and a new `.onDelete` anywhere in this app is dead code. That
+holds for a screen pushed inside a tab too, and it was measured there as well:
+swiping a row of the Outdoor list, which is pushed inside Train, pages the
+whole shell to Routines.
 
 **Deleting a routine is `RoutineRemoval`**, not view code -- the rule
 `PlanSides` follows and Coach's `ClientRemoval` follows, because a rule in a
@@ -351,6 +353,27 @@ at log time, and `PlanSides.logged`, which is deliberately a copy rather than a
 link back. It is one `save()`, so a failure rolls back whole. The confirmation
 always says what stays and leaves a count of zero out entirely, the distinction
 Coach's own confirmation makes.
+
+**Deleting a recorded run is `OutdoorRemoval`**, the same kind of rule as
+`RoutineRemoval` and for the same reason. **What goes:** the
+`OutdoorActivity` row, and with it the route -- `RoutePoint`s are encoded into
+`routePointsData` on the row itself, not a model of their own, so there is
+nothing to sweep and, unlike a routine, no orphan is possible: nothing else in
+the store names an activity. **What is worked out again rather than deleted:**
+the personal bests, the Last route card and a coach's `o` / `ob` / `lr`, all of
+which are read live from the query rather than stored, so the farthest run
+simply becomes whatever is now farthest and the coach's copy catches up at the
+next send. **What stays: the workout in Apple Health.** When `healthKitUUID` is
+set, LIFT wrote an `HKWorkout` with its route into the person's Health store,
+and deleting here does not touch it -- that data is shared with the rings and
+every other app that has read it, the delete would be silent and has no undo,
+`HealthKitManager` has never deleted anything, and a delete there can fail on a
+revoked authorization nobody can see. The confirmation says so in words
+whenever there is a workout to say it about, and says nothing about Health when
+there is not. One confirmation, two ways in
+(`DeleteOutdoorActivityAlert`): the list row and the review screen's own
+button, which used to be an unconfirmed "Discard" that deleted a year-old run
+as readily as a recording from ten seconds ago.
 
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation

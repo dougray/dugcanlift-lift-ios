@@ -8,6 +8,10 @@ struct RoutinesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
     @State private var isCreatingRoutine = false
+    /// Read so that a change of interface style invalidates this body, which
+    /// is what re-applies the navigation bar's colours. See the note on
+    /// `.toolbarColorScheme` below.
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Starter routines off a bundled file, for someone who hasn't written any.
     private let starters = StarterSplits.bundled()
@@ -59,6 +63,22 @@ struct RoutinesView: View {
             .background(Theme.background)
             .navigationTitle("Routines")
             .navigationBarTitleDisplayMode(.inline)
+            // The bar is told the style rather than left to work it out, and
+            // that was measured: switch the phone from dark to light with this
+            // screen showing and the title stayed white on parchment and the
+            // "+" stayed a dark-mode glass circle, while everything else on the
+            // screen turned light. `Theme`'s colours are dynamic `UIColor`s, so
+            // the list re-draws with no SwiftUI invalidation at all -- and a
+            // body that never re-runs never re-applies the bar, which holds the
+            // colours it resolved when it was built. Reading `colorScheme`
+            // above is what makes the change invalidate this body; naming it
+            // here is what the bar then picks up. Every other navigation bar in
+            // the app is on a sheet, which is built fresh each time it is
+            // presented and (measured, with Settings open across the change)
+            // re-resolves on its own; Train hides its bar outright. This is the
+            // only tab root that shows one, which is why it is the only screen
+            // that needed this.
+            .toolbarColorScheme(colorScheme, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("New", systemImage: "plus") { isCreatingRoutine = true }

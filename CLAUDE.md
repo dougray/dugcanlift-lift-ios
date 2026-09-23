@@ -269,6 +269,24 @@ blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
 missing one of the four core macros is not logged at all, because
 `NutritionFacts` would store it as zero. No location, ever.
 
+**The copy is pinned to the kit's bytes.** `Resources/road-food.sha256` is the
+kit's checksum of `road-food.json`, copied across with it, and
+`RoadFoodDataTests` hashes **what the app bundle actually holds** and asserts it
+matches. Everything else here checks the data's shape -- it decodes, the dates
+are usable, no fake name got in -- and a copy several chains behind passes all
+of it. Hashing the bundle rather than the file on disk also means a build that
+quietly dropped the resource from the target fails instead of passing.
+
+When that test fails, copy `road-food.json` *and* `road-food.sha256` from
+`dugcanlift-kit/data/` over together. Never edit either file here, and never
+re-write the checksum by hand to make the test pass: the kit writes it with
+`node data/validate-road-food.mjs --write-checksum`, and the other four app
+repos pin the same one, so a hand-written hash only moves the failure somewhere
+further away. `Tests/Fixtures/road-food-sample.json` is pinned the same way
+against `road-food-sample.sha256`, and is shared with LIFT web and
+`dugcanlift-lift` -- and `RoadFoodSample.swift`'s inline copy is pinned against
+the fixture, so those four move together or not at all.
+
 **Two dates, and the warning keys off the chain's.** `checkedOn` is the day a
 person read a chain's chart; `publishedOn` is the date the chart **states about
 itself**, optional and only as precise as the document is -- `"2021-03-29"`

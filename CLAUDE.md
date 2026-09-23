@@ -28,6 +28,8 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
   `LiftReference` product (see "Shared code lives in LiftKit" below), not a
   local `Sources/Reference/` — that directory no longer exists here.
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
+- **`Sources/ShareExtension/`** — the `LiftShare` share extension (see "A
+  coach's plan link, and why Universal Links are not the answer" below).
 - **`Watch/`** — LIFT for Apple Watch, this app's companion: the `LiftWatch`
   target (`Watch/LiftWatch`), its `LiftWatchKit` package, and the sync
   contracts (`Watch/contracts`). See "The Apple Watch app" below and
@@ -36,6 +38,75 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
 The SwiftData store lives in the App Group container
 (`group.com.dugcanlift.lift`) so the widget extension can read it. Do not move it
 to the app's private container.
+
+## A coach's plan link, and why Universal Links are not the answer
+
+A coach sends a plan as a link. `Config/Lift.entitlements` declares
+`com.apple.developer.associated-domains: applinks:www.dugcanlift.com` and it
+stays there for the day this is signed by a paid team -- but **a free Apple
+Personal Team cannot sign Associated Domains at all**, which is why
+`make device-build` swaps in `Config/Lift-free.entitlements`, and
+dugcanlift.com serves no apple-app-site-association file. On Doug's own phone
+a plan link therefore opens the browser, and nothing reaches the app.
+
+Coach iOS hit this wall first and answered it with three doors that need no
+entitlement. LIFT now has the same three, and they all ask **`PlanLinkIntake`**,
+so a link that opens one way opens every way and one that fails, fails alike:
+
+1. **`dugcanliftlift://plan#1z...`**, a custom URL scheme (`CFBundleURLTypes` in
+   project.yml, `LiftApp.onOpenURL`). Exactly that spelling: not
+   `dugcanliftcoach`, which is Coach iOS's, because a scheme claimed by two
+   apps on one phone goes to whichever iOS picks.
+2. **Paste a Plan Link** (`PastePlanLinkView`), in Settings under Coach -- the
+   section that already holds the coach's email and Send to Coach. It is a
+   push, not a sheet: Settings is itself a sheet, and a second `.sheet` on
+   `CoachSection` opened the screen and closed both again.
+3. **The share extension** (`LiftShare`, `Sources/ShareExtension/`). "LIFT"
+   appears in the share sheet for a URL or text; it says what the plan is
+   ("Plan from Doug · 1 workout · 1 scheduled day") or why it will not take it,
+   and on Add queues the *fragment* in the existing App Group
+   `group.com.dugcanlift.lift` (`PendingPlanLinks`). `LiftApp` drains the queue
+   whenever the scene becomes active.
+
+`LiftApp.onOpenURL` still handles the Universal Link unchanged, so the day
+there is a paid team nothing has to be rewritten.
+
+**Accepting a plan is still only `PlanPreviewView`.** No door imports
+anything; each one ends at the same preview and the same `PlanImporter`.
+The extension in particular **does not open the app and does not write
+SwiftData** -- iOS gives a share extension no supported way to open its
+containing app, and a routine appearing in someone's library from a share
+sheet is not a decision the share sheet gets to make. It compiles only
+`PlanLinkExtractor.swift`, `PlanLinkIntake.swift` and `PendingPlanLinks.swift`
+from `Sources/Shared`, listed file by file, and links `LiftCore` only: never
+SwiftData models, never `LiftReference`. It has its own
+`PrivacyInfo.xcprivacy`, because an extension is its own bundle. It is a new
+bundle id, `com.dugcanlift.lift.share`, so the next free-team device build
+registers one more App ID (ten per seven days is the cap).
+
+**`PlanLinkExtractor` is the one rule for finding a plan link in text**, and it
+is a deliberate port of Coach iOS's `ShareLinkExtractor` -- **change one, change
+both.** The first `www.dugcanlift.com/lift/#1z...`/`#1u...` (or
+`dugcanliftlift:` URL) anywhere in the text wins, whatever surrounds it;
+otherwise the whole text may be a bare fragment. Another site's URL carrying a
+`#1z...` fragment is refused, and so is the lifter's own `/coach/#1z...` log
+link, which travels the other way and gets its own sentence rather than "not a
+link". It is not in LiftKit because moving it there is a kit tag plus a pinned
+bump in two shipped apps, and Coach's copy is compiled into a shipped share
+extension; a third app needing the rule is when to pay that cost.
+
+**The lifter's id is mirrored into the App Group.** An extension has its own
+`UserDefaults.standard` and cannot read `coachLifterID`, which
+`PlanLinkCodec.decode` needs before it will return a payload at all.
+`LiftApp.init` writes it to the group suite once. Before LIFT has ever been
+opened there is nothing to mirror, and the extension says so rather than
+queueing a plan it could not check.
+
+**Safari shares the address without the plan**: `lift/app.js` strips the
+fragment with `history.replaceState` as soon as it has read it, exactly as the
+Coach web app does, so sharing from Safari after the page loaded sends
+`https://www.dugcanlift.com/lift/`. `isLiftPageWithoutPlan` recognises that and
+says to share from the message it arrived in instead.
 
 ## Conventions that matter
 
@@ -114,7 +185,17 @@ backfilled: every set logged before this is two-sided, which is honest, and no
 decoder anywhere should guess a side from an exercise name. Whether a lift is
 logged per limb is the lifter's choice, kept in `perSideExercises` keyed
 `name|equipment` — `UnilateralGuess` only pre-ticks the box, and a "no" on a
-name it says yes to must stick.
+name it says yes to must stick. **Its terms are matched as whole words**, over
+a name with everything that is not a letter or a digit turned into a space:
+one list, shared term for term with LIFT web's `UNILATERAL_TERMS`
+(`lift/sides.js`), LIFT for Android's `PerSideLogging` and Coach iPhone's
+`UnilateralGuess`, so change a term in all four or in none. It was a substring
+match until 2026-09, which pre-ticked a cold plunge for "lunge" — every
+singular and plural is listed rather than matched by prefix, and the "-ed"
+spellings too ("One-Legged Deadlift"), precisely because whole words cannot
+see a shorter term inside a longer word. No bundled exercise name reads
+differently either way; the names this gets wrong are the ones a coach types
+into a plan.
 
 **A lift's identity is name, equipment *and* side** wherever sets are grouped
 or charted (`LiftKey`), for the same reason equipment joined it: a left-arm row
@@ -129,9 +210,31 @@ sodium are: no threshold, no colour, no prompt to fix anything.
 2 right) and a named `side` field in a backup, omitted when both. Bits in the
 link so the tuple stays six fields and an older decoder still reads the weight
 and the reps; a name in the backup because that file is read by people and by
-three platforms. `PLAN-FORMAT` is unchanged — prescriptions stay two-sided in
-v1. The documents in the `dugcanlift-coach` repo are the contract; `PerLimbTests`
-pins this side of it.
+three platforms. The documents in the `dugcanlift-coach` repo are the contract;
+`PerLimbTests` pins this side of it.
+
+**A coach's plan can carry sides** (PLAN-FORMAT.md "Sides"): `b: 1` on an
+exercise done each side, and a sixth set-tuple position naming a side, read
+masked through LiftKit's `PlanSetFlags`. Accepting an each-side exercise turns
+per-side logging on for that lift. Starting it keeps the prescription with the
+logged exercise: the header counts against it (`L 0/3 · R 0/3`, `L 4/3` when
+over, never capped), Add set lands on the side the next unfilled prescribed set
+names and takes its numbers, and sided sets are logged as they are done rather
+than pre-filled; two-sided sets are copied in as before. A named set on a lift
+not logged per side shows L / R until it is logged, without touching
+`perSideExercises`. Progression, imbalance and volume read the log, never the
+plan. The rules are `Prescription` (a port of LIFT web's `sides.js`).
+**Where it is kept: `PlanSides`, a `UserDefaults` side-car**, keyed by the
+routine's exercise and set ids and by the logged `ExerciseEntry` id -- not
+properties on LiftKit's shared routine `@Model`s, which would mean freezing
+`Routine`, `RoutineExercise` and `RoutinePrescribedSet` in every schema version
+since V3, and not a V9 on `ExerciseEntry` for a suggestion. It is not in the
+backup file: a restored session loses only its targets, never a set.
+`PlanSidesDegradationTests` pins how a build without any of this reads such a
+plan (as two-sided sets, weights intact) against Coach web's fixture
+`Tests/Fixtures/web-plan-per-side.txt`; never regenerate it from Swift. The
+watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
+companion move.
 
 **A struct a model stores is part of the schema.** SwiftData flattens
 `NutritionFacts` into one column per field on FoodEntry, Recipe and

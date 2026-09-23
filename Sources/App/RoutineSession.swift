@@ -14,8 +14,11 @@ extension Routine {
     /// set that prescribes anything at all — weight, reps, time or distance.
     @MainActor
     @discardableResult
-    func startSession(on date: Date, in context: ModelContext) -> WorkoutDay {
+    func startSession(on date: Date, in context: ModelContext,
+                      defaults: UserDefaults = .standard) -> WorkoutDay {
         let day = WorkoutQueries.fetchOrCreate(date, in: context)
+        var planSides = PlanSides.load(from: defaults)
+        var loggedChanged = false
 
         // Guard against duplicate invocation: nothing marks a
         // ScheduledSession as consumed once started (TrainView's
@@ -47,7 +50,23 @@ extension Routine {
             // V6) and dropped every timed set, so a mobility or running routine
             // started with its exercises and no sets at all. Time and distance
             // now land on the set like weight and reps do.
+            // A coach's prescription with sides in it is kept with the logged
+            // exercise, so the header can count against it ("L 0/3 · R 0/3")
+            // and Add set can offer the side and the numbers of the next set it
+            // asks for. Its sided sets are logged one at a time, as they are
+            // done, rather than pre-filled: a pre-filled left set is a claim
+            // nobody made yet. Two-sided sets of an exercise that is not each
+            // side are copied in as they always were.
+            let prescription = planSides.prescription(for: exercise)
+            if let prescription {
+                planSides.logged[entry.id] = prescription
+                loggedChanged = true
+            }
             entry.sets = exercise.orderedSets
+                .filter { set in
+                    guard let prescription else { return true }
+                    return !prescription.eachSide && planSides.side(of: set) == nil
+                }
                 .filter {
                     $0.targetWeightKg != nil || $0.targetReps != nil
                         || $0.targetDurationSec != nil || $0.targetDistanceMeters != nil
@@ -67,6 +86,7 @@ extension Routine {
         }
 
         try? context.save()
+        if loggedChanged { planSides.save(to: defaults) }
         return day
     }
 }

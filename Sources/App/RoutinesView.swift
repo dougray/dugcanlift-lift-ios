@@ -30,10 +30,6 @@ struct RoutinesView: View {
                         ForEach(group.routines) { routine in
                             RoutineRow(routine: routine)
                         }
-                        .onDelete { offsets in
-                            for index in offsets { context.delete(group.routines[index]) }
-                            try? context.save()
-                        }
                     }
                 }
 
@@ -91,6 +87,8 @@ private struct RoutineRow: View {
     @Environment(\.modelContext) private var context
     let routine: Routine
     @State private var didSendToWatch = false
+    @State private var confirmingDelete = false
+    @State private var summary = RoutineRemoval.Summary()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -117,7 +115,31 @@ private struct RoutineRow: View {
                 .font(.caption.weight(.semibold))
                 .buttonStyle(.borderless)
                 .disabled(didSendToWatch)
+
+                // A button in the row, not `.onDelete`, and that was
+                // measured: the shell is a paged `TabView` (`RootView`),
+                // which takes every horizontal drag for itself — a swipe on
+                // Home turns to Food, and on Routines, the last page, it does
+                // nothing at all. The `.onDelete` that used to be here could
+                // therefore never be opened on any screen, which is why a
+                // routine could not be deleted. Asking first is what makes a
+                // plain button safe here, and it says what goes with it.
+                Button("Delete", role: .destructive) {
+                    summary = RoutineRemoval.summary(for: routine, in: context)
+                    confirmingDelete = true
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.borderless)
+                .tint(Theme.accent)
             }
+        }
+        .alert("Delete \u{201C}\(routine.name)\u{201D}?", isPresented: $confirmingDelete) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                RoutineRemoval.remove(routine, in: context)
+            }
+        } message: {
+            Text(RoutineRemoval.warning(summary))
         }
     }
 }

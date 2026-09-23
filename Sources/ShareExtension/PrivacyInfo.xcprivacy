@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The share extension's own manifest: an extension is its own bundle,
+	     and the app's manifest does not cover it. It reads the plan link the
+	     lifter shared, decodes it on the device, and writes the link's
+	     fragment to LIFT's App Group for the app to open. No network, no
+	     tracking. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- 1C8F.1: PendingPlanLinks, the group.com.dugcanlift.lift suite,
+		     shared with the containing app only. CA92.1: LiftCore's
+		     liftAppearance() reading the appearance choice through
+		     @AppStorage in the extension's own defaults. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>1C8F.1</string>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

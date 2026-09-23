@@ -310,6 +310,30 @@ lines. `RoadPicksDegradationTests` pins what a build without any of this makes
 of the same link, against Coach web's own fixture
 `Tests/Fixtures/web-plan-road-picks.txt`; never regenerate it from Swift.
 
+**The shell is a paged `TabView`, so `.onDelete` never opens.** `RootView`
+wraps the five tabs in `.tabViewStyle(.page(...))`, which takes every
+horizontal drag for itself -- a swipe on Home turns to Food, and on Routines,
+the last page, it does nothing at all. Swipe-to-delete inside any tab is
+therefore unreachable, however correct the code reads. A row that can be
+deleted needs a button (`RoutinesView`) rather than `.onDelete`, and a new
+`.onDelete` anywhere in this app is dead code. `OutdoorActivityListView` still
+has one.
+
+**Deleting a routine is `RoutineRemoval`**, not view code -- the rule
+`PlanSides` follows and Coach's `ClientRemoval` follows, because a rule in a
+view's `@State` cannot be tested and this one decides what somebody loses.
+**What goes:** the `Routine`, by cascade its `RoutineExercise`s and their
+`RoutinePrescribedSet`s, plus the three things that name a routine as a plain
+value and no cascade reaches -- every `ScheduledSession` a coach booked it on
+(left behind, one draws "Coach scheduled: X" forever and does nothing when
+tapped), the `WatchPlanPin` when it is this routine, and this routine's
+`PlanSides.eachSide` / `.sides` entries. **What stays:** every workout already
+logged from it, which is the whole point of snapshotting a name and its numbers
+at log time, and `PlanSides.logged`, which is deliberately a copy rather than a
+link back. It is one `save()`, so a failure rolls back whole. The confirmation
+always says what stays and leaves a count of zero out entirely, the distinction
+Coach's own confirmation makes.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

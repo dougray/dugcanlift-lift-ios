@@ -30,8 +30,8 @@ struct PastePlanLinkView: View {
     @State private var showsRefusal = false
     @State private var plan: IdentifiablePlan?
 
-    private var readyPlan: PlanPayload? {
-        if case .plan(let payload) = outcome { return payload }
+    private var readyPlan: PlanLinkIntake.IncomingPlan? {
+        if case .plan(let incoming) = outcome { return incoming }
         return nil
     }
 
@@ -48,7 +48,9 @@ struct PastePlanLinkView: View {
             // confirmation could not be seen.
             if let readyPlan {
                 Section {
-                    Label(PlanLinkExtractor.summary(of: readyPlan), systemImage: "checkmark.circle.fill")
+                    Label(PlanLinkExtractor.summary(of: readyPlan.payload,
+                                                    roadPickCount: readyPlan.roadPickIDs.count),
+                          systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                     Button("Open Plan") { open(readyPlan) }
                 }
@@ -83,7 +85,7 @@ struct PastePlanLinkView: View {
             }
         }
         .sheet(item: $plan) { plan in
-            PlanPreviewView(payload: plan.payload)
+            PlanPreviewView(plan: plan.plan)
                 .liftAppearance()
         }
         .onChange(of: text, initial: false) { _, latest in
@@ -95,7 +97,7 @@ struct PastePlanLinkView: View {
         }
     }
 
-    private func open(_ payload: PlanPayload) {
-        plan = IdentifiablePlan(payload: payload)
+    private func open(_ incoming: PlanLinkIntake.IncomingPlan) {
+        plan = IdentifiablePlan(plan: incoming)
     }
 }

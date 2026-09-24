@@ -331,6 +331,23 @@ that repo is Wear OS only now. `Watch/README.md` has the detail.
   `LIFT_SYNC_ENVELOPE` launch variable exists for that gap.
 - **HealthKit** authorization is per bundle id: the move asks again on the
   watch, and the watch's Info.plist carries its own usage strings.
+- **A finished session comes home whole, and is stored as an ordinary
+  workout.** `SESSION_FINISHED` carries a `session` payload — every exercise,
+  every set with its weight in kilograms, reps, RPE, warmup flag and **side**,
+  the local day it belongs to and the heart rate — because a phone in a locker
+  is reachable for none of it, so there is deliberately no streamed
+  `SET_LOGGED`. `WatchSessionImporter` decides what happens to it, out of the
+  `WCSession` delegate for the reason `LiftProgression` is out of a view: a new
+  session is appended to its day (a day may already hold a workout logged
+  here), a repeat is not stored twice, and a newer revision replaces an earlier
+  import **only while this phone has not edited those rows since** — a
+  fingerprint taken at import and re-derived, so "the watch never silently
+  overwrites newer phone edits" is code and not a comment. The day is the
+  watch's `performedOn` unless it is more than a day ahead of this phone or a
+  fortnight behind it, in which case the session is filed under today rather
+  than under a broken clock's year; it is never dropped. The watch keeps the
+  session in `UnsentSessionLog` until the acknowledgement arrives, so nothing
+  is lost if this app is never opened.
 - **A food is stored once and acknowledged.** A watch-logged food arrives as
   `FOOD_LOGGED`; `WatchSyncReceiver` stores each one-shot id once
   (`WatchFoodLogReceipts`) and answers with a `WORKOUT_SYNC_ACK` under that id,

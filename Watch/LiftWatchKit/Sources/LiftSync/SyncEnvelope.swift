@@ -50,6 +50,12 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
     /// Present only when `event == .planPushed`. Absent — never `null` — on
     /// every other event, so a build that predates plans never sees the key.
     public var plan: WorkoutPlan?
+    /// Present only when `event == .sessionFinished`: the whole workout
+    /// that was logged, so the receiver can store it without having watched
+    /// the sets go by. Absent on a `SESSION_FINISHED` from a build that
+    /// predates it, which reads exactly as it always did — a notification
+    /// that a session ended, with nothing to store.
+    public var session: FinishedSession?
     /// Present only when `event == .sessionFinished`, and only when heart
     /// rate was actually recorded. Absent is "not recorded", never zero.
     public var heartRate: SessionHeartRate?
@@ -62,12 +68,14 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
         case origin
         case foodLog
         case plan
+        case session
         case heartRate
     }
 
     public init(event: Event, workoutID: UUID, revision: Int, updatedAt: Date,
                 origin: Origin, foodLog: FoodLogPayload? = nil,
-                plan: WorkoutPlan? = nil, heartRate: SessionHeartRate? = nil) {
+                plan: WorkoutPlan? = nil, session: FinishedSession? = nil,
+                heartRate: SessionHeartRate? = nil) {
         self.event = event
         self.workoutID = workoutID
         self.revision = revision
@@ -75,6 +83,7 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
         self.origin = origin
         self.foodLog = foodLog
         self.plan = plan
+        self.session = session
         self.heartRate = heartRate
     }
 
@@ -89,6 +98,7 @@ public struct SyncEnvelope: Codable, Equatable, Sendable {
         // `null` as nil, so either shape from another encoder decodes.
         foodLog = try container.decodeIfPresent(FoodLogPayload.self, forKey: .foodLog)
         plan = try container.decodeIfPresent(WorkoutPlan.self, forKey: .plan)
+        session = try container.decodeIfPresent(FinishedSession.self, forKey: .session)
         heartRate = try container.decodeIfPresent(SessionHeartRate.self, forKey: .heartRate)
 
         // The schema says `revision` has a minimum of 1. Decoding is the only

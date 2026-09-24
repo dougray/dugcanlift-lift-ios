@@ -30,6 +30,10 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
 - **`Sources/ShareExtension/`** — the `LiftShare` share extension (see "A
   coach's plan link, and why Universal Links are not the answer" below).
+- **`Watch/`** — LIFT for Apple Watch, this app's companion: the `LiftWatch`
+  target (`Watch/LiftWatch`), its `LiftWatchKit` package, and the sync
+  contracts (`Watch/contracts`). See "The Apple Watch app" below and
+  `Watch/README.md`.
 
 The SwiftData store lives in the App Group container
 (`group.com.dugcanlift.lift`) so the widget extension can read it. Do not move it
@@ -241,22 +245,16 @@ change by installing over a store the previous build wrote, not only in tests �
 `Tests/Fixtures/v6-simulator.store` is one.
 
 **The watch is told what to lift, in kilograms, with blanks left blank.**
-`PLAN_PUSHED` carries today's plan to LIFT watchOS: the routine a coach's
+`PLAN_PUSHED` carries today's plan to the watch app: the routine a coach's
 plan booked for today, or one the lifter sent by hand from Routines
 (`WatchPlanPin`, a day-scoped `UserDefaults` pin rather than a field on the
-shared `Routine` model). `WatchPlanBuilder` decides which, and `Sources/
-Shared/WatchPlan.swift` holds the wire types — hand-mirrored from
-`dugcanlift-lift-watch/shared/contracts/workout-sync.schema.json` exactly as
-`SyncEnvelope` is, and pinned by `WatchPlanWireTests`. Three rules carry the
-risk: the wire field is `weightKg` and `RoutinePrescribedSet.targetWeightKg`
-is already kilograms, so nothing on that path converts; every prescribed
-field is optional and a blank travels as an absent key, never a zero or a
-`null`; and a re-push of an unchanged plan keeps its revision
-(`WatchPlanRevisions` hashes the payload), because the watch ignores a
-revision it has already seen. Delivery is `transferUserInfo` with
-`sendMessage` as a fast path — but see that file's note: measured on a paired
-simulator pair, this phone is not that watch's `WCSession` peer yet, and
-nothing it sends arrives.
+shared `Routine` model). `WatchPlanBuilder` decides which; the wire types are
+`LiftSync`'s (see below). Three rules carry the risk: the wire field is
+`weightKg` and `RoutinePrescribedSet.targetWeightKg` is already kilograms, so
+nothing on that path converts; every prescribed field is optional and a blank
+travels as an absent key, never a zero or a `null`; and a re-push of an
+unchanged plan keeps its revision (`WatchPlanRevisions` hashes the payload),
+because the watch ignores a revision it has already seen.
 
 **Road Food ranks against Home's number and logs an ordinary entry.** The
 rules are `RoadFoodRanking`, a port of LIFT web's `lift/road-food.js` with its
@@ -392,6 +390,62 @@ as readily as a recording from ten seconds ago.
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.
+
+## The Apple Watch app
+
+LIFT for Apple Watch is a target of this project, not a separate app. It moved
+here from `dugcanlift-lift-watch` (history kept, by `git subtree`) in 2026-09;
+that repo is Wear OS only now. `Watch/README.md` has the detail.
+
+- **Layout.** `Watch/LiftWatch` is the watchOS target `LiftWatch` (scheme
+  `LiftWatch`, product `LIFT.app`). `Watch/LiftWatchKit` is its Swift package,
+  named `LiftWatchKit` because dugcanlift-kit's package is already `LiftKit` and
+  Xcode takes a local package with a remote one's name for an override of it.
+  Its products are `LiftKit` (the watch's domain; the module name the watch
+  imports) and `LiftSync`. `Watch/contracts` holds the two schema files.
+- **One set of wire types.** `SyncEnvelope`, `WorkoutPlan` and its parts,
+  `SessionHeartRate`, `RecentFoodsSnapshot` and `WatchFood` live once, in
+  `LiftSync`, and both apps compile that copy: this app links the `LiftSync`
+  product alone (never `LiftKit`, which would bring the watch's domain and its
+  food library into the phone). There is no mirror to keep in step any more.
+  A change to them is still a wire change, because a phone and a watch can run
+  different builds: add fields as optional, absent-when-nil keys, never rename.
+  `SchemaConformanceTests` checks the types against `Watch/contracts/*.json` in
+  both directions; update the schema in the same change.
+- **Bundle ids.** `com.dugcanlift.lift.watchkitapp`, companion of
+  `com.dugcanlift.lift` (`WKCompanionAppBundleIdentifier`), embedded at
+  `Lift.app/Watch/LIFT.app`. `WKRunsIndependentlyOfCompanionApp` keeps it
+  usable with no phone. Being the companion is what makes the two `WCSession`
+  peers; the old `WKWatchOnly` `com.dugcanlift.watch` never was, and nothing
+  either side sent it arrived.
+- **One version.** The watch and widget targets set no version of their own and
+  every Info.plist reads `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`: App
+  Store validation rejects an embedded watch app whose version differs from
+  the app's. Never give a target its own.
+- **Signing on the free team.** The watch needs HealthKit only; nothing a free
+  Personal Team cannot sign. `make device-build` swaps in
+  `Config/Lift-free.entitlements` through `FREE_TEAM_ENTITLEMENTS`, which only
+  the Lift target sets; `make signing` shows every target keeps its own file.
+  The first device build registers the App ID `com.dugcanlift.lift.watchkitapp`
+  and needs `-allowProvisioningUpdates`, which `make device-build` passes. Free
+  teams cap new App IDs per week and active apps per device.
+- **Simulator.** `make watch-run` installs the embedded app on the watch
+  simulator paired with `$(SIM)` with `simctl install`, because the simulator
+  does not do it the way a real iPhone's Watch app does. **`transferUserInfo` is
+  never delivered between a paired iPhone and watch simulator**, either way
+  (Apple DTS; the payload reaches the peer's `wcd` and is dropped): on a
+  simulator only `sendMessage` and application context work. Anything queued —
+  a plan pushed while the watch app was closed, a food logged while this app
+  was not running — can only be checked on real devices. The watch's DEBUG
+  `LIFT_SYNC_ENVELOPE` launch variable exists for that gap.
+- **HealthKit** authorization is per bundle id: the move asks again on the
+  watch, and the watch's Info.plist carries its own usage strings.
+- **A food is stored once and acknowledged.** A watch-logged food arrives as
+  `FOOD_LOGGED`; `WatchSyncReceiver` stores each one-shot id once
+  (`WatchFoodLogReceipts`) and answers with a `WORKOUT_SYNC_ACK` under that id,
+  which takes the food out of the watch's standalone, exportable log. Never
+  acknowledge a food that was not saved: until the ack, the watch may hold the
+  only copy.
 
 ## Constraints
 

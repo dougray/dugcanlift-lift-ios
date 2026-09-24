@@ -3,6 +3,7 @@ import WatchConnectivity
 import SwiftData
 import WidgetKit
 import LiftCore
+import LiftSync
 
 /// The phone's only `WCSessionDelegate` — mirrors the watch's own
 /// `PhoneSyncTransport` on the other end of the same wire format. Decodes
@@ -33,9 +34,17 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     static private(set) var shared: WatchSyncReceiver?
 
     private let context: ModelContext
+    private let defaults: UserDefaults
+    /// Where an outgoing envelope goes. `nil` is WatchConnectivity
+    /// (`sendOverSession`); a test passes a closure to see what was sent,
+    /// since no `WCSession` activates in a unit test process.
+    private let sender: ((SyncEnvelope) -> Void)?
 
-    init(context: ModelContext) {
+    init(context: ModelContext, defaults: UserDefaults = .standard,
+         sender: ((SyncEnvelope) -> Void)? = nil) {
         self.context = context
+        self.defaults = defaults
+        self.sender = sender
         super.init()
         if WCSession.isSupported() {
             WCSession.default.delegate = self
@@ -151,19 +160,20 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         return true
     }
 
-    /// **Measured, 2026-09-20: this very likely reaches nothing yet.** On a
-    /// paired iPhone 17 / Apple Watch Ultra 4 simulator pair with both apps
-    /// installed and running, `WCSession.default` on this side reports
-    /// `isPaired == true` but `isWatchAppInstalled == false` and
-    /// `isReachable == false` — LIFT watchOS is a `WKWatchOnly` app with its
-    /// own bundle id (`com.dugcanlift.watch`) rather than this app's
-    /// companion, and `WCSession` connects an iOS app to *its own* watch
-    /// app. The watch repo's complications design already suspected this
-    /// ("LIFT iOS and LiftWatch are very likely not `WCSession` peers"); the
-    /// numbers above are the first measurement of it. Everything below is
-    /// still correct and is what will run the day the watch app ships as a
-    /// companion target — and the same gap already applies to the food
-    /// snapshot and `FOOD_LOGGED`, so it is not this feature's to fix.
+    /// The watch app is this app's companion (`Watch/`, embedded at
+    /// `Lift.app/Watch/LIFT.app`), which is what makes the two `WCSession`
+    /// peers. It was a separate `WKWatchOnly` app until 2026-09, and on a
+    /// paired simulator pair this side then reported
+    /// `isWatchAppInstalled == false` and nothing it sent arrived; as a
+    /// companion both sides report the other installed, and a plan, the
+    /// recent-foods context and a food all make the round trip.
+    ///
+    /// One exception on the simulator only: `transferUserInfo` is never
+    /// delivered between a paired iPhone and Apple Watch *simulator*, in
+    /// either direction (Apple DTS: the watchOS Simulator does not support
+    /// it; the payload reaches the peer's `wcd` and is dropped there). So on
+    /// a simulator only the `sendMessage` fast path below is seen to work,
+    /// and the queued path can only be checked on real devices.
     ///
     /// `transferUserInfo` is the delivery that matters: the OS queues it and
     /// hands it over when the watch is next in range, which is the whole
@@ -172,7 +182,16 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// fast path for a watch that is awake right now, and its failure falls
     /// back to the queue rather than dropping the plan.
     private func send(_ envelope: SyncEnvelope) {
-        guard let body = try? envelope.messageBody() else { return }
+        if let sender {
+            sender(envelope)
+        } else {
+            Self.sendOverSession(envelope)
+        }
+    }
+
+    private static func sendOverSession(_ envelope: SyncEnvelope) {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated,
+              let body = try? envelope.messageBody() else { return }
         let session = WCSession.default
         guard session.isReachable else {
             session.transferUserInfo(body)
@@ -205,13 +224,43 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         return true
     }
 
+    /// Stores a food the watch logged, once, and tells the watch it has.
+    ///
+    /// **Once**: the envelope's `workoutId` is the food's one-shot id, and an
+    /// id already stored is not stored again. The watch sends a food by
+    /// `sendMessage` when this phone is reachable and falls back to
+    /// `transferUserInfo` if that reports an error, and an error does not
+    /// prove the message was not delivered.
+    ///
+    /// **Tells the watch**: a `WORKOUT_SYNC_ACK` under the same id, revision
+    /// and all, the way `FOOD_LOGGED` already borrows the workout fields.
+    /// That takes the food out of the watch's standalone log, which it keeps
+    /// until then in case this phone never receives it; left there, a QR
+    /// export of that log would put the meal into the web app a second time.
+    /// A repeat is acknowledged again, since the first acknowledgement may
+    /// be the thing that was lost. An older watch build files the
+    /// acknowledgement under its outbox, finds no such workout, and ignores
+    /// it.
     @MainActor
     @discardableResult
     private func handleFoodLogged(_ envelope: SyncEnvelope) async -> Bool {
+        if WatchFoodLogReceipts.contains(envelope.workoutID, in: defaults) {
+            acknowledge(envelope)
+            return true
+        }
         guard let payload = envelope.foodLog,
               let resolved = await FoodRefResolver.nutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context),
               let mealType = MealType(rawValue: payload.meal.lowercased())
         else { return false }
+
+        // Asked again after the await: a second copy of this food (the
+        // message and its queued fallback, arriving together) can have been
+        // stored while this one was being resolved. Nothing below suspends,
+        // so on the main actor this check and `record` cannot be split.
+        if WatchFoodLogReceipts.contains(envelope.workoutID, in: defaults) {
+            acknowledge(envelope)
+            return true
+        }
 
         let entry = FoodEntry(
             foodRefID: payload.foodRefID,
@@ -224,10 +273,30 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
             loggedAt: payload.loggedAt
         )
         context.insert(entry)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Not stored, so not acknowledged: the watch keeps the food
+            // exportable, which is the point of asking before it lets go.
+            context.delete(entry)
+            return false
+        }
+        WatchFoodLogReceipts.record(envelope.workoutID, in: defaults)
+        acknowledge(envelope)
         WidgetCenter.shared.reloadAllTimelines()
         pushRecentFoodsSnapshot()
         return true
+    }
+
+    @MainActor
+    private func acknowledge(_ envelope: SyncEnvelope) {
+        send(SyncEnvelope(
+            event: .workoutSyncAck,
+            workoutID: envelope.workoutID,
+            revision: envelope.revision,
+            updatedAt: .now,
+            origin: .ios
+        ))
     }
 
     /// Pushed on activation and after every watch-originated food log, so
@@ -258,8 +327,60 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         let items = entries
             .filter { !$0.foodRefID.isEmpty && !$0.foodRefID.hasPrefix(RoadFoodRanking.foodRefPrefix) }
             .map {
-                RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName, lastAmountGrams: $0.amountGrams)
+                RecentFoodsSnapshot.Item(foodRefID: $0.foodRefID, displayName: $0.displayName,
+                                         lastAmountGrams: $0.amountGrams,
+                                         nutritionPer100g: nutritionPer100g(of: $0))
             }
         return RecentFoodsSnapshot(items: items, generatedAt: generatedAt)
+    }
+
+    /// The entry's macros per 100 g, which the snapshot schema has carried
+    /// (`nutritionPer100g`) since the watch learned to export its own food
+    /// log, and which this app never filled in. Without them the watch cannot
+    /// keep a food it logs from this list in its standalone log, so a food
+    /// whose `FOOD_LOGGED` never reached this phone was in neither place;
+    /// the watch counted it as "can't be exported yet. Update LIFT on your
+    /// iPhone." With them, the watch keeps it until this app acknowledges it
+    /// (`handleFoodLogged`).
+    ///
+    /// `nil` rather than a guess whenever the entry cannot say: no gram
+    /// amount to divide by, or no fibre figure, because `WatchFood.fibre` is
+    /// not optional and an unknown must never travel as a zero. `nutrition`
+    /// is already scaled to the amount eaten, so dividing by `amountGrams`
+    /// gives the per-100 g figure back.
+    static func nutritionPer100g(of entry: FoodEntry) -> WatchFood? {
+        guard let grams = entry.amountGrams, grams > 0, grams.isFinite,
+              let fibre = entry.nutrition.fiberG else { return nil }
+        let facts = entry.nutrition
+        func per100(_ value: Double) -> Double { (value * 100 / grams * 100).rounded() / 100 }
+        let values = [facts.calories, facts.proteinG, facts.fatG, facts.carbsG, fibre].map(per100)
+        guard values.allSatisfy(\.isFinite) else { return nil }
+        return WatchFood(name: entry.displayName, kcal: values[0], protein: values[1],
+                         fat: values[2], carbs: values[3], fibre: values[4])
+    }
+}
+
+// MARK: - Foods already stored
+
+/// The one-shot ids of the watch-logged foods this phone has stored, so a
+/// `FOOD_LOGGED` that arrives twice is stored once (`handleFoodLogged`).
+///
+/// `UserDefaults`, newest last, capped: a repeat arrives within seconds (a
+/// message and its queued fallback) or, for a `transferUserInfo` the OS
+/// replays, within days, and a watch logs a handful of foods a day, so the
+/// last 500 cover months.
+enum WatchFoodLogReceipts {
+    static let defaultsKey = "watchFoodLogReceipts"
+    static let capacity = 500
+
+    static func contains(_ id: UUID, in defaults: UserDefaults = .standard) -> Bool {
+        (defaults.stringArray(forKey: defaultsKey) ?? []).contains(id.uuidString)
+    }
+
+    static func record(_ id: UUID, in defaults: UserDefaults = .standard) {
+        var ids = defaults.stringArray(forKey: defaultsKey) ?? []
+        guard !ids.contains(id.uuidString) else { return }
+        ids.append(id.uuidString)
+        defaults.set(Array(ids.suffix(capacity)), forKey: defaultsKey)
     }
 }

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LIFT Recent Foods Snapshot",
+  "description": "Pushed phone -> watch via WCSession.updateApplicationContext so the watch's local 'recent foods' cache stays warm without a round trip. See the iOS side's Sources/Shared/RecentFoodsSnapshot.swift for the Swift type this schema documents.",
+  "type": "object",
+  "required": ["items", "generatedAt"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["foodRefID", "displayName"],
+        "properties": {
+          "foodRefID": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "lastAmountGrams": {
+            "type": ["number", "null"]
+          },
+          "nutritionPer100g": {
+            "type": "object",
+            "description": "Per-100g macros, so a watch-logged entry can be exported standalone. Absent on snapshots produced before this field existed.",
+            "properties": {
+              "name":    { "type": "string" },
+              "kcal":    { "type": "number" },
+              "protein": { "type": "number" },
+              "fat":     { "type": "number" },
+              "carbs":   { "type": "number" },
+              "fibre":   { "type": "number" }
+            },
+            "required": ["name", "kcal", "protein", "fat", "carbs", "fibre"]
+          }
+        }
+      }
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true
+}

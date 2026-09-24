@@ -1,6 +1,7 @@
 import XCTest
 import SwiftData
 import LiftCore
+import LiftSync
 @testable import Lift
 
 /// `WatchSyncReceiver` is the phone's landing point for every
@@ -15,6 +16,19 @@ final class WatchSyncReceiverTests: XCTestCase {
     private func makeContext() -> ModelContext {
         let container = LiftStore.makeContainer(inMemory: true)
         return ModelContext(container)
+    }
+
+    /// Its own `UserDefaults` suite per test, so food receipts never land in
+    /// the test host's real defaults. Every receiver built here also gets a
+    /// sender that goes nowhere: the test host is LIFT itself, whose
+    /// `WCSession` is really activated on a simulator paired with a watch,
+    /// and acknowledgements sent from a test would reach that watch.
+    private func isolatedDefaults(_ name: String = #function) -> UserDefaults {
+        let suite = "WatchSyncReceiverTests.\(name)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
     }
 
     private func foodLoggedEnvelope(
@@ -45,7 +59,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     /// roll, oven-roasted, 134.0 kcal/100g.
     func testFoodLoggedInsertsFoodEntryWithResolvedNutrition() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "usda:174608", amountGrams: 150, meal: "lunch")
 
         let handled = await sut.handle(envelope)
@@ -75,7 +89,7 @@ final class WatchSyncReceiverTests: XCTestCase {
         context.insert(recipe)
         try context.save()
 
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: recipe.foodRefID, amountGrams: 200, meal: "dinner")
 
         let handled = await sut.handle(envelope)
@@ -92,7 +106,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testUnknownFoodRefIDIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "not-a-real-ref-id")
 
         let handled = await sut.handle(envelope)
@@ -104,7 +118,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testUnknownMealTypeIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "usda:174608", meal: "brunch")
 
         let handled = await sut.handle(envelope)
@@ -116,7 +130,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testMissingFoodLogPayloadIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         // event is .foodLogged but foodLog itself is nil — malformed on the
         // wire, but SyncEnvelope's own decoding still lets it construct.
         let envelope = SyncEnvelope(
@@ -139,7 +153,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testNonFoodEventIsANoOp() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
         let envelope = SyncEnvelope(
             event: .sessionFinished,
             workoutID: UUID(),
@@ -271,6 +285,149 @@ final class WatchSyncReceiverTests: XCTestCase {
 
         XCTAssertEqual(snapshot.items.count, 1)
         XCTAssertEqual(snapshot.items.first?.foodRefID, "usda:174608")
+    }
+
+    // MARK: - Stored once, and acknowledged
+
+
+    /// The acknowledgement is what takes the food out of the watch's
+    /// standalone log, so a later export does not count it twice.
+    func testAStoredFoodIsAcknowledgedUnderItsOwnID() async throws {
+        let context = makeContext()
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+        let envelope = foodLoggedEnvelope()
+
+        let handled = await sut.handle(envelope)
+
+        XCTAssertTrue(handled)
+        let ack = try XCTUnwrap(sent.first { $0.event == .workoutSyncAck })
+        XCTAssertEqual(ack.workoutID, envelope.workoutID)
+        XCTAssertEqual(ack.revision, envelope.revision)
+        XCTAssertEqual(ack.origin, .ios)
+        XCTAssertNil(ack.foodLog)
+    }
+
+    /// The watch sends by `sendMessage` and falls back to `transferUserInfo`
+    /// on an error, and an error does not prove the message was lost. The
+    /// same food arriving twice is one entry, acknowledged both times.
+    func testTheSameFoodArrivingTwiceIsStoredOnce() async throws {
+        let context = makeContext()
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+        let envelope = foodLoggedEnvelope()
+
+        let first = await sut.handle(envelope)
+        let second = await sut.handle(envelope)
+
+        XCTAssertTrue(first)
+        XCTAssertTrue(second)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<FoodEntry>()).count, 1)
+        XCTAssertEqual(sent.filter { $0.event == .workoutSyncAck }.map(\.workoutID),
+                       [envelope.workoutID, envelope.workoutID])
+    }
+
+    /// The message and its queued fallback can arrive together, and storing
+    /// a food awaits the reference database. Both copies arriving while the
+    /// first is still being resolved must still make one entry.
+    func testTwoCopiesArrivingTogetherAreStoredOnce() async throws {
+        let context = makeContext()
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let envelope = foodLoggedEnvelope()
+
+        async let first = sut.handle(envelope)
+        async let second = sut.handle(envelope)
+        let results = await [first, second]
+
+        XCTAssertEqual(results, [true, true])
+        XCTAssertEqual(try context.fetch(FetchDescriptor<FoodEntry>()).count, 1)
+    }
+
+    /// Two different foods, even identical portions of the same one, are
+    /// two entries: only the id makes a repeat.
+    func testTwoFoodsWithTheSameContentAreBothStored() async throws {
+        let context = makeContext()
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+
+        _ = await sut.handle(foodLoggedEnvelope())
+        _ = await sut.handle(foodLoggedEnvelope())
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<FoodEntry>()).count, 2)
+    }
+
+    /// Not stored, not acknowledged: the watch keeps the food exportable.
+    func testAFoodThatCannotBeStoredIsNotAcknowledged() async throws {
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: makeContext(), defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+
+        let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "usda:does-not-exist"))
+
+        XCTAssertFalse(handled)
+        XCTAssertTrue(sent.isEmpty)
+    }
+
+    func testReceiptsAreCappedOldestFirst() {
+        let defaults = isolatedDefaults()
+        let ids = (0...WatchFoodLogReceipts.capacity).map { _ in UUID() }
+        for id in ids { WatchFoodLogReceipts.record(id, in: defaults) }
+        XCTAssertFalse(WatchFoodLogReceipts.contains(ids[0], in: defaults))
+        XCTAssertTrue(WatchFoodLogReceipts.contains(ids[1], in: defaults))
+        XCTAssertTrue(WatchFoodLogReceipts.contains(ids.last!, in: defaults))
+    }
+
+    // MARK: - Per-100 g macros for the watch's own food log
+
+    /// 150 g of the `usda:174608` fixture, as `handleFoodLogged` stores it:
+    /// `nutrition` scaled to the amount eaten. Per 100 g that is the
+    /// database's own 134 kcal row back again.
+    func testMakeSnapshotCarriesMacrosPer100Grams() throws {
+        let entry = FoodEntry(
+            foodRefID: "usda:174608",
+            name: "Chicken breast, roll, oven-roasted",
+            quantity: 150,
+            servingUnit: "g",
+            amountGrams: 150,
+            nutrition: NutritionFacts(calories: 201, proteinG: 21.885, carbsG: 2.685,
+                                      fatG: 11.475, fiberG: 0.15),
+            mealType: .lunch
+        )
+        let item = try XCTUnwrap(WatchSyncReceiver.makeSnapshot(from: [entry]).items.first)
+        let macros = try XCTUnwrap(item.nutritionPer100g)
+        XCTAssertEqual(macros.name, "Chicken breast, roll, oven-roasted")
+        XCTAssertEqual(macros.kcal, 134, accuracy: 0.001)
+        XCTAssertEqual(macros.protein, 14.59, accuracy: 0.001)
+        XCTAssertEqual(macros.carbs, 1.79, accuracy: 0.001)
+        XCTAssertEqual(macros.fat, 7.65, accuracy: 0.001)
+        XCTAssertEqual(macros.fibre, 0.1, accuracy: 0.001)
+        // ...and the watch reads them under the name it shows.
+        XCTAssertEqual(item.watchFood?.kcal, macros.kcal)
+    }
+
+    /// No gram amount to divide by: no macros, rather than a guess.
+    func testMakeSnapshotOmitsMacrosWithoutAGramAmount() throws {
+        let entry = FoodEntry(
+            foodRefID: "usda:174608", name: "Chicken breast, roll, oven-roasted",
+            quantity: 1, servingUnit: "serving", amountGrams: nil,
+            nutrition: NutritionFacts(calories: 201, proteinG: 21.885, carbsG: 2.685,
+                                      fatG: 11.475, fiberG: 0.15),
+            mealType: .lunch
+        )
+        XCTAssertNil(WatchSyncReceiver.makeSnapshot(from: [entry]).items.first?.nutritionPer100g)
+    }
+
+    /// Fibre unknown: `WatchFood.fibre` cannot say so, and a zero would be a
+    /// made-up number in an export, so the macros are left out entirely.
+    func testMakeSnapshotOmitsMacrosWhenFibreIsUnknown() throws {
+        let entry = FoodEntry(
+            foodRefID: "off:3017620422003", name: "Nutella", brand: "Ferrero",
+            quantity: 15, servingUnit: "g", amountGrams: 15,
+            nutrition: NutritionFacts(calories: 80, proteinG: 1, carbsG: 8.7, fatG: 4.6),
+            mealType: .snack
+        )
+        XCTAssertNil(WatchSyncReceiver.makeSnapshot(from: [entry]).items.first?.nutritionPer100g)
     }
 
     // MARK: - Message-dictionary decoding path (deliver's own responsibility)

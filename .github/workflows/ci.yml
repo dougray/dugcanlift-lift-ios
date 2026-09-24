@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   test:
-    name: Build and test on the iOS Simulator
+    name: Build and test the app and its watch app
     # GitHub's macOS runners, not a machine of ours; free on a public repo.
     # macos-26 ships Xcode 26.6, the same version the Makefile is used with
     # locally. No signing identity exists here, which is fine: a simulator
@@ -32,10 +32,25 @@ jobs:
       - name: Install xcodegen and xcbeautify
         run: brew install xcodegen xcbeautify
 
+      # The watch app's domain package (Watch/LiftWatchKit): swift test, no
+      # simulator. The trailing swift-testing "0 tests in 0 suites" line is
+      # expected; the XCTest "Executed N tests" line above it is the real
+      # count.
+      - name: Watch package unit tests
+        run: make watch-test
+
       # Regenerates the .xcodeproj from project.yml, then xcodebuild test on
-      # the simulator named in the Makefile.
-      - name: Unit tests
-        run: make test
+      # the simulator the Makefile detects. Building Lift builds the watch app
+      # too, for the watch simulator, because Lift embeds it.
+      - name: App unit tests
+        run: make app-test
+
+      # The LiftWatch scheme on its own, the way make watch builds it. The
+      # generic destination compiles against the watchOS simulator SDK with no
+      # booted device, so it does not depend on which watch simulators, if
+      # any, the runner image happens to carry.
+      - name: Build the watch app for the watch simulator
+        run: make watch WATCH_DEST='generic/platform=watchOS Simulator'
 
       - name: Upload test results
         if: failure()

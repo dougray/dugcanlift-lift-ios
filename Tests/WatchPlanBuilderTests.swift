@@ -182,6 +182,129 @@ final class WatchPlanBuilderTests: XCTestCase {
         XCTAssertNil(plan.exercises.first?.equipment)
     }
 
+    // MARK: - A coach's sides
+
+    /// A routine with the shape the spec's combination case asks for: three
+    /// rows each side, plus one more on the left.
+    @MainActor
+    private func eachSideRoutine(in context: ModelContext) -> (Routine, PlanSides) {
+        let rows = (0..<3).map {
+            RoutinePrescribedSet(orderIndex: $0, targetWeightKg: 13.6078, targetReps: 8)
+        }
+        let extra = RoutinePrescribedSet(orderIndex: 3, targetWeightKg: 11.3398, targetReps: 8)
+        let routine = insertRoutine(named: "Lower A", in: context, sets: rows + [extra],
+                                    exerciseName: "Bulgarian Split Squat", equipment: "dumbbell")
+        let exercise = try! XCTUnwrap(routine.orderedExercises.first)
+        var sides = PlanSides()
+        sides.eachSide.insert(exercise.id)
+        sides.sides[extra.id] = .left
+        sides.save(to: defaults)
+        return (routine, sides)
+    }
+
+    @MainActor
+    func testACoachsSidesTravelToTheWatch() throws {
+        let context = makeContext()
+        let (routine, _) = eachSideRoutine(in: context)
+        WatchPlanPin.save(routineID: routine.id, to: defaults)
+
+        let plan = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+        let exercise = try XCTUnwrap(plan.exercises.first)
+
+        XCTAssertTrue(exercise.eachSide)
+        XCTAssertEqual(exercise.sets.map(\.side), [nil, nil, nil, .left])
+        // Seven sets to perform: three a side, plus the extra left one — the
+        // same count the watch's guided session walks.
+        XCTAssertEqual(plan.totalSetCount, 7)
+        XCTAssertEqual(exercise.plannedSets.compactMap(\.side),
+                       [.left, .right, .left, .right, .left, .right, .left])
+    }
+
+    @MainActor
+    func testARoutineWithNoSidesSendsNeitherKey() throws {
+        // The byte-for-byte rule from this end: a plan nobody prescribed
+        // sides on is exactly the payload this built before sides existed,
+        // so `WatchPlanRevisions` does not see a change and does not re-push.
+        let context = makeContext()
+        let routine = insertRoutine(named: "Upper A", in: context)
+        WatchPlanPin.save(routineID: routine.id, to: defaults)
+
+        let plan = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+        let exercise = try XCTUnwrap(plan.exercises.first)
+        XCTAssertFalse(exercise.eachSide)
+        XCTAssertFalse(exercise.prescribesSides)
+        XCTAssertNil(exercise.sets.first?.side)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let json = String(decoding: try encoder.encode(plan), as: UTF8.self)
+        XCTAssertFalse(json.contains("eachSide"))
+        XCTAssertFalse(json.contains("side"))
+    }
+
+    @MainActor
+    func testTheSidesSentAreTheOnesTheCoachPrescribedForThisRoutine() throws {
+        // `PlanSides` is keyed by the routine's own exercise and set ids, so
+        // another routine's prescription must not leak into this plan.
+        let context = makeContext()
+        let (mine, _) = eachSideRoutine(in: context)
+        let other = insertRoutine(named: "Upper A", in: context)
+        WatchPlanPin.save(routineID: other.id, to: defaults)
+
+        let plan = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+        XCTAssertEqual(plan.name, "Upper A")
+        XCTAssertFalse(try XCTUnwrap(plan.exercises.first).eachSide)
+        XCTAssertNotEqual(mine.id, other.id)
+    }
+
+    @MainActor
+    func testTheWatchesPlanIsTheOneTheWireCarriesAfterARoundTrip() throws {
+        // What the phone builds, encoded and decoded through the envelope the
+        // watch actually receives, is what the watch reads. Both apps compile
+        // one copy of these types, and this is the check that the phone's
+        // `SetSide` and the wire's `PlanSide` say the same word.
+        let context = makeContext()
+        let (routine, _) = eachSideRoutine(in: context)
+        WatchPlanPin.save(routineID: routine.id, to: defaults)
+        let plan = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+
+        let envelope = SyncEnvelope(event: .planPushed, workoutID: routine.id, revision: 1,
+                                    updatedAt: .now, origin: .ios, plan: plan)
+        let data = try SyncEnvelope.encoder.encode(envelope)
+        let decoded = try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data)
+        XCTAssertEqual(decoded.plan, plan)
+
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let wirePlan = try XCTUnwrap(object["plan"] as? [String: Any])
+        let exercise = try XCTUnwrap((wirePlan["exercises"] as? [[String: Any]])?.first)
+        XCTAssertEqual(exercise["eachSide"] as? Bool, true)
+        let sets = try XCTUnwrap(exercise["sets"] as? [[String: Any]])
+        XCTAssertFalse(sets[0].keys.contains("side"))
+        XCTAssertEqual(sets[3]["side"] as? String, "left")
+    }
+
+    @MainActor
+    func testPrescribingASideChangesTheRevision() throws {
+        // A plan that now says something it did not say before is a new
+        // revision, or the watch would ignore it as one it has already seen.
+        let context = makeContext()
+        let routine = insertRoutine(named: "Lower A", in: context)
+        WatchPlanPin.save(routineID: routine.id, to: defaults)
+        let before = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+
+        var sides = PlanSides()
+        sides.eachSide.insert(try XCTUnwrap(routine.orderedExercises.first).id)
+        sides.save(to: defaults)
+        let after = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+
+        var revisions = WatchPlanRevisions()
+        XCTAssertEqual(revisions.revision(for: routine.id,
+                                          contentHash: WatchPlanRevisions.contentHash(of: before)), 1)
+        XCTAssertEqual(revisions.revision(for: routine.id,
+                                          contentHash: WatchPlanRevisions.contentHash(of: after)), 2)
+    }
+
     // MARK: - Last time's actual
 
     @MainActor

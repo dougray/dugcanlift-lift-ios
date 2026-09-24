@@ -85,11 +85,18 @@ enum WatchPlanBuilder {
                 scheduledFor: date,
                 restSeconds: restSeconds,
                 history: history,
-                excludingDayKey: dayKey
+                excludingDayKey: dayKey,
+                sides: PlanSides.load(from: defaults)
             )
         )
     }
 
+    /// `sides` is the coach's per-side prescription for this routine
+    /// (`PlanSides`), which lives in `UserDefaults` rather than on LiftKit's
+    /// shared routine models — so it has to be handed in here rather than
+    /// read off the `Routine`. A routine nobody has prescribed sides on
+    /// yields the empty value and a plan identical to the one this built
+    /// before any of this existed.
     @MainActor
     static func plan(
         from routine: Routine,
@@ -97,7 +104,8 @@ enum WatchPlanBuilder {
         scheduledFor: Date?,
         restSeconds: Int?,
         history: [WorkoutDay],
-        excludingDayKey: String? = nil
+        excludingDayKey: String? = nil,
+        sides: PlanSides = PlanSides()
     ) -> WorkoutPlan {
         let exercises = routine.orderedExercises.map { exercise -> PlanExercise in
             PlanExercise(
@@ -113,7 +121,8 @@ enum WatchPlanBuilder {
                         weightKg: prescribed.targetWeightKg,
                         reps: prescribed.targetReps,
                         rpe: prescribed.targetRPE,
-                        restSeconds: restSeconds
+                        restSeconds: restSeconds,
+                        side: sides.side(of: prescribed)?.planSide
                     )
                 },
                 lastPerformed: lastPerformed(
@@ -121,7 +130,8 @@ enum WatchPlanBuilder {
                     equipment: exercise.equipment,
                     in: history,
                     excludingDayKey: excludingDayKey
-                )
+                ),
+                eachSide: sides.isEachSide(exercise)
             )
         }
         return WorkoutPlan(
@@ -179,6 +189,17 @@ enum WatchPlanBuilder {
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first
     }
+}
+
+// MARK: - Sides, in the watch's own spelling
+
+extension SetSide {
+    /// The same two words on the watch's wire. Two types rather than one
+    /// because `SetSide` is this app's own (it is in `Sources/Shared`, which
+    /// the widget compiles too) and `PlanSide` is `LiftSync`'s, which both
+    /// apps compile; the raw values are identical, deliberately, so a side
+    /// means one thing in the store, in a backup and on this wire.
+    var planSide: PlanSide { self == .left ? .left : .right }
 }
 
 // MARK: - Which routine the lifter sent

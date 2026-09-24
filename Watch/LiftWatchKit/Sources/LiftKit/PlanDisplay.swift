@@ -52,19 +52,32 @@ extension PrescribedSet {
 
     /// The big line on the Now screen: "185 x 5", "5 reps", "185 lb", or
     /// "—" when this set prescribes nothing at all. Never "0 x 5".
-    public func headline(unit: WeightUnit) -> String {
+    ///
+    /// `side` is the side the set is about to be done on, which the caller
+    /// reads from the session rather than from the set: an each-side
+    /// exercise's sets name no side of their own and are still done one limb
+    /// at a time. It is appended as "30 x 8 · L", the separator the phone's
+    /// own per-side counts use, and a set with no side reads exactly as it
+    /// always has.
+    public func headline(unit: WeightUnit, side: PlanSide? = nil) -> String {
+        var text: String
         switch (weightText(unit: unit), reps) {
-        case let (weight?, reps?): return "\(weight) x \(reps)"
-        case let (weight?, nil):   return "\(weight) \(unit.abbreviation)"
-        case let (nil, reps?):     return "\(reps) reps"
-        case (nil, nil):           return "—"
+        case let (weight?, reps?): text = "\(weight) x \(reps)"
+        case let (weight?, nil):   text = "\(weight) \(unit.abbreviation)"
+        case let (nil, reps?):     text = "\(reps) reps"
+        case (nil, nil):           text = "—"
         }
+        if let side { text += " · \(side.shortLabel)" }
+        return text
     }
 
-    /// Everything the set prescribes, RPE included: "185 x 5 @8".
-    public func summary(unit: WeightUnit) -> String {
+    /// Everything the set prescribes, RPE included: "185 x 5 @8", and
+    /// "30 x 8 @8 · L" with a side. The side goes last, as it does on the
+    /// phone's own set rows, so the numbers stay together.
+    public func summary(unit: WeightUnit, side: PlanSide? = nil) -> String {
         var text = headline(unit: unit)
         if let rpe { text += " @\(PlanFormat.rpe(rpe))" }
+        if let side { text += " · \(side.shortLabel)" }
         return text
     }
 }

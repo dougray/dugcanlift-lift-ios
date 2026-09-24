@@ -92,7 +92,7 @@ as application context:
 | Recent foods | phone -> watch | `updateApplicationContext`, with per-100 g macros where the phone knows them |
 | `FOOD_LOGGED` | watch -> phone | `sendMessage` if reachable, else `transferUserInfo` |
 | `WORKOUT_SYNC_ACK` for a food | phone -> watch | as `PLAN_PUSHED`; takes the food out of the standalone log |
-| `SESSION_FINISHED` (carrying the whole workout) | watch -> phone | `transferUserInfo` via `SyncOutbox`, re-offered from `UnsentSessionLog` until acknowledged |
+| `SESSION_FINISHED` (carrying the whole workout) | watch -> phone | `sendMessage` if reachable, else `transferUserInfo`; stays in `SyncOutbox` and `UnsentSessionLog` until acknowledged |
 | `WORKOUT_SYNC_ACK` for a session | phone -> watch | as `PLAN_PUSHED`; takes the session out of `UnsentSessionLog` |
 | `WORKOUT_EDITED`, `OUTDOOR_ACTIVITY_FINISHED` | watch -> phone | `transferUserInfo` via `SyncOutbox` |
 
@@ -186,6 +186,10 @@ not have been reachable for a single one of them.
 - **Identity is the envelope's**, as a plan's is: `workoutId` is the session's
   id and `revision` the draft's revision. A resend, a queued copy arriving
   second and a later edit all reconcile under "newer revision wins".
+- **It takes the fast path when there is one.** `sendMessage` to a phone
+  that is awake, so the workout is there when the lifter picks it up, and
+  `transferUserInfo` otherwise -- the same two-step a food takes. Sending it
+  twice is safe: the phone stores a session id once and acknowledges it again.
 - **`UnsentSessionLog` keeps it until the phone says it has it.**
   `WorkoutStore` and `SyncOutbox` are in memory and die with the app;
   `transferUserInfo` returns normally with no iPhone ever paired, and its queue

@@ -419,11 +419,25 @@ final class WorkoutSessionModel: ObservableObject {
         // there, and handing it over again on every flush only queued
         // duplicates. A transfer that finishes with an error is handed over
         // again on the next flush (`onTransferFailed`).
+        //
+        // A finished session goes by `sendNow` as well, and stays queued.
+        // It is the thing the lifter expects to see when they pick the
+        // phone up, so a phone that is reachable right now should have it
+        // in a second or two rather than whenever the OS gets round to the
+        // queue; an unreachable one falls back to `transferUserInfo` and
+        // loses nothing. Sending it twice is safe — the phone stores a
+        // session id once and acknowledges it again — and unlike a food it
+        // stays in this queue, and in `unsentSessions`, until that
+        // acknowledgement arrives.
         for envelope in outbox.unsent {
-            if envelope.event == .foodLogged {
+            switch envelope.event {
+            case .foodLogged:
                 transport.sendNow(envelope)
                 outbox.remove(workoutID: envelope.workoutID)
-            } else {
+            case .sessionFinished:
+                transport.sendNow(envelope)
+                outbox.markHandedOver(envelope)
+            default:
                 transport.send(envelope)
                 outbox.markHandedOver(envelope)
             }

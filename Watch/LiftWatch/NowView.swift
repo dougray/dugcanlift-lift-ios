@@ -43,7 +43,11 @@ struct NowView: View {
             // The prescription, in the size the spec draws it. A blank field
             // is never a zero here: "5 reps" is a set with no weight
             // prescribed, and "—" is a set that prescribes nothing at all.
-            Text(guided.currentPrescription?.headline(unit: session.unit) ?? "—")
+            // With a side in play it reads "30 x 8 · L", and the position
+            // above it "3/6 · L" — six because an each-side exercise's three
+            // prescribed rows are six sets to perform.
+            Text(guided.currentPrescription?
+                    .headline(unit: session.unit, side: guided.currentSide) ?? "—")
                 .font(.system(size: 34, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)

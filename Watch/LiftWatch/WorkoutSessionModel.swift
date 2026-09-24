@@ -188,6 +188,17 @@ final class WorkoutSessionModel: ObservableObject {
         return guided?.currentExercise?.lastPerformed
     }
 
+    /// The side the next set against `exerciseID` should be logged on, or
+    /// `nil` when this exercise says nothing about sides — which is every
+    /// exercise of a plan without them, and everything logged off plan.
+    ///
+    /// A suggestion, not a decision: `LogSetView` starts its control here and
+    /// the lifter can move it, exactly as the phone's Add set does.
+    func suggestedSide(for exerciseID: UUID) -> PlanSide? {
+        guard guidedExerciseID == exerciseID else { return nil }
+        return guided?.currentSide
+    }
+
     /// Moves the guided session to whichever exercise the lifter opened, so
     /// training out of order is a tap rather than a wrong prescription.
     func focusGuidedSession(on exerciseID: UUID) {
@@ -201,20 +212,26 @@ final class WorkoutSessionModel: ObservableObject {
         edit { $0.addExercise(refID: refID, name: name, equipment: equipment) }
     }
 
-    func logSet(to exerciseID: UUID, weight: Double, reps: Int, rpe: Double? = nil) {
+    /// `side` is the limb the set was actually done on — what the lifter left
+    /// the control on, which starts at `suggestedSide(for:)`. It is stored on
+    /// the set, because the log records what happened while the plan only
+    /// asked; and it is what the guided session counts, so an each-side
+    /// exercise's next set is offered on the side that is now behind.
+    func logSet(to exerciseID: UUID, weight: Double, reps: Int, rpe: Double? = nil,
+                side: PlanSide? = nil) {
         let weightKg = unit.toKilograms(weight)
         edit { draft in
             guard let setID = draft.appendSet(to: exerciseID, weightKg: weightKg,
-                                              reps: reps, rpe: rpe) else { return }
+                                              reps: reps, rpe: rpe, side: side) else { return }
             draft.completeSet(setID)
         }
 
         // Rest is the one the set just performed prescribed — not the next
-        // set's, and not the next exercise's. `recordSet()` also advances the
-        // position, and the next exercise when this one's sets are done.
+        // set's, and not the next exercise's. `recordSet(on:)` also advances
+        // the position, and the next exercise when this one's sets are done.
         var prescribedRest: Int?
         if guidedExerciseID == exerciseID {
-            prescribedRest = guided?.recordSet()?.restSeconds
+            prescribedRest = guided?.recordSet(on: side)?.restSeconds
         }
         restTimer.interval = TimeInterval(prescribedRest ?? Self.defaultRestSeconds)
         restTimer.start()

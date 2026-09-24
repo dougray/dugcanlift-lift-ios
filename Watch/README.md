@@ -92,7 +92,9 @@ as application context:
 | Recent foods | phone -> watch | `updateApplicationContext`, with per-100 g macros where the phone knows them |
 | `FOOD_LOGGED` | watch -> phone | `sendMessage` if reachable, else `transferUserInfo` |
 | `WORKOUT_SYNC_ACK` for a food | phone -> watch | as `PLAN_PUSHED`; takes the food out of the standalone log |
-| `SESSION_FINISHED`, `WORKOUT_EDITED`, `OUTDOOR_ACTIVITY_FINISHED` | watch -> phone | `transferUserInfo` via `SyncOutbox` |
+| `SESSION_FINISHED` (carrying the whole workout) | watch -> phone | `transferUserInfo` via `SyncOutbox`, re-offered from `UnsentSessionLog` until acknowledged |
+| `WORKOUT_SYNC_ACK` for a session | phone -> watch | as `PLAN_PUSHED`; takes the session out of `UnsentSessionLog` |
+| `WORKOUT_EDITED`, `OUTDOOR_ACTIVITY_FINISHED` | watch -> phone | `transferUserInfo` via `SyncOutbox` |
 
 **`transferUserInfo` never arrives between simulators**, in either direction.
 Apple DTS says the watchOS Simulator does not support it, and the spike's
@@ -165,6 +167,33 @@ the free-entry flow unchanged**.
   surfaces current, average and maximum heart rate and saves the workout with
   its samples. Only one `HKWorkoutSession` may be live at a time, which the UI
   guarantees: an outdoor recording owns the whole screen.
+
+### Back to the phone
+
+A set logged on the wrist has to become a set on the phone, and the phone may
+not have been reachable for a single one of them.
+
+- **`SESSION_FINISHED` carries the whole workout** (`FinishedSession`): every
+  exercise in order, every set with its weight in kilograms, reps, RPE, warmup
+  flag, side and completion time, the local day it belongs to, the focus, and
+  the session's average and maximum heart rate. One message, one
+  reconciliation.
+- **Not a streamed `SET_LOGGED`.** The schema left room for one and the spec
+  called it optional. A phone in a locker is not reachable, so every streamed
+  message would be lost and only the queued transport would carry anything --
+  and the offline path is the one that has to work. `WORKOUT_EDITED` still
+  goes per edit and is still only a notification.
+- **Identity is the envelope's**, as a plan's is: `workoutId` is the session's
+  id and `revision` the draft's revision. A resend, a queued copy arriving
+  second and a later edit all reconcile under "newer revision wins".
+- **`UnsentSessionLog` keeps it until the phone says it has it.**
+  `WorkoutStore` and `SyncOutbox` are in memory and die with the app;
+  `transferUserInfo` returns normally with no iPhone ever paired, and its queue
+  cannot be read back. So a finished session is written to `UserDefaults`
+  before it is handed to any transport, re-offered on every launch and every
+  reachability change, and removed only by a `WORKOUT_SYNC_ACK` under its id --
+  the rule `StandaloneFoodLog` already follows for food, including that
+  retention is bounded by count and never by a date.
 
 ### Food
 

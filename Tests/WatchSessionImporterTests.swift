@@ -261,6 +261,9 @@ final class WatchSessionImporterTests: XCTestCase {
         let day = try XCTUnwrap(try days(in: context).first)
         XCTAssertEqual(day.orderedExercises.count, 1, "the earlier import must be replaced, not added to")
         XCTAssertEqual(day.orderedExercises[0].orderedSets.map(\.reps), [8, 6])
+        XCTAssertEqual(day.orderedExercises[0].orderIndex, 0,
+                       "and the replacement is numbered as if the old rows had gone")
+        XCTAssertEqual(day.totalSetCount, 2)
     }
 
     // MARK: - The phone edited the day after the watch finished

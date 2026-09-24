@@ -97,6 +97,11 @@ enum WatchSessionImporter {
                 receipts.save(to: defaults)
                 return .conflict
             }
+            // Off the relationship first, then deleted: a delete alone can
+            // leave the old rows in `day.exercises` until the save, and the
+            // insert below reads that array to number what it appends.
+            let staleIDs = Set(existing.map(\.id))
+            day.exercises.removeAll { staleIDs.contains($0.id) }
             for entry in existing { context.delete(entry) }
             let ids = insert(exercises, into: day, sessionID: envelope.workoutID,
                              defaults: defaults)

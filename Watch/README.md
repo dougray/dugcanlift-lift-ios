@@ -141,8 +141,25 @@ the free-entry flow unchanged**.
   `[null, 5]` is "five reps, you pick the weight" and a blank must never reach
   a wrist as a zero. `headline(unit:)` renders that as "5 reps", and a set
   prescribing nothing at all as "—".
-- `GuidedSession` holds position only: which exercise, which set of it, and
-  what to do when one is logged.
+- `GuidedSession` holds position only: which exercise, which set of it, which
+  side that set is for, and what to do when one is logged.
+- **A coach's sides reach the wrist** (PLAN-FORMAT.md "Sides"). A
+  `PlanExercise` can be `eachSide` -- every prescribed set done on both sides,
+  so "3 x 8 each side" is three prescribed rows and six sets -- and a
+  `PrescribedSet` can name a `side`. Both are **omitted** when they say
+  nothing, never `false` and never `"both"`, so a plan without sides is byte
+  for byte what the build before them wrote; `WatchPlanRevisions` hashes the
+  payload, and one stray key would re-push every plan once. The Now screen
+  reads `3/6 - L` and `30 x 8 - L` (with a middle dot), Log Set offers the
+  phone's own two-button L / R control, and `DraftSet.side` records the limb
+  the set was actually done on -- **absent is both, forever**, the phone's own
+  rule and its own two words (`PlanSide`).
+  *Which* side is next is LIFT for iPhone's rule, ported: the first prescribed
+  sided set the log has not filled, then whichever side is behind, left
+  breaking a tie -- so an each-side exercise alternates L, R, L, R, and a
+  named-side set on an exercise that is not each side stops asking about sides
+  once it is logged. `GuidedSessionTests` pins all of it, including that a
+  plan with no sides behaves exactly as before.
 - `LiftingSessionRecorder` runs an `HKWorkoutSession` of
   `.traditionalStrengthTraining` with an `HKLiveWorkoutBuilder`, which
   surfaces current, average and maximum heart rate and saves the workout with

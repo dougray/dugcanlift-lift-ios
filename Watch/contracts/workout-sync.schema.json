@@ -117,6 +117,10 @@
         "lastPerformed": {
           "$ref": "#/$defs/lastPerformed",
           "description": "What the lifter actually did the last time they trained this exercise, so the watch can show 'last: 185x5 @8' beside the prescription. Omitted when there is no history for it."
+        },
+        "eachSide": {
+          "type": "boolean",
+          "description": "Every prescribed set is done on both sides (PLAN-FORMAT.md 'Sides', `b: 1`): '3 x 8 each side' stays three entries in `sets` and is six sets to perform, three a side. Omitted, never `false`, so a plan with no sides is byte for byte what a sender that predates this wrote. A receiver that does not know the key ignores it and runs the three sets it can see, with the right weights and reps and no side."
         }
       }
     },
@@ -141,6 +145,10 @@
           "type": "integer",
           "minimum": 1,
           "description": "How long to rest after this set. Absent means the sender has no opinion and the watch uses its own default -- it does not mean zero rest."
+        },
+        "side": {
+          "enum": ["left", "right"],
+          "description": "The one side this set is for (PLAN-FORMAT.md 'Sides', the set tuple's sixth position), spelled as BACKUP-FORMAT and the phone's own store spell it. Omitted -- never 'both', never null -- for an ordinary two-sided set, so a plan with no sides is unchanged. A named side is performed once on that side whether or not its exercise is each side. A receiver reads a value it does not know as two-sided rather than refusing the plan."
         }
       }
     },

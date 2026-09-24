@@ -337,6 +337,20 @@ deleted needs a button (`RoutinesView`) rather than `.onDelete`, and a new
 `.onDelete` anywhere in this app is dead code. `OutdoorActivityListView` still
 has one.
 
+**A navigation bar does not follow a change of interface style on its own.**
+`Theme`'s colours are dynamic `UIColor`s, so the whole screen re-draws when the
+phone goes light or dark without SwiftUI invalidating anything -- and a body
+that never re-runs never re-applies its navigation bar, which keeps the colours
+it resolved when it was built. Measured on Routines: switching to light left the
+title white on parchment and the "+" a dark-mode glass circle over an otherwise
+light screen. `RoutinesView` reads `\.colorScheme` and hands it to
+`.toolbarColorScheme(_:for: .navigationBar)`; reading it is what makes the
+change invalidate the body, naming it is what the bar picks up. Routines is the
+only tab root with a visible system bar -- Train hides its bar, Home, Food and
+Cook sit in no stack, and every other bar is on a sheet, which is built fresh
+each presentation and was measured to re-resolve on its own. Any new screen that
+shows a system bar outside a sheet needs the same two lines.
+
 **Deleting a routine is `RoutineRemoval`**, not view code -- the rule
 `PlanSides` follows and Coach's `ClientRemoval` follows, because a rule in a
 view's `@State` cannot be tested and this one decides what somebody loses.

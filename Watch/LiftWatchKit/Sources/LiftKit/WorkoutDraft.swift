@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// A workout the watch can create and edit with no phone in range.
 ///
@@ -128,6 +129,7 @@ public struct WorkoutDraft: Identifiable, Codable, Equatable, Sendable {
         reps: Int,
         rpe: Double? = nil,
         isWarmup: Bool = false,
+        side: PlanSide? = nil,
         now: Date = Date()
     ) -> UUID? {
         guard let index = exercises.firstIndex(where: { $0.id == exerciseID }) else { return nil }
@@ -136,7 +138,8 @@ public struct WorkoutDraft: Identifiable, Codable, Equatable, Sendable {
             weightKg: weightKg,
             reps: reps,
             rpe: rpe,
-            isWarmup: isWarmup
+            isWarmup: isWarmup,
+            side: side
         )
         exercises[index].sets.append(set)
         commit(now)
@@ -238,6 +241,12 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
     /// 6–10 in half steps, shown inline on every set like the phone does.
     public var rpe: Double?
     public var isWarmup: Bool
+    /// Which limb this set was done on, when the lifter was logging one at a
+    /// time. **Absent is "both", forever** — the phone's own rule for
+    /// `SetEntry.sideRaw`, and the same one word for it (`PlanSide`), so a
+    /// watch-logged set and a phone-logged set say the same thing. A draft
+    /// written before this decodes with no side and stays two-sided.
+    public var side: PlanSide?
     public var completedAt: Date?
 
     public init(
@@ -247,6 +256,7 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
         reps: Int = 0,
         rpe: Double? = nil,
         isWarmup: Bool = false,
+        side: PlanSide? = nil,
         completedAt: Date? = nil
     ) {
         self.id = id
@@ -255,6 +265,7 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
         self.reps = reps
         self.rpe = rpe
         self.isWarmup = isWarmup
+        self.side = side
         self.completedAt = completedAt
     }
 
@@ -262,7 +273,9 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
         isWarmup ? 0 : Double(reps) * weightKg
     }
 
-    /// "325 x 5 @7.5" — weight, reps, then RPE, matching the phone app.
+    /// "325 x 5 @7.5", and "30 x 8 @8 · L" for a set done on one side —
+    /// weight, reps, RPE, then the side, matching the phone app's own set
+    /// rows. A two-sided set is unchanged.
     public func display(unit: WeightUnit) -> String {
         let weight = unit.fromKilograms(weightKg)
         let rounded = (weight * 10).rounded() / 10
@@ -274,6 +287,7 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
             let rpeText = rpe == rpe.rounded() ? String(Int(rpe)) : String(format: "%.1f", rpe)
             text += " @\(rpeText)"
         }
+        if let side { text += " · \(side.shortLabel)" }
         return text
     }
 

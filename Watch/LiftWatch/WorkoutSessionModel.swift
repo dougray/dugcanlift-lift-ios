@@ -18,6 +18,11 @@ final class WorkoutSessionModel: ObservableObject {
     /// `StandaloneFoodLog`'s doc comment for why `SyncOutbox` cannot serve
     /// this purpose.
     let foodLog = StandaloneFoodLog()
+    /// Finished sessions the phone has not acknowledged, on disk, for the
+    /// same reason the food log is: `SyncOutbox` dies with the app and the
+    /// OS queue behind `transferUserInfo` cannot be read back. See
+    /// `UnsentSessionLog`.
+    let unsentSessions = UnsentSessionLog()
     @Published var restTimer = RestTimer()
     @Published var unit: WeightUnit = .pounds
     @Published var servingUnit: ServingUnit = .grams
@@ -89,6 +94,12 @@ final class WorkoutSessionModel: ObservableObject {
             Task { @MainActor in self?.receiveApplicationContext(context) }
         }
         transport.activate()
+        // Whatever the phone has not acknowledged goes back in the queue on
+        // every launch. A session finished while the phone was in a locker,
+        // or while LIFT was not installed on it at all, is offered again
+        // here and keeps being offered until the phone says it has it.
+        for envelope in unsentSessions.pending { outbox.enqueue(envelope) }
+        flushOutbox()
         if let latest = transport.latestApplicationContext() {
             receiveApplicationContext(latest)
         }
@@ -188,6 +199,17 @@ final class WorkoutSessionModel: ObservableObject {
         return guided?.currentExercise?.lastPerformed
     }
 
+    /// The side the next set against `exerciseID` should be logged on, or
+    /// `nil` when this exercise says nothing about sides — which is every
+    /// exercise of a plan without them, and everything logged off plan.
+    ///
+    /// A suggestion, not a decision: `LogSetView` starts its control here and
+    /// the lifter can move it, exactly as the phone's Add set does.
+    func suggestedSide(for exerciseID: UUID) -> PlanSide? {
+        guard guidedExerciseID == exerciseID else { return nil }
+        return guided?.currentSide
+    }
+
     /// Moves the guided session to whichever exercise the lifter opened, so
     /// training out of order is a tap rather than a wrong prescription.
     func focusGuidedSession(on exerciseID: UUID) {
@@ -201,20 +223,26 @@ final class WorkoutSessionModel: ObservableObject {
         edit { $0.addExercise(refID: refID, name: name, equipment: equipment) }
     }
 
-    func logSet(to exerciseID: UUID, weight: Double, reps: Int, rpe: Double? = nil) {
+    /// `side` is the limb the set was actually done on — what the lifter left
+    /// the control on, which starts at `suggestedSide(for:)`. It is stored on
+    /// the set, because the log records what happened while the plan only
+    /// asked; and it is what the guided session counts, so an each-side
+    /// exercise's next set is offered on the side that is now behind.
+    func logSet(to exerciseID: UUID, weight: Double, reps: Int, rpe: Double? = nil,
+                side: PlanSide? = nil) {
         let weightKg = unit.toKilograms(weight)
         edit { draft in
             guard let setID = draft.appendSet(to: exerciseID, weightKg: weightKg,
-                                              reps: reps, rpe: rpe) else { return }
+                                              reps: reps, rpe: rpe, side: side) else { return }
             draft.completeSet(setID)
         }
 
         // Rest is the one the set just performed prescribed — not the next
-        // set's, and not the next exercise's. `recordSet()` also advances the
-        // position, and the next exercise when this one's sets are done.
+        // set's, and not the next exercise's. `recordSet(on:)` also advances
+        // the position, and the next exercise when this one's sets are done.
         var prescribedRest: Int?
         if guidedExerciseID == exerciseID {
-            prescribedRest = guided?.recordSet()?.restSeconds
+            prescribedRest = guided?.recordSet(on: side)?.restSeconds
         }
         restTimer.interval = TimeInterval(prescribedRest ?? Self.defaultRestSeconds)
         restTimer.start()
@@ -229,7 +257,11 @@ final class WorkoutSessionModel: ObservableObject {
         // than reporting a heart rate of zero.
         let sessionHeartRate = heartRate?.finish()
         if let draft {
-            enqueue(.sessionFinished, for: draft, heartRate: sessionHeartRate)
+            // The whole workout travels, not a notification that one
+            // happened: the phone may not have been reachable for a single
+            // set of it. See `FinishedSession`.
+            enqueue(.sessionFinished, for: draft,
+                    session: draft.finishedSession(), heartRate: sessionHeartRate)
         }
         guided = nil
         // Back to the start screen. `RootView` shows the workout for as long
@@ -281,9 +313,10 @@ final class WorkoutSessionModel: ObservableObject {
     // MARK: - Synchronization
 
     private func enqueue(_ event: SyncEnvelope.Event, for workout: WorkoutDraft,
+                          session: FinishedSession? = nil,
                           heartRate: SessionHeartRate? = nil) {
         enqueue(event, workoutID: workout.id, revision: workout.revision,
-                updatedAt: workout.updatedAt, heartRate: heartRate)
+                updatedAt: workout.updatedAt, session: session, heartRate: heartRate)
     }
 
     /// Entry point for sync notifications that don't originate from a
@@ -334,6 +367,7 @@ final class WorkoutSessionModel: ObservableObject {
 
     private func enqueue(_ event: SyncEnvelope.Event, workoutID: UUID, revision: Int,
                           updatedAt: Date, foodLog: FoodLogPayload? = nil,
+                          session: FinishedSession? = nil,
                           heartRate: SessionHeartRate? = nil) {
         let envelope = SyncEnvelope(
             event: event,
@@ -342,8 +376,14 @@ final class WorkoutSessionModel: ObservableObject {
             updatedAt: updatedAt,
             origin: .watchOS,
             foodLog: foodLog,
+            session: session,
             heartRate: heartRate
         )
+        // On disk before it is handed to any transport, and before the
+        // in-memory queue that dies with the app. A session is written here
+        // first precisely because everything after this point can fail
+        // silently.
+        if event == .sessionFinished { unsentSessions.record(envelope) }
         outbox.enqueue(envelope)
         flushOutbox()
     }
@@ -379,11 +419,25 @@ final class WorkoutSessionModel: ObservableObject {
         // there, and handing it over again on every flush only queued
         // duplicates. A transfer that finishes with an error is handed over
         // again on the next flush (`onTransferFailed`).
+        //
+        // A finished session goes by `sendNow` as well, and stays queued.
+        // It is the thing the lifter expects to see when they pick the
+        // phone up, so a phone that is reachable right now should have it
+        // in a second or two rather than whenever the OS gets round to the
+        // queue; an unreachable one falls back to `transferUserInfo` and
+        // loses nothing. Sending it twice is safe — the phone stores a
+        // session id once and acknowledges it again — and unlike a food it
+        // stays in this queue, and in `unsentSessions`, until that
+        // acknowledgement arrives.
         for envelope in outbox.unsent {
-            if envelope.event == .foodLogged {
+            switch envelope.event {
+            case .foodLogged:
                 transport.sendNow(envelope)
                 outbox.remove(workoutID: envelope.workoutID)
-            } else {
+            case .sessionFinished:
+                transport.sendNow(envelope)
+                outbox.markHandedOver(envelope)
+            default:
                 transport.send(envelope)
                 outbox.markHandedOver(envelope)
             }
@@ -421,6 +475,10 @@ final class WorkoutSessionModel: ObservableObject {
         switch envelope.event {
         case .workoutSyncAck:
             outbox.acknowledge(envelope)
+            // The phone has stored the session under this id, so it can
+            // stop being offered. Until this arrives the watch keeps it,
+            // whatever any transport reported: a send is not a receipt.
+            unsentSessions.acknowledge(envelope)
             // The phone acknowledges a stored `FOOD_LOGGED` the same way,
             // under the food's one-shot id. It is in LIFT for iPhone now, so
             // it leaves the standalone log, or an export would count it a

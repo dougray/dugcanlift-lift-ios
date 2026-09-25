@@ -232,9 +232,10 @@ since V3, and not a V9 on `ExerciseEntry` for a suggestion. It is not in the
 backup file: a restored session loses only its targets, never a set.
 `PlanSidesDegradationTests` pins how a build without any of this reads such a
 plan (as two-sided sets, weights intact) against Coach web's fixture
-`Tests/Fixtures/web-plan-per-side.txt`; never regenerate it from Swift. The
-watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
-companion move.
+`Tests/Fixtures/web-plan-per-side.txt`; never regenerate it from Swift.
+**The watch carries them too**: `WatchPlanBuilder` reads `PlanSides` and fills
+`eachSide` / `side` on the watch's own contract, and `GuidedSession` counts and
+alternates by the same rules (see "The Apple Watch app" below).
 
 **A struct a model stores is part of the schema.** SwiftData flattens
 `NutritionFacts` into one column per field on FoodEntry, Recipe and
@@ -243,6 +244,16 @@ PlannedMeal, so a new field in LiftKit is a schema change here. LiftKit 1.9.0's
 every existing install failed to open its store (134504). Verify any schema
 change by installing over a store the previous build wrote, not only in tests —
 `Tests/Fixtures/v6-simulator.store` is one.
+
+**A coach's sides travel to the watch as well.** `PLAN_PUSHED` carries
+`eachSide` on an exercise and `side` on a prescribed set, both **omitted** when
+they say nothing -- never `false`, never `"both"` -- so a plan without sides
+hashes to what it always did and is not re-pushed. `WatchPlanBuilder` fills
+them from `PlanSides`, `SetSide.planSide` maps this app's own side onto
+`LiftSync`'s `PlanSide` (identical raw values, deliberately: one word in the
+store, in a backup and on this wire), and the watch's `GuidedSession` is a port
+of `Prescription`'s rules, so an each-side exercise is twice the sets and
+alternates the way Add set does here.
 
 **The watch is told what to lift, in kilograms, with blanks left blank.**
 `PLAN_PUSHED` carries today's plan to the watch app: the routine a coach's
@@ -320,6 +331,23 @@ that repo is Wear OS only now. `Watch/README.md` has the detail.
   `LIFT_SYNC_ENVELOPE` launch variable exists for that gap.
 - **HealthKit** authorization is per bundle id: the move asks again on the
   watch, and the watch's Info.plist carries its own usage strings.
+- **A finished session comes home whole, and is stored as an ordinary
+  workout.** `SESSION_FINISHED` carries a `session` payload — every exercise,
+  every set with its weight in kilograms, reps, RPE, warmup flag and **side**,
+  the local day it belongs to and the heart rate — because a phone in a locker
+  is reachable for none of it, so there is deliberately no streamed
+  `SET_LOGGED`. `WatchSessionImporter` decides what happens to it, out of the
+  `WCSession` delegate for the reason `LiftProgression` is out of a view: a new
+  session is appended to its day (a day may already hold a workout logged
+  here), a repeat is not stored twice, and a newer revision replaces an earlier
+  import **only while this phone has not edited those rows since** — a
+  fingerprint taken at import and re-derived, so "the watch never silently
+  overwrites newer phone edits" is code and not a comment. The day is the
+  watch's `performedOn` unless it is more than a day ahead of this phone or a
+  fortnight behind it, in which case the session is filed under today rather
+  than under a broken clock's year; it is never dropped. The watch keeps the
+  session in `UnsentSessionLog` until the acknowledgement arrives, so nothing
+  is lost if this app is never opened.
 - **A food is stored once and acknowledged.** A watch-logged food arrives as
   `FOOD_LOGGED`; `WatchSyncReceiver` stores each one-shot id once
   (`WatchFoodLogReceipts`) and answers with a `WORKOUT_SYNC_ACK` under that id,

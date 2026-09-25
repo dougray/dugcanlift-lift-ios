@@ -65,6 +65,21 @@ final class SchemaConformanceTests: XCTestCase {
                     eachSide: true
                 )]
             ),
+            session: FinishedSession(
+                name: "Push",
+                focus: "bodybuilding",
+                performedOn: "2026-09-20",
+                startedAt: Date(timeIntervalSince1970: 1_758_355_200),
+                finishedAt: Date(timeIntervalSince1970: 1_758_358_800),
+                exercises: [PerformedExercise(
+                    name: "Bench Press",
+                    equipment: "barbell",
+                    note: "Pause the first rep",
+                    sets: [PerformedSet(weightKg: 83.9, reps: 5, rpe: 8, isWarmup: true,
+                                        side: .left,
+                                        completedAt: Date(timeIntervalSince1970: 1_758_356_000))]
+                )]
+            ),
             heartRate: SessionHeartRate(averageBpm: 128.5, maxBpm: 171)
         )
 

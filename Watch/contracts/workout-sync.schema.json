@@ -55,6 +55,10 @@
       "$ref": "#/$defs/plan",
       "description": "Present only when event is PLAN_PUSHED (phone -> watch). The envelope's own `workoutId` is the plan's identity and `revision` is the plan's revision, so the existing conflict rule applies unchanged: a receiver ignores a PLAN_PUSHED whose revision it has already seen for that id, and accepts a newer one. PLAN_REQUEST (watch -> phone) carries no `plan` at all; it is a bare envelope asking the phone to push the current one, with a fresh one-shot `workoutId` and revision 1, exactly as FOOD_LOGGED uses those fields."
     },
+    "session": {
+      "$ref": "#/$defs/session",
+      "description": "Present only when event is SESSION_FINISHED (watch -> phone): the whole workout that was logged, so the receiver can store it without having seen any of the sets go by. The envelope's `workoutId` is the session's identity and `revision` is the session's revision, so the existing conflict rule covers a resend and a later edit with no new machinery: the same revision again changes nothing, a newer one supersedes what was stored, an older one is ignored. Absent on a SESSION_FINISHED from a sender that predates this key, which a receiver reads exactly as it always did -- a notification that a session ended, with nothing to store."
+    },
     "heartRate": {
       "type": "object",
       "description": "Present only when event is SESSION_FINISHED, and only when the watch actually recorded heart rate for that session. Absent means 'not recorded' -- never zero.",
@@ -73,6 +77,91 @@
   },
   "additionalProperties": true,
   "$defs": {
+    "session": {
+      "type": "object",
+      "description": "A workout that was actually performed, whole. Ordered: `exercises` is the order they were trained in and each exercise's `sets` the order they were performed in. Unlike a plan, whose every field is a prescription that may be absent, a performed set's weight and reps are values that were recorded -- 0 kg is a bodyweight set, not a blank -- so they are required and carry no 'absent is not zero' rule.",
+      "required": ["name", "performedOn", "startedAt", "finishedAt", "exercises"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "focus": {
+          "type": "string",
+          "description": "The training style the session was logged under. A plain string, not an enum: the two apps' rosters are not identical and a receiver that does not recognise a word falls back to its own default rather than refusing the session. Omitted when the sender has none."
+        },
+        "performedOn": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The local calendar day the session belongs to, as the SENDER's own clock read it when the session started -- yyyy-MM-dd, the same shape `scheduledFor` uses. A session that runs past midnight belongs to the day it began. A receiver decides how far it trusts this: the two devices' clocks are not comparable, which is the same reason reconciliation is by `revision` and not by `updatedAt`."
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "exercises": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/performedExercise" }
+        }
+      }
+    },
+    "performedExercise": {
+      "type": "object",
+      "required": ["name", "sets"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "equipment": {
+          "type": "string",
+          "description": "Omitted, never empty, when the exercise has none -- as on a planExercise. A lift's identity is name and equipment together, so a receiver matching this against its own history must match on both."
+        },
+        "note": {
+          "type": "string"
+        },
+        "sets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/performedSet" }
+        }
+      }
+    },
+    "performedSet": {
+      "type": "object",
+      "required": ["weightKg", "reps"],
+      "properties": {
+        "weightKg": {
+          "type": "number",
+          "minimum": 0,
+          "description": "KILOGRAMS, as everywhere on this contract. Zero is a real bodyweight set."
+        },
+        "reps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rpe": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Omitted when the lifter did not rate the set. Never zero, which is not a rating."
+        },
+        "warmup": {
+          "type": "boolean",
+          "description": "Omitted, never `false`, so a session of working sets is byte for byte what a sender that predates this key wrote."
+        },
+        "side": {
+          "enum": ["left", "right"],
+          "description": "The limb this set was actually performed on, spelled as BACKUP-FORMAT and both apps' own stores spell it. Omitted -- never 'both', never null -- for an ordinary two-sided set, so a session with no sides is unchanged, and a receiver reads a value it does not know as two-sided rather than refusing the session."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the set was logged. Omitted for a set that was entered but never completed."
+        }
+      }
+    },
     "plan": {
       "type": "object",
       "description": "The workout the watch should run. Ordered: `exercises` is the order to train in, and each exercise's `sets` are the order to perform them in.",

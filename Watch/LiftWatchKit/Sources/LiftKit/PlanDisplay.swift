@@ -35,9 +35,7 @@ extension WorkoutPlan {
     /// Monday push that arrived on Tuesday would put it back.
     public func isScheduled(for date: Date, calendar: Calendar = .current) -> Bool {
         guard let scheduledFor else { return true }
-        let day = calendar.dateComponents([.year, .month, .day], from: date)
-        guard let year = day.year, let month = day.month, let dayOfMonth = day.day else { return false }
-        return scheduledFor == String(format: "%04d-%02d-%02d", year, month, dayOfMonth)
+        return scheduledFor == WireDay.key(for: date, calendar: calendar)
     }
 }
 

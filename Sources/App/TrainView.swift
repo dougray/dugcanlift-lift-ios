@@ -17,6 +17,15 @@ struct TrainView: View {
     @State private var showingPicker = false
     @Environment(\.pageWidth) private var pageWidth
 
+    /// The week the "what you were asked to do" card is showing, and the day of
+    /// it it has open. Both nil means "follow Train": the week containing the
+    /// day on screen, with that day open. The card's own arrows set the first,
+    /// a row sets the second, and Previous / Next clears both -- moving a day
+    /// should not leave the card describing a week the rest of the screen has
+    /// left.
+    @State private var planWeekAnchor: String?
+    @State private var planWeekOpen: String?
+
     private var unit: WeightUnit { WeightUnit(rawValue: unitRaw) ?? .pounds }
 
     var body: some View {
@@ -38,6 +47,18 @@ struct TrainView: View {
                             FocusPicker(date: selectedDate)
 
                             ScheduledSessionBanner(date: selectedDate)
+
+                            // The coach's week, under the coach's own card for
+                            // the day and above the day's own log -- the day's
+                            // action first, the week as the context under it,
+                            // where LIFT web puts it. Absent entirely when the
+                            // week on screen books no training.
+                            PlanWeekCard(date: selectedDate,
+                                         anchor: $planWeekAnchor,
+                                         open: $planWeekOpen) { key in
+                                guard let date = DayKey.date(from: key) else { return }
+                                selectedDate = date
+                            }
 
                             DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
                         }
@@ -101,6 +122,10 @@ struct TrainView: View {
         guard let moved = Calendar.current.date(byAdding: .day, value: days, to: selectedDate)
         else { return }
         selectedDate = moved
+        // Moving a day should not leave the week card describing a week the
+        // rest of the screen has left.
+        planWeekAnchor = nil
+        planWeekOpen = nil
     }
 
     private func addExercise(_ record: ExerciseRecord) {

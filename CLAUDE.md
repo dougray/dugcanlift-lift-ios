@@ -393,6 +393,85 @@ as readily as a recording from ten seconds ago.
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.
 
+## The coach's week, beside your own log
+
+`PlanAndLog` puts the week a coach booked beside the week this phone logged, on
+**Train**, under the coach's own card for the day (`ScheduledSessionBanner`) and
+above the day's own log. **LIFT web's `lift/plan-log.js` is the reference
+implementation**, as `sides.js` is; `PlanAndLogTests` ports
+`plan-log.test.mjs` case for case. Coach iPhone's `PlanAndLog` /
+`BookedCardView` is the same idea for the other reader.
+
+**It is a week and not a marker on a day, and the argument is load-bearing.**
+Train shows one day at a time and Next is disabled past today, so a booked
+Wednesday is invisible on Thursday and a booked Friday can be looked at nowhere
+else on the phone. A marker on the day screen would only restate what the day
+screen already shows. One day is open at a time, by default the day Train is
+showing; tapping a row opens it and moves Train to it where Train can show it.
+The `‹ ›` step between weeks a coach **actually booked**, disabled when there is
+none -- a card that vanished on the way to an empty week would take its own
+arrows with it. The week runs **Monday to Sunday** (`weekStartsOn`, a fixed
+constant), never a rolling seven days, or a booked Tuesday would move out of
+"this week" overnight.
+
+**Nothing new travels, nothing new is stored and no schema changed.** The
+accepted plan and the log are read exactly as they already sit in the store.
+
+**The ask is the stored plan, never the logged sets.** `ScheduledSession` names
+the date and the `Routine`; that routine's `RoutineExercise` /
+`RoutinePrescribedSet` rows are what was asked, and `PlanSides` carries each
+side and the named sides. It is not read off the log because starting a session
+copies two-sided prescribed sets in as ordinary editable sets, and
+`PlanSides.logged` keeps a prescription beside a logged exercise **only when it
+says something about sides** -- so for an ordinary plan the original ask is gone
+from the log the moment a set is edited, which is the whole gap this card
+closes. The cost, stated: a routine the lifter then edits changes what the card
+says was asked, because the routine *is* the record. Deleting one is safe --
+`RoutineRemoval` takes its bookings with it.
+
+**Days join on date and nothing else.** LIFT web uses `startedSessionId` to pick
+the right session out of a day holding two; this app has no session below the
+day (`WorkoutDay` is one per `dayKey`), so there is nothing to pick -- everything
+logged that day is that day's log, and a lift nobody asked for falls to `Also
+logged`. A session lifted the day after the one it was booked for is a booked
+day with nothing logged **and** a session of its own, adjacent on screen, with
+nothing claimed about the two.
+
+**Four verdicts.** `logged`, `not logged` and `not booked` are Coach web's words
+unchanged, so a lifter and their coach describe the same week the same way.
+`to do` is this side's own, because only the person living the week has a day
+that has not happened yet -- a day still ahead prints what it asks for (nowhere
+else can) and a past day does not recite what was not done. Coach's fourth
+state, `outside the log they sent`, **cannot arise here** (the log is on the
+device) and Coach's footer is a sentence about somebody else, so this card has
+its own: "Your coach's plan beside your own log. What else the week held, only
+you know."
+
+**Sides are the session header's own function.** `Prescription.targetsLabel` is
+what `ExerciseBlock` already shows (`L 3/3 · R 2/3`, `L 4/3` when over, never
+capped, an each-side exercise's ask twice its tuples), called with the same
+argument, so the card and the exercise it describes cannot disagree. A day still
+ahead shows `Each side · L 4 · R 3` instead, because `L 0/3` on a Friday is a
+nought nobody has had the chance to earn. The plain count is
+`SetSide.countsLabel(of:)`, which `ExerciseEntry.perSideCountLabel` now
+delegates to: one sentence, one place.
+
+**A set is spelled the way `SetEntry.display` spells it**, field for field --
+the one deliberate divergence from the browser, whose `setText` orders distance
+before duration. A card comparing two rows printed by two different formatters
+would be comparing two different sentences. Both rows come from kilograms,
+converted once at display. **Blank stays blank**: `[null, 5]` is "5 reps", never
+"0 x 5". LIFT writes `x`, never `×`.
+
+**Nobody is graded.** No score, no percentage, no streak, no colour on a day
+nothing was logged against, nothing carried between weeks and nothing comparing
+anything. `PlanAndLog.lines` flattens every sentence the card can produce so
+`testNothingInThisCardTellsALifterWhatToDo` and
+`testNothingHereAggregatesAWeekIntoAScore` hold the whole screen to that list
+rather than an eye holding one render of it. **A week that books nothing is no
+card at all** -- never an empty frame explaining itself, and never a week of
+your own training held up against a plan nobody wrote.
+
 ## Constraints
 
 - iOS 17.0 minimum (SwiftData).

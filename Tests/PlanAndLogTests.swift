@@ -561,6 +561,110 @@ final class PlanAndLogTests: XCTestCase {
                      "your own training is never held up against a plan nobody wrote")
     }
 
+    // MARK: - Who sent it
+
+    private func signed(_ bookings: [PlanAndLog.Booking],
+                        anchor: String? = nil) throws -> String {
+        let result = try XCTUnwrap(run(bookings, [], anchor: anchor))
+        return PlanAndLog.sentBy(result, bookings: bookings)
+    }
+
+    /// Web's own case: the week is signed the way the prescribed card signs a
+    /// session, and a plan that named nobody signs it "From your coach".
+    func testTheWeekIsSignedTheWayThePrescribedCardSignsASession() throws {
+        let squat = lift("Back Squat", "Barbell", [set(225, 5)])
+        XCTAssertEqual(
+            try signed([PlanAndLog.Booking(date: mon, name: "Lower A",
+                                           coachName: "Doug", exercises: [squat])]),
+            "From Doug")
+        XCTAssertEqual(
+            try signed([PlanAndLog.Booking(date: mon, name: "Lower A",
+                                           coachName: nil, exercises: [squat])]),
+            PlanAndLog.noCoachName)
+        XCTAssertEqual(PlanAndLog.noCoachName, "From your coach")
+    }
+
+    /// A week booked before a booking kept a name at all reads exactly as it
+    /// read then: nil on every row, and the fallback sentence.
+    func testAWeekBookedBeforeANameWasKeptReadsAsItAlwaysDid() throws {
+        XCTAssertEqual(try signed(weekTraining()), PlanAndLog.noCoachName,
+                       "the helper builds bookings with no name, as a pre-V9 row has")
+    }
+
+    /// Two coaches in one week are both named, in the order the week meets
+    /// them, joined with web's separator. A plan that named nobody adds no
+    /// voice: it says nothing about who sent the week rather than saying
+    /// somebody else did.
+    func testTwoCoachesInOneWeekAreBothNamedAndANamelessPlanAddsNothing() throws {
+        let squat = lift("Back Squat", "Barbell", [set(225, 5)])
+        let bookings = [
+            PlanAndLog.Booking(date: mon, name: "Lower A", coachName: "Doug",
+                               exercises: [squat]),
+            PlanAndLog.Booking(date: wed, name: "Upper A", coachName: "Dana",
+                               exercises: [squat]),
+            PlanAndLog.Booking(date: fri, name: "Lower B", coachName: nil,
+                               exercises: [squat]),
+        ]
+        XCTAssertEqual(try signed(bookings), "From Doug · Dana")
+    }
+
+    /// One coach who booked three days is one name.
+    func testOneCoachWhoBookedThreeDaysIsOneName() throws {
+        let squat = lift("Back Squat", "Barbell", [set(225, 5)])
+        let bookings = [mon, wed, fri].map {
+            PlanAndLog.Booking(date: $0, name: "Lower A", coachName: "Doug",
+                               exercises: [squat])
+        }
+        XCTAssertEqual(try signed(bookings), "From Doug")
+    }
+
+    /// Only this week signs this week. A coach who booked last week does not
+    /// put their name on a week they wrote nothing for.
+    func testOnlyTheWeekOnScreenSignsIt() throws {
+        let squat = lift("Back Squat", "Barbell", [set(225, 5)])
+        let bookings = [
+            PlanAndLog.Booking(date: "2026-10-05", name: "Lower A", coachName: "Dana",
+                               exercises: [squat]),
+            PlanAndLog.Booking(date: mon, name: "Lower A", coachName: "Doug",
+                               exercises: [squat]),
+        ]
+        XCTAssertEqual(try signed(bookings), "From Doug")
+        XCTAssertEqual(try signed(bookings, anchor: "2026-10-07"), "From Dana")
+    }
+
+    /// `n` is free text from another person's app. A name padded, or carrying
+    /// a line break, is one line with single spaces in it -- what the browser
+    /// gets from HTML folding whitespace in a `<p>`, which a `Text` does not.
+    /// Nothing is cut: how long a line the card gives it is the view's rule.
+    func testALongOrMultiLineNameIsOneLineAndIsNotCut() throws {
+        let squat = lift("Back Squat", "Barbell", [set(225, 5)])
+        let long = String(repeating: "Dana Whitfield-Fotheringay ", count: 12)
+            .trimmingCharacters(in: .whitespaces)
+        XCTAssertEqual(
+            try signed([PlanAndLog.Booking(date: mon, name: "Lower A", coachName: long,
+                                           exercises: [squat])]),
+            "From " + long)
+
+        let broken = try signed([PlanAndLog.Booking(
+            date: mon, name: "Lower A", coachName: "  Dana\nWhitfield\t\tStrength  ",
+            exercises: [squat])])
+        XCTAssertEqual(broken, "From Dana Whitfield Strength")
+        XCTAssertFalse(broken.contains("\n"), "a name cannot add a line to the card")
+    }
+
+    /// Who sent a week is a fact about the plans, not a figure about the week:
+    /// it is not on `Result` (whose members
+    /// `testNothingHereAggregatesAWeekIntoAScore` names) and not in `lines`,
+    /// which is the list the line discipline is held to. Web keeps it out of
+    /// both for the same reason.
+    func testTheSignatureIsNotPartOfTheWeekItSigns() throws {
+        let squat = lift("Back Squat", "Barbell", [set(225, 5)])
+        let bookings = [PlanAndLog.Booking(date: mon, name: "Lower A", coachName: "Doug",
+                                           exercises: [squat])]
+        let result = try XCTUnwrap(run(bookings, []))
+        XCTAssertFalse(PlanAndLog.lines(result).contains { $0.contains("Doug") })
+    }
+
     // MARK: - Warmups
 
     /// Warmups are excluded on both sides -- a plan never prescribes one, and
@@ -782,6 +886,61 @@ final class PlanAndLogTests: XCTestCase {
                        "the coach's own numbers, not the ones the lifter edited")
         XCTAssertEqual(row.logged?.text, "100 x 3")
         XCTAssertEqual(row.countLine, "Asked 2 sets · logged 1")
+    }
+
+    /// The whole way through, from a link a coach sent to the sentence on the
+    /// card: `n` reaches the booking and the booking signs the week.
+    @MainActor
+    func testAPlanAcceptedFromALinkSignsTheWeekWithTheNameItCarried() throws {
+        let context = ModelContext(LiftStore.makeContainer(inMemory: true))
+        let suite = "plan-and-log-sent-by-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        func accept(_ name: String, on day: String, workout: String, hash: String) throws {
+            let payload = PlanPayload(
+                v: 1, t: "plan", l: "a1b2c3d4", n: name, r: nil, m: nil,
+                w: [PlanWorkout(n: workout, e: [
+                    PlanWorkoutExercise(n: "Back Squat", q: "Barbell", c: nil, s: [[225, 5]])
+                ])],
+                k: [PlanSession(d: day, x: 0)])
+            try PlanImporter.accept(payload, hash: hash, in: context, defaults: defaults)
+        }
+        try accept("Dana Whitfield", on: mon, workout: "Lower A", hash: "s1")
+        try accept("", on: "2026-10-05", workout: "Upper B", hash: "s2")
+
+        func week(_ anchor: String) throws -> String {
+            let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+            let result = try XCTUnwrap(PlanAndLog.compare(
+                anchor: anchor, today: today, sessions: sessions,
+                routines: try context.fetch(FetchDescriptor<Routine>()),
+                days: [], sides: PlanSides.load(from: defaults),
+                unit: .kilograms, locale: locale))
+            return PlanAndLog.sentBy(result, sessions: sessions)
+        }
+        XCTAssertEqual(try week(mon), "From Dana Whitfield")
+        XCTAssertEqual(try week("2026-10-05"), PlanAndLog.noCoachName,
+                       "a plan that named nobody signs nothing")
+    }
+
+    /// A booking written before the name was kept -- every row in a store
+    /// migrated to V9 -- reads exactly as it read then.
+    @MainActor
+    func testABookingWithNoNameSignsTheWeekAsItAlwaysDid() throws {
+        let context = ModelContext(LiftStore.makeContainer(inMemory: true))
+        let routine = Routine(name: "Lower A")
+        context.insert(routine)
+        context.insert(ScheduledSession(routineID: routine.id, routineName: routine.name,
+                                        scheduledFor: try XCTUnwrap(DayKey.date(from: mon))))
+        try context.save()
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertNil(sessions.first?.coachName)
+        let result = try XCTUnwrap(PlanAndLog.compare(
+            anchor: mon, today: today, sessions: sessions,
+            routines: try context.fetch(FetchDescriptor<Routine>()), days: [],
+            sides: PlanSides(), unit: .kilograms, locale: locale))
+        XCTAssertEqual(PlanAndLog.sentBy(result, sessions: sessions), "From your coach")
     }
 
     /// The sides of the ask come from `PlanSides`, keyed by the routine's own

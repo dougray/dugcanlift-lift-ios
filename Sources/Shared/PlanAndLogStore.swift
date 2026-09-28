@@ -41,15 +41,34 @@ extension PlanAndLog {
     static func bookings(sessions: [ScheduledSession], routines: [Routine],
                          sides: PlanSides) -> [Booking] {
         let byID = Dictionary(routines.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return sessions
-            .sorted { $0.dayKey == $1.dayKey ? $0.routineName < $1.routineName : $0.dayKey < $1.dayKey }
-            .map { session in
-                let routine = byID[session.routineID]
-                return Booking(
-                    date: session.dayKey,
-                    name: session.routineName,
-                    exercises: (routine?.orderedExercises ?? []).map { asked($0, sides: sides) })
-            }
+        return inOrder(sessions).map { session in
+            let routine = byID[session.routineID]
+            return Booking(
+                date: session.dayKey,
+                name: session.routineName,
+                coachName: session.coachName,
+                exercises: (routine?.orderedExercises ?? []).map { asked($0, sides: sides) })
+        }
+    }
+
+    /// Who sent the week, from the bookings themselves.
+    ///
+    /// The same order `bookings` puts them in, because `sentBy` prints two
+    /// coaches in the order it first meets them and a `@Query` has no order of
+    /// its own -- two names would otherwise swap places between launches.
+    /// Only the date and the name are read, so the routine behind a booking is
+    /// not fetched to answer this.
+    static func sentBy(_ result: Result, sessions: [ScheduledSession]) -> String {
+        sentBy(result, bookings: inOrder(sessions).map {
+            Booking(date: $0.dayKey, name: $0.routineName, coachName: $0.coachName,
+                    exercises: [])
+        })
+    }
+
+    private static func inOrder(_ sessions: [ScheduledSession]) -> [ScheduledSession] {
+        sessions.sorted {
+            $0.dayKey == $1.dayKey ? $0.routineName < $1.routineName : $0.dayKey < $1.dayKey
+        }
     }
 
     /// One prescribed exercise, as the plan stored it.

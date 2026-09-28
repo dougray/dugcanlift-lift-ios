@@ -147,6 +147,7 @@ private struct PlanWeekBody: View {
                 .font(Theme.sectionLabel)
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(week.spokenHead)
             step("chevron.right", direction: 1, from: week.from)
         }
     }
@@ -201,6 +202,13 @@ private struct PlanWeekBody: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
+            // One name for the row, not three fragments -- and the two things
+            // pressing it does. The trait says it is a button; nothing on
+            // screen said which state it is in, or that opening a day Train
+            // can show also moves Train there.
+            .accessibilityLabel(day.spoken)
+            .accessibilityValue(day.key == openKey ? "Expanded" : "Collapsed")
+            .accessibilityHint(day.openable ? "Opens this day on Train" : "Opens this day")
 
             if day.key == openKey { detail(day) }
         }
@@ -212,6 +220,12 @@ private struct PlanWeekBody: View {
     private func detail(_ day: PlanAndLog.DayRow) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(day.exercises, id: \.key) { exercise in
+                // **Drawn as it always was and said as one sentence.** Every
+                // `Text` in a `VStack` is its own accessibility element, so the
+                // six lines of a lift arrive as six stops with the word that
+                // named the numbers two swipes behind them. One element with
+                // the rule's own sentence makes the asked row and the logged
+                // row the comparison they are.
                 VStack(alignment: .leading, spacing: 3) {
                     Text(exercise.title)
                         .font(.system(size: 15, weight: .bold))
@@ -224,13 +238,17 @@ private struct PlanWeekBody: View {
                     // are; it reads as nonsense above them.
                     if let substitution = exercise.substitution { muted(substitution) }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(exercise.spoken)
             }
             if !day.alsoLogged.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Also logged")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.textPrimary)
-                    ForEach(day.alsoLogged, id: \.key) { muted($0.text) }
+                    ForEach(day.alsoLogged, id: \.key) { row in
+                        muted(row.text).accessibilityLabel(row.spoken)
+                    }
                 }
             }
         }

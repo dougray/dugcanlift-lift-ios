@@ -63,6 +63,27 @@ enum SetSide: String, Codable, CaseIterable, Identifiable, Sendable {
         guard let text = raw as? String else { return nil }
         return SetSide(rawValue: text.trimmingCharacters(in: .whitespaces).lowercased())
     }
+
+    // MARK: - Counting
+
+    /// "L 3 · R 2", so a missed side is obvious, with "· 2 both" appended when
+    /// some of the sets carry no side at all.
+    ///
+    /// One rule, two readers: `ExerciseEntry.perSideCountLabel` is the
+    /// exercise header in the day editor and `PlanAndLog` is the week card, and
+    /// a second copy of the sentence could only drift. LIFT web's
+    /// `countsLabel` is the same function.
+    ///
+    /// Sets logged before the per-side toggle went on are still in the
+    /// exercise and still real, which is why they are counted out loud rather
+    /// than quietly left out of a count whose whole job is to add up.
+    static func countsLabel(of sides: [SetSide?]) -> String {
+        let left = sides.filter { $0 == .left }.count
+        let right = sides.filter { $0 == .right }.count
+        let both = sides.filter { $0 == nil }.count
+        let text = "L \(left) · R \(right)"
+        return both > 0 ? "\(text) · \(both) both" : text
+    }
 }
 
 /// The name half of the lift identity, spelled the way the share link's

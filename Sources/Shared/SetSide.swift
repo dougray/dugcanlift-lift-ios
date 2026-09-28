@@ -84,6 +84,20 @@ enum SetSide: String, Codable, CaseIterable, Identifiable, Sendable {
         let text = "L \(left) · R \(right)"
         return both > 0 ? "\(text) · \(both) both" : text
     }
+
+    /// "L" and "R" are a column heading, not a word. What a screen reader is
+    /// handed instead, wherever a side is announced.
+    var spokenLabel: String { self == .left ? "left" : "right" }
+
+    /// `countsLabel`, said: "left 3, right 3, 2 both". Built from the same
+    /// counts as the label rather than by picking the label apart.
+    static func countsSpoken(of sides: [SetSide?]) -> String {
+        let left = sides.filter { $0 == .left }.count
+        let right = sides.filter { $0 == .right }.count
+        let both = sides.filter { $0 == nil }.count
+        let text = "left \(left), right \(right)"
+        return both > 0 ? "\(text), \(both) both" : text
+    }
 }
 
 /// The name half of the lift identity, spelled the way the share link's

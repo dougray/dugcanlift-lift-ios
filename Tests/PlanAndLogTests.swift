@@ -801,8 +801,10 @@ final class PlanAndLogTests: XCTestCase {
         // Counts hang off the week the card is looking at, and there is nothing
         // above them: no all-time figure, no trend, nothing carried to next
         // week.
+        // `spokenHead` is `head` said, and nothing else: the same sentence with
+        // its `·` read as a comma and its range read as a range.
         XCTAssertEqual(Mirror(reflecting: result).children.compactMap(\.label).sorted(),
-                       ["counts", "days", "footer", "from", "head", "range", "to"])
+                       ["counts", "days", "footer", "from", "head", "range", "spokenHead", "to"])
         XCTAssertEqual(Mirror(reflecting: result.counts).children.compactMap(\.label).sorted(),
                        ["booked", "logged", "notLogged", "other", "toDo"],
                        "a week counts the days it booked and the days it holds, and nothing else")
@@ -1022,4 +1024,124 @@ final class PlanAndLogTests: XCTestCase {
         XCTAssertEqual(result?.days.first?.text, "Mon 12 Oct · Lower A · not logged")
         XCTAssertEqual(result?.days.first?.exercises, [])
     }
+
+    // MARK: - How it reads aloud
+    //
+    // The card is built out of short muted lines with `·` between their
+    // clauses, which is a comma sighted and a fragment aloud, and every `Text`
+    // in a `VStack` is its own accessibility element. `spokenLines` is the same
+    // card said; these pin the rules rather than the strings.
+
+    func testADayRowIsOneSentenceNotThreeFragments() throws {
+        let spoken = PlanAndLog.spokenLines(everyState())
+        XCTAssertFalse(spoken.contains { $0.contains(" · ") }, "\(spoken)")
+        XCTAssertTrue(spoken.contains("Monday 12 October, Lower A, logged"),
+                      "no spoken day row: \(spoken.prefix(4))")
+    }
+
+    func testTheDateADayRowSaysIsTheDateItDrawsInWords() {
+        XCTAssertEqual(PlanAndLog.dayLabel(mon, locale: locale), "Mon 12 Oct")
+        XCTAssertEqual(PlanAndLog.spokenDayLabel(mon, locale: locale), "Monday 12 October")
+    }
+
+    func testAWeekIsARangeAloudNotAnEnDash() {
+        XCTAssertEqual(PlanAndLog.rangeText(from: mon, to: sun, locale: locale), "12–18 Oct")
+        XCTAssertEqual(PlanAndLog.spokenRange(from: mon, to: sun, locale: locale),
+                       "12 to 18 October")
+        XCTAssertEqual(PlanAndLog.spokenRange(from: "2026-09-28", to: "2026-10-04",
+                                              locale: locale),
+                       "28 September to 4 October")
+        XCTAssertEqual(PlanAndLog.spokenRange(from: mon, to: mon, locale: locale), "12 October")
+    }
+
+    func testTheAskedRowAndTheLoggedRowAreOneComparisonUnderTheLift() throws {
+        let result = run([booked(mon, "Lower A",
+                                 [lift("Back Squat", "Barbell",
+                                       [set(100, 5), set(100, 5), set(110, 3)])])],
+                         [loggedDay(mon, "Lower A",
+                                    [lift("Back Squat", "Barbell", [set(100, 5), set(100, 5)])])],
+                         unit: .kilograms)
+        let row = try XCTUnwrap(try day(result, 0).exercises.first)
+        XCTAssertEqual(row.spoken,
+                       "Back Squat (Barbell). Asked 3 sets, logged 2. "
+                       + "Asked 100 by 5, 100 by 5, 110 by 3. Logged 100 by 5, 100 by 5")
+        // ` x ` never reaches it: read literally it is the letter.
+        XCTAssertFalse(row.spoken.contains(" x "))
+    }
+
+    func testTheSideLineIsSaidInWords() throws {
+        let result = run([booked(mon, "Lower A",
+                                 [lift("Split Squat", "Dumbbell",
+                                       [set(20, 8), set(20, 8), set(20, 8)], eachSide: true)])],
+                         [loggedDay(mon, "Lower A",
+                                    [lift("Split Squat", "Dumbbell", [
+                                        set(20, 8, side: .left), set(20, 8, side: .left),
+                                        set(20, 8, side: .left), set(20, 8, side: .right),
+                                        set(20, 8, side: .right)])])])
+        let row = try XCTUnwrap(try day(result, 0).exercises.first)
+        XCTAssertEqual(row.sideLine, "L 3/3 · R 2/3", "the drawn line is unchanged")
+        XCTAssertEqual(row.spokenSideLine, "left 3 of 3, right 2 of 3")
+        XCTAssertEqual(row.logged?.spoken,
+                       "Logged left 20 by 8, 20 by 8, 20 by 8; right 20 by 8, 20 by 8")
+        // "each side" is a clause on the ask and is said, or the plan asks for
+        // half of what it asks for.
+        XCTAssertTrue(row.asked?.spoken.hasSuffix(" each side") == true,
+                      row.asked?.spoken ?? "nil")
+    }
+
+    func testADayStillAheadSaysItsEachSideAskInWordsNotInNoughts() throws {
+        let result = run([booked(fri, "Lower B",
+                                 [lift("Split Squat", "Dumbbell",
+                                       [set(20, 10), set(20, 10)], eachSide: true)])], [])
+        let ahead = try XCTUnwrap(result?.days.first { $0.key == fri }?.exercises.first)
+        XCTAssertEqual(ahead.sideLine, "Each side · L 2 · R 2")
+        XCTAssertEqual(ahead.spokenSideLine, "Each side, left 2, right 2")
+    }
+
+    func testASetRowSaysItsLabelAndItsNumbersInOneBreath() throws {
+        let result = run([booked(mon, "Lower A",
+                                 [lift("Back Squat", "Barbell", [set(100, 5)])])],
+                         [loggedDay(mon, "Lower A",
+                                    [lift("Back Squat", "Barbell", [set(100, 5)])])])
+        let asked = try XCTUnwrap(try day(result, 0).exercises.first?.asked)
+        XCTAssertEqual(asked.label + " " + asked.text, "Asked 100 x 5")
+        XCTAssertEqual(asked.spoken, "Asked 100 by 5")
+    }
+
+    func testTheSpokenSideLineAgreesWithTheDrawnOne() {
+        // Two functions that count separately eventually count differently.
+        let prescription = Prescription(
+            eachSide: true,
+            sets: [CoachPrescribedSet(side: nil), CoachPrescribedSet(side: nil),
+                   CoachPrescribedSet(side: nil)])
+        let logged: [SetSide?] = [.left, .left, .left, .right, .right]
+        XCTAssertEqual(prescription.targetsLabel(logged: logged), "L 3/3 · R 2/3")
+        XCTAssertEqual(prescription.targetsSpoken(logged: logged), "left 3 of 3, right 2 of 3")
+        let digits = { (s: String) in s.filter(\.isNumber) }
+        XCTAssertEqual(digits(prescription.targetsLabel(logged: logged)),
+                       digits(prescription.targetsSpoken(logged: logged)))
+        XCTAssertEqual(SetSide.countsLabel(of: [.left, .right, nil]), "L 1 · R 1 · 1 both")
+        XCTAssertEqual(SetSide.countsSpoken(of: [.left, .right, nil]), "left 1, right 1, 1 both")
+    }
+
+    func testNothingAScreenReaderIsHandedChangesWhatTheCardDraws() {
+        // The spoken layer is labels, and the drawn lines keep their
+        // punctuation.
+        let drawn = PlanAndLog.lines(everyState())
+        XCTAssertTrue(drawn.contains { $0.contains(" · ") }, "the card still draws `·`")
+        XCTAssertTrue(drawn.contains { $0.contains("L 3/3") }, "and still draws `L 3/3`")
+        XCTAssertTrue(drawn.contains { $0.contains(" x ") }, "and still draws ` x `")
+    }
+
+    func testNothingAScreenReaderIsHandedTellsALifterWhatToDo() {
+        // The same discipline as the drawn lines, over the announced ones: a
+        // label is a sentence you read, and "not logged" must be as flat aloud
+        // as it is on screen.
+        let every = PlanAndLog.spokenLines(everyState()).joined(separator: " · ").lowercased()
+        XCTAssertGreaterThan(every.count, 400, "the fixture should exercise the whole card")
+        for word in forbidden + forbiddenHere {
+            XCTAssertFalse(every.contains(word), "\"\(word)\" reached a screen reader: \(every)")
+        }
+    }
+
 }

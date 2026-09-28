@@ -632,6 +632,30 @@ final class PlanAndLogTests: XCTestCase {
         XCTAssertEqual(try signed(bookings, anchor: "2026-10-07"), "From Dana")
     }
 
+    /// Two coaches are met in **booked-date order**, which is not quite web's:
+    /// web meets its bookings in the order the plans were accepted. Nothing
+    /// here can reproduce that -- a `ScheduledSession` records no moment of
+    /// its own -- and date order is the order the rows under the line are
+    /// drawn in. It shows at all only when two coaches book one week and the
+    /// later-dated plan arrived first.
+    func testTwoCoachesAreNamedInBookedDateOrder() throws {
+        let squat = lift("Back Squat", "Barbell", [set(225, 5)])
+        let bookings = [
+            PlanAndLog.Booking(date: fri, name: "Lower B", coachName: "Dana",
+                               exercises: [squat]),
+            PlanAndLog.Booking(date: mon, name: "Lower A", coachName: "Doug",
+                               exercises: [squat]),
+        ]
+        // `bookings` is handed over unsorted here; the store's own overload is
+        // what sorts, so this pins the rule and not the sort.
+        XCTAssertEqual(try signed(bookings), "From Dana · Doug")
+        XCTAssertEqual(
+            PlanAndLog.sentBy(try XCTUnwrap(run(bookings, [])),
+                              bookings: bookings.sorted { $0.date < $1.date }),
+            "From Doug · Dana",
+            "the store hands them over in booked-date order")
+    }
+
     /// `n` is free text from another person's app. A name padded, or carrying
     /// a line break, is one line with single spaces in it -- what the browser
     /// gets from HTML folding whitespace in a `<p>`, which a `Text` does not.

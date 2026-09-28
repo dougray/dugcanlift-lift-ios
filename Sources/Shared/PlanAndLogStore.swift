@@ -58,6 +58,15 @@ extension PlanAndLog {
     /// its own -- two names would otherwise swap places between launches.
     /// Only the date and the name are read, so the routine behind a booking is
     /// not fetched to answer this.
+    ///
+    /// **One divergence from web, stated.** Web meets its bookings in the
+    /// order the plans were accepted, so a week two coaches booked reads in
+    /// that order; this reads in booked-date order. Nothing here can
+    /// reproduce web's: a `ScheduledSession` records no moment of its own, and
+    /// `ImportedPlan` is not reachable from one. Date order is the order the
+    /// rows under the line are drawn in, which is the next best thing and is
+    /// stable. It shows at all only when two coaches book one week and the
+    /// later-dated plan arrived first.
     static func sentBy(_ result: Result, sessions: [ScheduledSession]) -> String {
         sentBy(result, bookings: inOrder(sessions).map {
             Booking(date: $0.dayKey, name: $0.routineName, coachName: $0.coachName,

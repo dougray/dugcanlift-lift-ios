@@ -91,6 +91,7 @@ private struct PlanWeekBody: View {
         if let week {
             LiftCard {
                 VStack(alignment: .leading, spacing: 10) {
+                    sentBy(week)
                     head(week)
                     ForEach(week.days) { day in
                         dayRow(day, openKey: openKey(in: week))
@@ -114,6 +115,27 @@ private struct PlanWeekBody: View {
     private func openKey(in week: PlanAndLog.Result) -> String? {
         if let open { return open }
         return week.days.contains(where: { $0.key == trainKey }) ? trainKey : nil
+    }
+
+    // MARK: Who sent it
+
+    /// One muted line above the head -- the coach's name when a plan this week
+    /// carried one, "From your coach" when none did. Exactly where LIFT web
+    /// puts it, and the only place a name appears on this card: the rows
+    /// below are about a week, not about who wrote it.
+    ///
+    /// `Text` is handed a `String` and never a literal with a name
+    /// interpolated into it. A literal is a `LocalizedStringKey`, which is
+    /// read as Markdown -- and `n` is free text typed into somebody else's
+    /// app. Two lines at most, so a coach with a very long name pushes
+    /// nothing off the card.
+    private func sentBy(_ week: PlanAndLog.Result) -> some View {
+        Text(PlanAndLog.sentBy(week, sessions: sessions))
+            .font(Theme.detail)
+            .foregroundStyle(Theme.textSecondary)
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: The week's head, and its arrows

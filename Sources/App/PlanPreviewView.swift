@@ -17,11 +17,23 @@ struct PlanPreviewView: View {
 
     private var summary: PlanImportSummary { PlanImporter.summary(for: plan) }
 
+    private var sentBy: String {
+        let name = summary.coachName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? PlanAndLog.noCoachName : "From \(name)"
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Text("From \(summary.coachName)")
+                    // A `String`, never a literal with the name interpolated
+                    // into it: a literal is a `LocalizedStringKey` and is read
+                    // as Markdown, and `n` is free text from somebody else's
+                    // app. The fallback is the week card's own sentence, and
+                    // the rule `PlanLinkExtractor.summary` already follows for
+                    // the share sheet -- a plan that named nobody said "From "
+                    // and a trailing space here.
+                    Text(sentBy)
                         .font(.headline)
                 }
                 Section("This plan includes") {

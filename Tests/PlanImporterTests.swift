@@ -127,6 +127,83 @@ final class PlanImporterTests: XCTestCase {
         XCTAssertEqual(sessions.first?.dayKey, "2026-09-08")
     }
 
+    // MARK: - The coach's name
+
+    /// `n` used to be read for the accept screen and dropped, so the week card
+    /// could only ever say "From your coach". It is kept on the booking now --
+    /// see `ScheduledSession.coachName`.
+    func testABookingKeepsTheNameThePlanArrivedWith() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(examplePayload, hash: "name-1", in: context)
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.first?.coachName, "Coach Dana")
+    }
+
+    /// A coach who named nobody is nil, never "": the card reads nil as "From
+    /// your coach", and an empty string would be a name of no characters.
+    func testAPlanThatNamesNobodyBooksNoName() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(payload(named: ""), hash: "name-2", in: context)
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertNil(sessions.first?.coachName)
+    }
+
+    /// Whitespace is not a name either, and a name that arrives padded is
+    /// stored trimmed -- so two bookings from one coach are one name on the
+    /// card rather than two.
+    func testANameIsTrimmedOnceOnTheWayInAndWhitespaceAloneIsNoName() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(payload(named: "   "), hash: "name-3", in: context)
+        XCTAssertNil(try context.fetch(FetchDescriptor<ScheduledSession>()).first?.coachName)
+
+        let second = try makeContext()
+        try PlanImporter.accept(payload(named: "  Coach Dana  "), hash: "name-4", in: second)
+        XCTAssertEqual(try second.fetch(FetchDescriptor<ScheduledSession>()).first?.coachName,
+                       "Coach Dana")
+    }
+
+    /// Every booking of one plan carries the same spelling, so a week booked
+    /// twice by one coach is one name.
+    func testEveryBookingOfOnePlanCarriesTheSameName() throws {
+        let context = try makeContext()
+        let twoDays = PlanPayload(
+            v: 1, t: "plan", l: "a1b2c3d4", n: "Coach Dana", r: nil, m: nil,
+            w: [PlanWorkout(n: "Lower A", e: [
+                PlanWorkoutExercise(n: "Back Squat", q: "Barbell", c: nil, s: [[225, 5]])
+            ])],
+            k: [PlanSession(d: "2026-09-08", x: 0), PlanSession(d: "2026-09-10", x: 0)])
+        try PlanImporter.accept(twoDays, hash: "name-5", in: context)
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertEqual(Set(sessions.compactMap(\.coachName)), ["Coach Dana"])
+    }
+
+    /// A name long enough to be a paragraph is stored as sent. Nothing is cut
+    /// here -- what a card does with it is the card's rule
+    /// (`PlanAndLog.sentBy` and the two-line limit on the view), and a store
+    /// that truncated would lose the name for every other reader too.
+    func testALongNameIsStoredWhole() throws {
+        let context = try makeContext()
+        let long = String(repeating: "Dana Whitfield-Fotheringay ", count: 12)
+            .trimmingCharacters(in: .whitespaces)
+        try PlanImporter.accept(payload(named: long), hash: "name-6", in: context)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledSession>()).first?.coachName,
+                       long)
+    }
+
+    private func payload(named name: String) -> PlanPayload {
+        PlanPayload(
+            v: 1, t: "plan", l: "a1b2c3d4", n: name, r: nil, m: nil,
+            w: [PlanWorkout(n: "Lower A", e: [
+                PlanWorkoutExercise(n: "Back Squat", q: "Barbell", c: nil, s: [[225, 5]])
+            ])],
+            k: [PlanSession(d: "2026-09-08", x: 0)])
+    }
+
     func testAcceptSkipsAScheduledSessionWithANegativeRoutineIndexInsteadOfCrashing() throws {
         // Mirrors testAcceptSkipsAMealWithANegativeRecipeIndexInsteadOfCrashing
         // above: a malformed or adversarially-crafted plan link could carry a

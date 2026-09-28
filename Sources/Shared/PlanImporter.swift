@@ -35,12 +35,35 @@ final class ScheduledSession {
     var dayKey: String = ""
     var scheduledFor: Date = Date.now
 
-    init(routineID: UUID, routineName: String, scheduledFor: Date) {
+    /// The coach's name, from the plan's `n` — what the week card's one muted
+    /// line says (`PlanAndLog.sentBy`). Nil when the plan gave none, and nil
+    /// on every row written before schema V9, which read the same way: "From
+    /// your coach".
+    ///
+    /// **On the booking rather than beside it.** A week can hold bookings from
+    /// two plans, so the name has to be readable per booking or a second
+    /// coach's week would be labelled with the first one's name; web keeps it
+    /// per entry (`training[].fromCoach`) for exactly that reason. `PlanSides`
+    /// is a `UserDefaults` side-car because it keys LiftKit's shared routine
+    /// models, where a property is a schema change for two apps — this is
+    /// LIFT's own model, so the change costs one nullable column here and
+    /// nothing anywhere else. It is also the same kind of field
+    /// `routineName` already is: a copy taken when the plan was accepted,
+    /// which is what lets a booking outlive what it was copied from. A
+    /// side-car would pay `ScheduledSession`'s own cost twice over — no
+    /// cascade reaches it, so a removed routine's bookings would leave their
+    /// names behind forever, and a failed `save()` would leave them without a
+    /// booking at all.
+    var coachName: String?
+
+    init(routineID: UUID, routineName: String, scheduledFor: Date,
+         coachName: String? = nil) {
         self.id = UUID()
         self.routineID = routineID
         self.routineName = routineName
         self.dayKey = DayKey.make(from: scheduledFor)
         self.scheduledFor = scheduledFor
+        self.coachName = coachName
     }
 }
 
@@ -224,6 +247,13 @@ enum PlanImporter {
             createdRoutineIDs.append(routine.id)
         }
 
+        // `n`, kept rather than dropped: it is the one thing the week card's
+        // lead line can say instead of "From your coach". Trimmed here, once,
+        // so every booking from one plan carries the same spelling; empty is
+        // nil, which is what a plan that named nobody has always meant.
+        let trimmedName = payload.n.trimmingCharacters(in: .whitespacesAndNewlines)
+        let coachName = trimmedName.isEmpty ? nil : trimmedName
+
         for session in payload.k ?? [] {
             guard session.x >= 0, session.x < createdRoutineIDs.count,
                   let parsedDate = dateFormatter.date(from: session.d) else { continue }
@@ -234,7 +264,8 @@ enum PlanImporter {
             )
             guard let routine = try context.fetch(routineDescriptor).first else { continue }
             context.insert(ScheduledSession(
-                routineID: routineID, routineName: routine.name, scheduledFor: date
+                routineID: routineID, routineName: routine.name, scheduledFor: date,
+                coachName: coachName
             ))
         }
 

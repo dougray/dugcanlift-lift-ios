@@ -136,11 +136,17 @@ enum PlanAndLog {
     struct Booking: Equatable {
         var date: String
         var name: String
+        /// The coach who sent it, from the plan's `n` -- read by `sentBy` and
+        /// by nothing else. Nil when the plan named nobody, and on every
+        /// booking accepted before a booking kept the name at all.
+        var coachName: String?
         var exercises: [Exercise]
 
-        init(date: String, name: String, exercises: [Exercise]) {
+        init(date: String, name: String, coachName: String? = nil,
+             exercises: [Exercise]) {
             self.date = date
             self.name = name
+            self.coachName = coachName
             self.exercises = exercises
         }
     }
@@ -651,6 +657,51 @@ enum PlanAndLog {
             head += " · " + plural(counts.other, "other day logged", "other days logged")
         }
         return head
+    }
+
+    // MARK: - Who sent the week
+
+    /// The one muted line above the head: "From Dana", or "From your coach"
+    /// when no plan this week carried a name.
+    ///
+    /// A port of LIFT web's `sentBy`, name for name: the distinct names on the
+    /// bookings **inside this week**, in the order they first appear, joined
+    /// with " · ", and the same fallback sentence the prescribed card has
+    /// always opened with. A week holding one named plan and one unnamed one
+    /// reads as the named one -- a plan that named nobody says nothing about
+    /// who sent the week, rather than adding a second voice to it.
+    ///
+    /// **Not a field on `Result`.** The card is a week's two records and its
+    /// counts and nothing above them, which `testNothingHereAggregatesAWeek
+    /// IntoAScore` pins by naming `Result`'s every member; who sent it is a
+    /// fact about the plans, not a figure about the week. Web keeps it out of
+    /// `compare` for the same reason, and out of `lines` -- the line
+    /// discipline is about what the card says of somebody's week, and this
+    /// says nothing of it.
+    ///
+    /// `n` is free text from another person's app. It reaches a screen here,
+    /// so a name is trimmed **and its inner whitespace collapsed**: the
+    /// browser gets that from HTML, which folds a newline in a `<p>` into a
+    /// space, and a SwiftUI `Text` does not -- a name with a line break in it
+    /// would otherwise quietly turn one line of card into three.
+    static func sentBy(_ result: Result, bookings: [Booking]) -> String {
+        var names: [String] = []
+        for booking in bookings where booking.date >= result.from && booking.date <= result.to {
+            guard let name = coachName(booking.coachName) else { continue }
+            if !names.contains(name) { names.append(name) }
+        }
+        return names.isEmpty ? noCoachName : "From " + names.joined(separator: " · ")
+    }
+
+    /// What a week whose plans named nobody reads as -- and what every week
+    /// booked before a booking kept a name reads as, unchanged.
+    static let noCoachName = "From your coach"
+
+    /// A name as it can be printed, or nil when there is nothing to print.
+    private static func coachName(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let collapsed = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return collapsed.isEmpty ? nil : collapsed
     }
 
     private static func title(_ exercise: Exercise) -> String {

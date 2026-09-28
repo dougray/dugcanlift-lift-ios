@@ -373,12 +373,21 @@ enum PlanAndLog {
 
         var id: String { key }
 
-        init(key: String, state: DayState, name: String, text: String, openable: Bool,
-             exercises: [ExerciseRow], alsoLogged: [AlsoLoggedRow], meals: [MealRow] = []) {
+        /// `spoken` has no default on purpose. It carries one, as a property,
+        /// so a `DayRow` decoded or copied is never invalid -- but a row built
+        /// here without a sentence is a row a screen reader passes over in
+        /// silence, and that is not a thing to let a default hide. This `init`
+        /// exists for `meals`'s default and dropped `spoken` when the two
+        /// branches were merged; the compiler caught it, which is the argument
+        /// for keeping it required.
+        init(key: String, state: DayState, name: String, text: String, spoken: String,
+             openable: Bool, exercises: [ExerciseRow], alsoLogged: [AlsoLoggedRow],
+             meals: [MealRow] = []) {
             self.key = key
             self.state = state
             self.name = name
             self.text = text
+            self.spoken = spoken
             self.openable = openable
             self.exercises = exercises
             self.alsoLogged = alsoLogged

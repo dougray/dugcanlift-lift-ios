@@ -803,7 +803,10 @@ final class PlanAndLogTests: XCTestCase {
 
     func testNothingOnAMealRowSaysAnythingAboutWhatWasEaten() throws {
         let result = try XCTUnwrap(runMeals(weekTraining(), weekWorkouts(), mealWeek()))
-        let every = PlanAndLog.lines(result).joined(separator: " · ").lowercased()
+        // Said as well as drawn: a sentence only a screen reader hears is still
+        // a screen, and it is the one a lifter cannot skim past.
+        let every = (PlanAndLog.lines(result) + PlanAndLog.spokenLines(result))
+            .joined(separator: " · ").lowercased()
         for phrase in ["logged at", "nothing logged at", "not itemised", "no food logged",
                        "foods logged", "not tied to a meal", "only they know",
                        "only you know at"] {
@@ -815,8 +818,11 @@ final class PlanAndLogTests: XCTestCase {
             XCTAssertEqual(Mirror(reflecting: row).children.compactMap(\.label).sorted(),
                            ["date", "detail", "name", "servings", "slot", "slotLabel", "title"])
         }
+        // `spokenHead` is `head` said, and nothing else: the one field the
+        // accessibility pass added, and the reason this list is checked rather
+        // than assumed.
         XCTAssertEqual(Mirror(reflecting: result).children.compactMap(\.label).sorted(),
-                       ["counts", "days", "footer", "from", "head", "range", "to"],
+                       ["counts", "days", "footer", "from", "head", "range", "spokenHead", "to"],
                        "no meal footer, and no context line about the food log")
     }
 

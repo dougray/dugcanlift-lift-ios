@@ -304,6 +304,13 @@ private struct PlanWeekBody: View {
                             .foregroundStyle(Theme.textPrimary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    // One sentence for the pair, the way an asked/logged pair
+                    // is one: each `Text` is its own element, so read as drawn
+                    // this is "Breakfast", then "Overnight Oats · 1 serving"
+                    // with the dot spelled out. `PlanAndLog.spokenLines` says
+                    // the same sentence.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(PlanAndLog.plainly(meal.title))
                 }
             }
         }

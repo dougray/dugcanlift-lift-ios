@@ -54,6 +54,9 @@ private struct PlanWeekBody: View {
 
     @AppStorage("weightUnit") private var unitRaw = WeightUnit.pounds.rawValue
     @AppStorage(PlanSides.storageKey) private var planSidesData = Data()
+    // Which planned meals a coach booked (`PlanMeals`). `@AppStorage` rather than
+    // a read, so accepting a plan redraws the card with the meals it just booked.
+    @AppStorage(PlanMeals.storageKey) private var planMealsData = Data()
 
     /// Every booking and every routine, not a week's worth: the arrows have to
     /// know which weeks a coach booked at all, and a booking reaches its
@@ -63,6 +66,12 @@ private struct PlanWeekBody: View {
     @Query private var sessions: [ScheduledSession]
     @Query private var routines: [Routine]
     @Query private var days: [WorkoutDay]
+    /// Every planned meal, for the reason every booking is fetched: the arrows
+    /// have to know which weeks a coach booked food in, and a week of meals is a
+    /// card of its own. One row per meal anybody has planned, a coach's and this
+    /// phone's own -- which of the two each is, is `PlanAndLog.bookedMeals`'s
+    /// decision and not a fetch's.
+    @Query private var plannedMeals: [PlannedMeal]
 
     init(week anchorKey: String, trainKey: String, anchor: Binding<String?>,
          open: Binding<String?>, show: @escaping (String) -> Void) {
@@ -81,10 +90,16 @@ private struct PlanWeekBody: View {
         (try? JSONDecoder().decode(PlanSides.self, from: planSidesData)) ?? PlanSides()
     }
 
+    /// Decoded once per body evaluation and threaded down, rather than per row.
+    private var meals: [PlanAndLog.Meal] {
+        let coach = (try? JSONDecoder().decode(PlanMeals.self, from: planMealsData)) ?? PlanMeals()
+        return PlanAndLog.meals(plannedMeals, coach: coach)
+    }
+
     private var week: PlanAndLog.Result? {
         PlanAndLog.compare(anchor: anchorKey, today: DayKey.today,
                            sessions: sessions, routines: routines, days: days,
-                           sides: sides, unit: unit)
+                           meals: meals, sides: sides, unit: unit)
     }
 
     var body: some View {
@@ -104,8 +119,10 @@ private struct PlanWeekBody: View {
             }
             // A plan arriving brings the card back to the day on screen: it was
             // very likely parked on an older week, and the week that just
-            // arrived is the one being asked about.
+            // arrived is the one being asked about. Meals as well as sessions,
+            // because a plan can book only food and that is a week too.
             .onChange(of: sessions.count) { anchor = nil; open = nil }
+            .onChange(of: plannedMeals.count) { anchor = nil; open = nil }
         }
     }
 
@@ -130,7 +147,7 @@ private struct PlanWeekBody: View {
     /// app. Two lines at most, so a coach with a very long name pushes
     /// nothing off the card.
     private func sentBy(_ week: PlanAndLog.Result) -> some View {
-        Text(PlanAndLog.sentBy(week, sessions: sessions))
+        Text(PlanAndLog.sentBy(week, sessions: sessions, meals: meals))
             .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
             .lineLimit(2)
@@ -159,7 +176,8 @@ private struct PlanWeekBody: View {
     /// it is used.
     private func step(_ symbol: String, direction: Int, from monday: String) -> some View {
         let target = PlanAndLog.adjacentWeek(
-            bookedDates: PlanAndLog.bookedDates(sessions), from: monday, direction: direction)
+            bookedDates: PlanAndLog.bookedDates(sessions: sessions, meals: meals),
+            from: monday, direction: direction)
         return Button {
             anchor = target
             open = nil
@@ -251,9 +269,44 @@ private struct PlanWeekBody: View {
                     }
                 }
             }
+            mealsBlock(day)
         }
         .padding(.leading, 2)
         .padding(.bottom, 2)
+    }
+
+    /// What a coach booked for this day to eat, under the training it sits beside.
+    ///
+    /// **Stated and nothing more** -- no verdict per slot, no macros, and nothing
+    /// at all about what was logged, however much this device knows. `PlanAndLog`
+    /// says at length why. The slot and the dish are `MealRow`'s own two columns,
+    /// so Breakfast and Dinner line up with each other and this composes no
+    /// sentence of its own; the column is wider than `setRow`'s, which holds
+    /// "Asked" and not "Breakfast".
+    ///
+    /// Keyed by position, because two dishes at one dinner can be the same dish
+    /// twice and both are shown.
+    @ViewBuilder
+    private func mealsBlock(_ day: PlanAndLog.DayRow) -> some View {
+        if !day.meals.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Meals")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                ForEach(Array(day.meals.enumerated()), id: \.offset) { _, meal in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(meal.slotLabel)
+                            .font(Theme.detail)
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: 76, alignment: .leading)
+                        Text(meal.detail)
+                            .font(Theme.detail)
+                            .foregroundStyle(Theme.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
     }
 
     /// One row of sets: "Asked   L 40 x 8 · 40 x 8   R 40 x 8".

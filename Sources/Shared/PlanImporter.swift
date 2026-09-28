@@ -185,6 +185,19 @@ enum PlanImporter {
             Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
         }
 
+        // `n`, kept rather than dropped: it is the one thing the week card's lead
+        // line can say instead of "From your coach". Trimmed here, once, so every
+        // booking and every meal from one plan carries the same spelling; empty
+        // is nil, which is what a plan that named nobody has always meant.
+        let trimmedName = payload.n.trimmingCharacters(in: .whitespacesAndNewlines)
+        let coachName = trimmedName.isEmpty ? nil : trimmedName
+
+        // Which planned meals a coach booked, so the week card can show a coach's
+        // and leave the lifter's own alone. A side-car rather than a column,
+        // because `PlannedMeal` is LiftKit's -- see `PlanMeals`.
+        var planMeals = PlanMeals.load(from: defaults)
+        var planMealsChanged = false
+
         for planMeal in payload.m ?? [] {
             guard planMeal.x >= 0, planMeal.x < createdRecipeIDs.count,
                   let mealType = mealType(forSlot: planMeal.s),
@@ -198,9 +211,12 @@ enum PlanImporter {
                 predicate: #Predicate { $0.id == targetRecipeID }
             )
             guard let recipe = try context.fetch(recipeDescriptor).first else { continue }
-            context.insert(PlannedMeal(
+            let meal = PlannedMeal(
                 recipe: recipe, mealType: mealType, plannedFor: date, servings: planMeal.q
-            ))
+            )
+            context.insert(meal)
+            planMeals.book(meal.id, coach: coachName)
+            planMealsChanged = true
         }
 
         var createdRoutineIDs: [UUID] = []
@@ -247,13 +263,6 @@ enum PlanImporter {
             createdRoutineIDs.append(routine.id)
         }
 
-        // `n`, kept rather than dropped: it is the one thing the week card's
-        // lead line can say instead of "From your coach". Trimmed here, once,
-        // so every booking from one plan carries the same spelling; empty is
-        // nil, which is what a plan that named nobody has always meant.
-        let trimmedName = payload.n.trimmingCharacters(in: .whitespacesAndNewlines)
-        let coachName = trimmedName.isEmpty ? nil : trimmedName
-
         for session in payload.k ?? [] {
             guard session.x >= 0, session.x < createdRoutineIDs.count,
                   let parsedDate = dateFormatter.date(from: session.d) else { continue }
@@ -285,6 +294,9 @@ enum PlanImporter {
         }
 
         if sidesChanged { sides.save(to: defaults) }
+        // After the save, like the sides and the picks: a failed accept rolled
+        // its meals back, so it must leave no marker claiming a coach booked one.
+        if planMealsChanged { planMeals.save(to: defaults) }
         // An each-side exercise turns on "Log left and right separately" for
         // that lift when the plan is accepted, as LIFT web does. The lifter can
         // turn it back off; that choice is theirs from then on.

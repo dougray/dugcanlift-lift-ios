@@ -67,11 +67,12 @@ extension PlanAndLog {
     /// rows under the line are drawn in, which is the next best thing and is
     /// stable. It shows at all only when two coaches book one week and the
     /// later-dated plan arrived first.
-    static func sentBy(_ result: Result, sessions: [ScheduledSession]) -> String {
+    static func sentBy(_ result: Result, sessions: [ScheduledSession],
+                       meals: [Meal] = []) -> String {
         sentBy(result, bookings: inOrder(sessions).map {
             Booking(date: $0.dayKey, name: $0.routineName, coachName: $0.coachName,
                     exercises: [])
-        })
+        }, meals: meals)
     }
 
     private static func inOrder(_ sessions: [ScheduledSession]) -> [ScheduledSession] {
@@ -125,6 +126,27 @@ extension PlanAndLog {
                   side: set.side)
     }
 
+    /// This phone's planned meals, a coach's and the lifter's own in one list,
+    /// each marked with which it is.
+    ///
+    /// **Both kinds, deliberately.** Which meals belong on the card is part of
+    /// the rule, so `bookedMeals` is where the lifter's own are dropped rather
+    /// than whatever fetched the rows -- a filter in a view could not be tested,
+    /// and this one decides whether somebody's own note-taking is held up to them
+    /// as an expectation.
+    ///
+    /// `mealType.rawValue` rather than the column behind it: `PlannedMeal` keeps
+    /// its raw slot private and coerces an unknown one to dinner, so a slot this
+    /// build cannot read never reaches here from this app's store. See
+    /// `PlanAndLog.Meal.slot`.
+    static func meals(_ planned: [PlannedMeal], coach: PlanMeals) -> [Meal] {
+        planned.map { meal in
+            Meal(date: meal.dayKey, slot: meal.mealType.rawValue, name: meal.recipeName,
+                 servings: meal.servings, fromCoach: coach.isFromCoach(meal),
+                 coachName: coach.coachName(of: meal))
+        }
+    }
+
     /// Every date a coach's plan books, whatever week it is in -- what the
     /// arrows step between. Dates only: nothing is read out of a week the card
     /// is not looking at.
@@ -132,14 +154,24 @@ extension PlanAndLog {
         sessions.map(\.dayKey)
     }
 
+    /// The same, with the weeks a coach booked **food** in.
+    ///
+    /// Without them a week a coach sent food for would be reachable only by
+    /// standing in it, and the arrows would skip over a card that exists. A meal
+    /// the lifter placed books no week: the arrow would land on a card that is
+    /// not there.
+    static func bookedDates(sessions: [ScheduledSession], meals: [Meal]) -> [String] {
+        bookedDates(sessions) + meals.filter(\.fromCoach).map(\.date)
+    }
+
     /// The whole card for one week, from rows a view already holds.
     static func compare(anchor: String, today: String,
                         sessions: [ScheduledSession], routines: [Routine],
-                        days: [WorkoutDay], sides: PlanSides,
+                        days: [WorkoutDay], meals: [Meal] = [], sides: PlanSides,
                         unit: WeightUnit, locale: Locale = .current) -> Result? {
         compare(
             bookings: bookings(sessions: sessions, routines: routines, sides: sides),
-            logged: days.map(loggedDay),
+            logged: days.map(loggedDay), meals: meals,
             today: today, anchor: anchor, unit: unit, locale: locale)
     }
 }

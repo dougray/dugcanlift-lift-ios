@@ -414,8 +414,34 @@ arrows with it. The week runs **Monday to Sunday** (`weekStartsOn`, a fixed
 constant), never a rolling seven days, or a booked Tuesday would move out of
 "this week" overnight.
 
-**Nothing new travels, nothing new is stored and no schema changed.** The
+**Nothing new travels.** No wire change, no new key, no new permission: the
 accepted plan and the log are read exactly as they already sit in the store.
+One thing *is* stored that was not -- see "Who sent it" below.
+
+**Who sent it.** One muted line above the head, `PlanAndLog.sentBy`, a port of
+web's function of the same name: the distinct coach names on the bookings
+**inside this week**, first-appearance order, joined with " · ", and "From your
+coach" when no plan that week carried one. A week holding one named plan and
+one nameless one reads as the named one -- a plan that named nobody says
+nothing about who sent the week rather than adding a second voice. The name is
+the plan's `n`, which `PlanImporter` read for the accept screen and **dropped**;
+it is now kept on the booking as `ScheduledSession.coachName`, which is
+**schema V9** (`LiftPreCoachNameShapes` freezes what V3-V8 shipped, and
+`Tests/Fixtures/v8-simulator.store` is a store the V8 binary wrote). On the
+booking rather than in a `PlanSides`-style side-car because a week can hold two
+coaches' plans, so it has to be readable per booking; because `ScheduledSession`
+is LIFT's own model, so the column costs nothing in LiftKit or Coach iOS; and
+because it is the same kind of copy `routineName` already is. Nothing is
+backfilled and there is nothing to backfill from -- a booking written before
+this reads nil, and nil is "From your coach", the sentence that week already
+read. It is **not** on `Result` and **not** in `lines`, as web keeps it out of
+`compare` and `lines`: who sent a week is a fact about the plans, not a figure
+about the week. `n` is free text from somebody else's app, so it is trimmed and
+its inner whitespace collapsed (HTML folds a newline in a `<p>`; a SwiftUI
+`Text` does not), handed to `Text` as a `String` and never as a literal with a
+name interpolated into it -- a literal is a `LocalizedStringKey` and is read as
+Markdown -- and given two lines at most. A name appears **nowhere else on the
+card**.
 
 **The ask is the stored plan, never the logged sets.** `ScheduledSession` names
 the date and the `Routine`; that routine's `RoutineExercise` /

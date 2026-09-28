@@ -51,6 +51,43 @@ import LiftCore
 /// do`. A booked day that has not happened yet is not an absence, and calling
 /// it one would be the app inventing a failure out of a Wednesday.
 ///
+/// **Meals are stated, never answered.** A coach can book meals as well as
+/// sessions (PLAN-FORMAT's `m`), and accepting a plan files them beside the ones
+/// the lifter places in Cook. This card lists the ones a coach booked --
+/// `Dinner · Beef Chilli · 2 servings` -- and says **nothing whatever about what
+/// you ate**. Coach's card does the other half as well: it names the foods the
+/// client stamped with that slot, above a count of the day's foods so `Nothing
+/// logged at lunch` cannot read as `they ate nothing`, under a note saying it
+/// cannot know whether the dish was the one it booked. None of that half is
+/// worth anything here. Your food log is on the Food screen, dated, and reading
+/// it back to you in the third person tells you nothing you did not already
+/// know -- and you are the one person who does not need telling whether they ate
+/// their dinner. So there is no `Nothing logged at lunch`, no food count above
+/// the rows, no macros beside a booked dish, no figure for meals eaten, and no
+/// meal footer: Coach's note exists to disclaim a join Coach cannot make, and
+/// this card makes no claim to disclaim.
+///
+/// What is left is the one thing no other screen gives you: **the food booked
+/// for a day you cannot reach.** Cook's plan shows seven days from today and
+/// Train shows one, so a dish booked for next Thursday is legible nowhere until
+/// you arrive at it, and a week of it that a coach sent reached no screen at
+/// all. `to do` carries that, as it does for a session, and **a plan of meals
+/// with no training is now a card** where before there was none.
+///
+/// `PlannedMeal.loggedFoodEntryID` is deliberately not read. This device really
+/// does know a planned meal was logged -- you tapped "Log it" and the entry's id
+/// was stored against it -- so unlike Coach there would be no guessing in saying
+/// so. It is still not printed. The only thing it could add is a tick on some
+/// meal rows and a blank on the rest, which is a score with the numbers filed
+/// off, and the screen that can act on the answer (Cook's plan, with `Log it`
+/// beside the dish) already shows it where it is useful.
+///
+/// Only a coach's meals, never your own -- `PlanMeals` is what tells them apart.
+/// A week a coach booked no meals in reads exactly as it did before any of this:
+/// the count, the clause and the rows appear only where there is a booked meal to
+/// carry them, which `testAWeekACoachBookedNoMealsInReadsExactlyAsItDid` pins
+/// line for line against the card as it shipped.
+///
 /// **The ask is read from the stored plan, never from the logged sets.**
 /// Starting a booked session copies its two-sided prescribed sets in as
 /// editable sets, and `PlanSides.logged` keeps a prescription beside a logged
@@ -151,6 +188,46 @@ enum PlanAndLog {
         }
     }
 
+    /// One planned meal as this phone holds it -- a coach's or the lifter's own,
+    /// because which it is is part of the rule and `bookedMeals` is where that
+    /// is decided rather than in whatever fetched the rows.
+    ///
+    /// Macros are not here and neither is anything about the food log: the three
+    /// things a coach wrote are the three things that can be said without
+    /// reservation, and nothing else about a meal is read at all.
+    struct Meal: Equatable {
+        var date: String
+        /// The slot as this device stores it, read into the four words
+        /// PLAN-FORMAT's `m.s` indexes in the same order, so a booked slot is
+        /// named here the way Coach names it.
+        ///
+        /// A string this build cannot read sorts last rather than being dropped
+        /// -- a dish a coach booked is a dish a coach booked, and hiding it would
+        /// hide the plan. `PlannedMeal.mealType` coerces an unknown raw value to
+        /// dinner before this ever sees it, so the state cannot arise from this
+        /// app's own store; LIFT for Android keeps the slot as free text and can
+        /// really hold one, and the rule is a rule the three builds share.
+        var slot: String
+        var name: String
+        var servings: Double
+        /// Whether a coach's plan booked this meal, rather than the lifter
+        /// placing it in Cook. `PlanMeals` is where that is recorded.
+        var fromCoach: Bool
+        /// The coach who booked it, when their plan named one. Read by `sentBy`
+        /// and by nothing else.
+        var coachName: String?
+
+        init(date: String, slot: String, name: String, servings: Double = 1,
+             fromCoach: Bool = true, coachName: String? = nil) {
+            self.date = date
+            self.slot = slot
+            self.name = name
+            self.servings = servings
+            self.fromCoach = fromCoach
+            self.coachName = coachName
+        }
+    }
+
     /// A day this phone logged. One per date -- a `WorkoutDay` *is* the day,
     /// which is why nothing here has to pick a session out of one (see
     /// `compare`).
@@ -168,7 +245,10 @@ enum PlanAndLog {
 
     // MARK: - What comes out
 
-    enum DayState: String, Equatable { case logged, toDo, notLogged, notBooked }
+    /// A day row's state. `meals` is a day in the past that booked food and
+    /// nothing else, and it is the one state that carries **no word at all**:
+    /// there is no `not logged` for a meal, and no figure standing in for one.
+    enum DayState: String, Equatable { case logged, toDo, notLogged, notBooked, meals }
     enum ExerciseState: String, Equatable { case logged, toDo, notLogged }
 
     /// One side's sets -- "L 40 x 8 · 40 x 8 · 40 x 5" -- or one unlabelled
@@ -238,10 +318,35 @@ enum PlanAndLog {
         var spoken: String { PlanAndLog.plainly(text) }
     }
 
+    /// One booked meal as it is read: the slot, the dish and how much of it,
+    /// which are the three things a coach wrote.
+    ///
+    /// `title` is the whole line and `slotLabel` / `detail` are its two columns,
+    /// so the view can align the slots without composing a second sentence of
+    /// its own that could drift from the one the tests read. Nothing here is a
+    /// verdict, and nothing here comes from the food log.
+    struct MealRow: Equatable {
+        var date: String
+        /// The slot's place in `mealSlots`, or nil for one this build cannot
+        /// read -- which sorts last and prints no label.
+        var slot: Int?
+        var slotLabel: String
+        var name: String
+        var servings: Double
+        var detail: String
+        var title: String
+    }
+
     /// The days this week booked and the days it holds, and nothing else. No
     /// all-time figure, no trend, nothing carried to next week.
+    ///
+    /// `training` and `meals` count what a coach wrote -- days that book a
+    /// session, and dishes booked. Neither carries a figure for what came back:
+    /// `logged` is that figure for training, and **there is none for a meal.**
     struct Counts: Equatable {
         var booked = 0
+        var training = 0
+        var meals = 0
         var logged = 0
         var notLogged = 0
         var toDo = 0
@@ -262,8 +367,32 @@ enum PlanAndLog {
         var openable: Bool
         var exercises: [ExerciseRow]
         var alsoLogged: [AlsoLoggedRow]
+        /// What a coach booked for this day to eat, and **nothing about what was
+        /// eaten**. Empty on every day nobody booked a meal for.
+        var meals: [MealRow]
 
         var id: String { key }
+
+        /// `spoken` has no default on purpose. It carries one, as a property,
+        /// so a `DayRow` decoded or copied is never invalid -- but a row built
+        /// here without a sentence is a row a screen reader passes over in
+        /// silence, and that is not a thing to let a default hide. This `init`
+        /// exists for `meals`'s default and dropped `spoken` when the two
+        /// branches were merged; the compiler caught it, which is the argument
+        /// for keeping it required.
+        init(key: String, state: DayState, name: String, text: String, spoken: String,
+             openable: Bool, exercises: [ExerciseRow], alsoLogged: [AlsoLoggedRow],
+             meals: [MealRow] = []) {
+            self.key = key
+            self.state = state
+            self.name = name
+            self.text = text
+            self.spoken = spoken
+            self.openable = openable
+            self.exercises = exercises
+            self.alsoLogged = alsoLogged
+            self.meals = meals
+        }
     }
 
     struct Result: Equatable {
@@ -311,6 +440,67 @@ enum PlanAndLog {
         return direction < 0 ? weeks.last : weeks.first
     }
 
+    // MARK: - The meals a coach booked
+
+    /// The four slots a coach can book, in the order PLAN-FORMAT's `m.s` indexes
+    /// them -- which is the order a day is eaten in, not the order the coach
+    /// happened to book them. `MealType`'s own order and `MealType.displayName`'s
+    /// own words, so Breakfast is spelled here the way Food and Cook spell it.
+    static let mealSlots: [MealType] = MealType.allCases
+
+    /// The meals a coach booked, in the window given, breakfast to snack within
+    /// each day.
+    ///
+    /// **Only a coach's.** A meal the lifter placed in Cook is theirs to move,
+    /// and holding it up on a card headed "your coach's plan" would make an
+    /// expectation out of their own note-taking -- the same reason a week nobody
+    /// booked is no card at all.
+    ///
+    /// Two dishes at one dinner are two dishes and both are shown, in the order
+    /// they were booked; meals do not pool, as sessions on a date do, because a
+    /// coach who booked both wants both eaten. `from` and `to` are optional --
+    /// the arrows need every week a coach booked a meal in, not one week of them.
+    static func bookedMeals(_ meals: [Meal], from: String? = nil,
+                            to: String? = nil) -> [MealRow] {
+        let unreadable = mealSlots.count
+        return meals.filter { meal in
+            guard meal.fromCoach else { return false }
+            if let from, meal.date < from { return false }
+            if let to, meal.date > to { return false }
+            return true
+        }.map { meal -> MealRow in
+            let wanted = meal.slot.trimmingCharacters(in: .whitespaces).lowercased()
+            let slot = mealSlots.firstIndex { $0.rawValue.lowercased() == wanted }
+            let name = meal.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A coach's own number, however odd. Anything that is not a real
+            // amount is one serving rather than a dish of none.
+            let servings = meal.servings.isFinite && meal.servings > 0 ? meal.servings : 1
+            return mealRow(date: meal.date, slot: slot,
+                           name: name.isEmpty ? "Recipe" : name, servings: servings)
+        // Sorted by hand on the original order as the tie-break, because
+        // `sorted(by:)` is not documented as stable and two dishes at one dinner
+        // are read in the order the coach booked them.
+        }.enumerated().sorted { left, right in
+            if left.element.date != right.element.date {
+                return left.element.date < right.element.date
+            }
+            let (l, r) = (left.element.slot ?? unreadable, right.element.slot ?? unreadable)
+            return l == r ? left.offset < right.offset : l < r
+        }.map(\.element)
+    }
+
+    private static func mealRow(date: String, slot: Int?, name: String,
+                                servings: Double) -> MealRow {
+        let label = slot.map { mealSlots[$0].displayName } ?? ""
+        // `CookFormat.servingsLabel` is what Cook's own plan rows print, so a
+        // booked dish reads here the way it reads there: "1 serving", "2
+        // servings", "0.5 servings".
+        let detail = [name, CookFormat.servingsLabel(servings)].joined(separator: " · ")
+        return MealRow(date: date, slot: slot, slotLabel: label, name: name,
+                       servings: servings, detail: detail,
+                       title: [label, detail].filter { !$0.isEmpty }.joined(separator: " · "))
+    }
+
     // MARK: - The join
 
     /// One week of a coach's plan against this device's log, or `nil` when
@@ -332,11 +522,17 @@ enum PlanAndLog {
     /// logged that day is that day's log, and a lift nobody asked for falls to
     /// `Also logged` exactly as it does in the browser.
     static func compare(bookings: [Booking], logged: [LoggedDay],
+                        meals: [Meal] = [],
                         today: String, anchor: String,
                         unit: WeightUnit, locale: Locale = .current) -> Result? {
         let week = weekOf(anchor)
         let booked = bookings.filter { $0.date >= week.from && $0.date <= week.to }
-        guard !booked.isEmpty else { return nil }
+        // A plan is a plan whichever half of it arrived: `k` and `m` are
+        // independent (PLAN-FORMAT), and a send carrying only meals books days.
+        // Before this the card was absent for one, so a coach who sent a week of
+        // food reached no screen that said so past Cook's seven days from today.
+        let weekMeals = bookedMeals(meals, from: week.from, to: week.to)
+        guard !booked.isEmpty || !weekMeals.isEmpty else { return nil }
 
         let days = logged.filter { $0.date >= week.from && $0.date <= week.to }
         var byDate: [String: [Booking]] = [:]
@@ -352,19 +548,59 @@ enum PlanAndLog {
             }
         }
 
+        var mealsByDate: [String: [MealRow]] = [:]
+        for meal in weekMeals { mealsByDate[meal.date, default: []].append(meal) }
+
+        // Every date this week books anything at all. A day may book a session
+        // with no meals, meals with no session, or both, and all three are one
+        // row -- this card opens one date at a time and tapping a row moves Train
+        // to a date, so a second row on the same day would open two details and
+        // go nowhere new.
+        let bookedOn = Set(byDate.keys).union(mealsByDate.keys)
+
         var counts = Counts()
-        counts.booked = byDate.count
-        var rows: [DayRow] = byDate.keys.sorted().map { date in
-            let booking = merge(byDate[date] ?? [], on: date)
+        counts.booked = bookedOn.count
+        var rows: [DayRow] = bookedOn.sorted().map { date in
+            let bookedHere = byDate[date] ?? []
+            // Whether this day books a session at all. A day that books only
+            // meals gets no training verdict: `not logged` against a day nobody
+            // was asked to train would be the app inventing a booking to hold
+            // against you.
+            let booksTraining = !bookedHere.isEmpty
+            let booking = merge(bookedHere, on: date)
             let day = loggedByDate[date]
+            let dayMeals = mealsByDate[date] ?? []
+            let trained = !(day?.exercises.isEmpty ?? true)
+
+            if booksTraining { counts.training += 1 }
+            counts.meals += dayMeals.count
 
             let state: DayState
-            if !(day?.exercises.isEmpty ?? true) {
-                state = .logged; counts.logged += 1
+            if booksTraining {
+                if trained {
+                    state = .logged; counts.logged += 1
+                } else if date >= today {
+                    state = .toDo; counts.toDo += 1
+                } else {
+                    state = .notLogged; counts.notLogged += 1
+                }
+            // A day booked for food that was trained anyway. The training was
+            // not booked, which is the same fact -- and Coach's same word -- as a
+            // day the plan says nothing about, and it is said on the row itself
+            // so a week read with every day shut still says which days you
+            // trained.
+            } else if trained {
+                state = .notBooked; counts.other += 1
+            // A day still ahead is a plan, whether it books a session, a dinner
+            // or both. `to do` is a fact about the calendar and needs no log to
+            // be true, which is why it is the one verdict a meals-only day can
+            // carry.
             } else if date >= today {
                 state = .toDo; counts.toDo += 1
+            // A day in the past that booked food and nothing else. No word at
+            // all: there is no `not logged` for a meal, and no figure for one.
             } else {
-                state = .notLogged; counts.notLogged += 1
+                state = .meals
             }
 
             let word = self.word(for: state)
@@ -373,6 +609,11 @@ enum PlanAndLog {
             case .logged:
                 joined = join(asked: booking.exercises, logged: day?.exercises ?? [],
                               unit: unit)
+            case _ where !booksTraining:
+                // Nothing was asked of this day, so nothing is compared. What was
+                // logged on it is logged work counted against nothing, exactly
+                // like a lift nobody asked for.
+                joined = ([], day?.exercises.filter { !$0.sets.isEmpty }.map(alsoLoggedRow) ?? [])
             default:
                 // A day still ahead prints what it asks for, because nowhere
                 // else can. A day in the past does not recite what was not
@@ -384,25 +625,50 @@ enum PlanAndLog {
                 }, [])
             }
 
+            // A booking names itself. Only a day that books no session at all
+            // takes its name from what was logged on it, exactly as a `not
+            // booked` day of its own does -- a booked session with a blank name
+            // keeps its blank.
+            let name = booking.name.isEmpty && !booksTraining && trained
+                ? day?.name ?? "" : booking.name
+            let mealsClause = dayMeals.isEmpty
+                ? "" : plural(dayMeals.count, "meal booked", "meals booked")
+            // The training word hugs the session it judges; the meal clause
+            // follows it. A day that booked no session has no session for it to
+            // hug, so what is left -- `to do`, or nothing -- goes last instead.
+            // Coach's own rule, and its own sentence: a week described to a coach
+            // reads the same way.
+            let head = name.isEmpty
+                ? [dayLabel(date, locale: locale), mealsClause, word]
+                : [dayLabel(date, locale: locale), name, word, mealsClause]
+            // The same clauses in the same order, with the date said in words.
+            // Built beside `head` rather than from it, so a clause can never be
+            // in one and not the other.
+            let spokenHead = name.isEmpty
+                ? [spokenDayLabel(date, locale: locale), mealsClause, word]
+                : [spokenDayLabel(date, locale: locale), name, word, mealsClause]
+
             return DayRow(
-                key: date, state: state, name: booking.name,
-                text: [dayLabel(date, locale: locale), booking.name, word]
-                    .filter { !$0.isEmpty }.joined(separator: " · "),
-                // The same clauses, in the same order, with the date said in
-                // words -- one sentence rather than three fragments. Built
-                // here beside `text` rather than from it, so a clause can
-                // never be in one and not the other.
-                spoken: said([spokenDayLabel(date, locale: locale), booking.name, word]),
+                key: date, state: state, name: name,
+                text: head.filter { !$0.isEmpty }.joined(separator: " · "),
+                // One sentence rather than three fragments. `name`, never
+                // `booking.name`: a day booked only for food and trained anyway
+                // takes its name from the session, and that is the row the
+                // accessibility pass never saw.
+                spoken: said(spokenHead),
                 openable: date <= today,
-                exercises: joined.exercises, alsoLogged: joined.alsoLogged)
+                exercises: joined.exercises, alsoLogged: joined.alsoLogged,
+                meals: dayMeals)
         }
 
         // A day in the week that was trained and that nothing was booked for.
         // Shown beside the bookings, saying nothing about cause: a session
         // lifted the day after the one it was booked for looks exactly like
-        // this, and so does a session added for its own sake.
+        // this, and so does a session added for its own sake. Every date this
+        // send booked, meals included: a day booked for food and trained anyway
+        // is already a row above, with `not booked` on it.
         for day in loggedByDate.values.sorted(by: { $0.date < $1.date })
-        where byDate[day.date] == nil && !day.exercises.isEmpty {
+        where !bookedOn.contains(day.date) && !day.exercises.isEmpty {
             counts.other += 1
             rows.append(DayRow(
                 key: day.date, state: .notBooked, name: day.name,
@@ -753,7 +1019,21 @@ enum PlanAndLog {
     /// a coach reads.
     static func headLine(range: String, counts: Counts) -> String {
         var head = "Booked \(plural(counts.booked, "day", "days")), \(range)"
-        if counts.logged > 0 || counts.notLogged > 0 { head += " · logged \(counts.logged)" }
+        // What a coach booked, which is a count of their own writing. There is no
+        // figure beside it for meals eaten, in this line or anywhere else.
+        if counts.meals > 0 {
+            head += " · " + plural(counts.meals, "meal booked", "meals booked")
+        }
+        if counts.logged > 0 || counts.notLogged > 0 {
+            // `logged 1` under `Booked 5 days` would read as one day of five when
+            // three of them booked no session at all, so once meals are in the
+            // line the figure says what it counts. Coach's sentence, for the same
+            // reason.
+            head += counts.meals > 0
+                ? " · " + plural(counts.training, "training day", "training days")
+                    + ", \(counts.logged) logged"
+                : " · logged \(counts.logged)"
+        }
         if counts.toDo > 0 { head += " · \(counts.toDo) to do" }
         if counts.other > 0 {
             head += " · " + plural(counts.other, "other day logged", "other days logged")
@@ -786,11 +1066,23 @@ enum PlanAndLog {
     /// browser gets that from HTML, which folds a newline in a `<p>` into a
     /// space, and a SwiftUI `Text` does not -- a name with a line break in it
     /// would otherwise quietly turn one line of card into three.
-    static func sentBy(_ result: Result, bookings: [Booking]) -> String {
+    /// - Parameter meals: the planned meals, so **a week that booked only meals
+    ///   is signed by whoever sent it** like any other. A meal the lifter placed
+    ///   is not from a coach at all, so the same test that keeps it off the card
+    ///   keeps its owner out of the name.
+    static func sentBy(_ result: Result, bookings: [Booking],
+                       meals: [Meal] = []) -> String {
         var names: [String] = []
+        func add(_ raw: String?) {
+            guard let name = coachName(raw), !names.contains(name) else { return }
+            names.append(name)
+        }
         for booking in bookings where booking.date >= result.from && booking.date <= result.to {
-            guard let name = coachName(booking.coachName) else { continue }
-            if !names.contains(name) { names.append(name) }
+            add(booking.coachName)
+        }
+        for meal in meals
+        where meal.fromCoach && meal.date >= result.from && meal.date <= result.to {
+            add(meal.coachName)
         }
         return names.isEmpty ? noCoachName : "From " + names.joined(separator: " · ")
     }
@@ -1011,6 +1303,12 @@ enum PlanAndLog {
                 out.append("Also logged")
                 out.append(contentsOf: day.alsoLogged.map(\.text))
             }
+            // Meals last, under the training they sit beside. One line each, and
+            // nothing under them: there is no second row about the food log.
+            if !day.meals.isEmpty {
+                out.append("Meals")
+                out.append(contentsOf: day.meals.map(\.title))
+            }
         }
         out.append(result.footer)
         return out
@@ -1032,6 +1330,13 @@ enum PlanAndLog {
             if !day.alsoLogged.isEmpty {
                 out.append("Also logged")
                 out.append(contentsOf: day.alsoLogged.map(\.spoken))
+            }
+            // Meals last, exactly where `lines` puts them. A meal row is
+            // composed by the time a screen asks for it, so `plainly` is what
+            // says it -- the case that helper exists for.
+            if !day.meals.isEmpty {
+                out.append("Meals")
+                out.append(contentsOf: day.meals.map { plainly($0.title) })
             }
         }
         out.append(result.footer)

@@ -257,9 +257,9 @@ final class PlanImporterTests: XCTestCase {
 
     func testIsAlreadyImportedReflectsAcceptedHashes() throws {
         let context = try makeContext()
-        XCTAssertFalse(PlanImporter.isAlreadyImported("fresh", in: context, defaults: isolated))
+        XCTAssertFalse(PlanImporter.isAlreadyImported("fresh", in: context))
         try PlanImporter.accept(examplePayload, hash: "fresh", in: context, defaults: isolated)
-        XCTAssertTrue(PlanImporter.isAlreadyImported("fresh", in: context, defaults: isolated))
+        XCTAssertTrue(PlanImporter.isAlreadyImported("fresh", in: context))
     }
 
     func testHashIsStableForIdenticalPayloadsAndDiffersForDifferentOnes() throws {

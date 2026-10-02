@@ -12,15 +12,22 @@ struct LogSetView: View {
     @State private var weight: Double = 135
     @State private var reps: Int = 5
     @State private var rpe: Double = 8
+    /// The limb this set is being done on. Seeded from the plan and then the
+    /// lifter's, because the log records what happened rather than what was
+    /// asked for.
+    @State private var side: PlanSide?
 
     private var exercise: DraftExercise? { session.draft?.exercise(exerciseID) }
     private var prescription: PrescribedSet? { session.prescription(for: exerciseID) }
+    /// Whether this exercise involves sides at all. Only then is there a
+    /// control to show: a bench press screen is exactly what it was.
+    private var showsSide: Bool { session.suggestedSide(for: exerciseID) != nil }
 
     var body: some View {
         List {
             if let prescription {
                 Section("Prescribed") {
-                    Text(prescription.summary(unit: session.unit))
+                    Text(prescription.summary(unit: session.unit, side: side))
                         .foregroundStyle(DclTheme.muted)
                 }
             }
@@ -52,17 +59,51 @@ struct LogSetView: View {
                                  ? String(Int(rpe))
                                  : String(format: "%.1f", rpe))
                 }
+
+                if showsSide { sideControl }
             }
 
             Section {
                 Button("Log Set") {
-                    session.logSet(to: exerciseID, weight: weight, reps: reps, rpe: rpe)
+                    session.logSet(to: exerciseID, weight: weight, reps: reps, rpe: rpe,
+                                   side: side)
                     dismiss()
                 }
             }
         }
         .navigationTitle(exercise?.name ?? "Set")
         .onAppear(perform: seed)
+    }
+
+    /// Two buttons rather than a `Picker`, exactly as the phone's set row
+    /// does it: a segmented picker cannot express "neither", and a set the
+    /// lifter did on both limbs at once has no side at all. Tapping the
+    /// highlighted side clears it back to both, so nothing here is a one-way
+    /// door.
+    private var sideControl: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Side")
+                .font(.caption2)
+                .foregroundStyle(DclTheme.muted)
+            HStack(spacing: 6) {
+                ForEach(PlanSide.allCases, id: \.self) { option in
+                    Button {
+                        side = side == option ? nil : option
+                    } label: {
+                        Text(option.shortLabel)
+                            .font(.system(size: 15, weight: .bold))
+                            .frame(maxWidth: .infinity, minHeight: 30)
+                            .foregroundStyle(side == option ? DclTheme.onAccent : DclTheme.muted)
+                            .background {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(side == option ? DclTheme.accent : Color.clear)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(option == .left ? "Left" : "Right")
+                }
+            }
+        }
     }
 
     /// What the fields start at.
@@ -79,6 +120,10 @@ struct LogSetView: View {
     /// last set of this exercise, or the 135/5/8 defaults for the first one.
     private func seed() {
         seedFromPreviousSet()
+        // The side the plan asks for next, which is the side the session is
+        // counting against — not the side of the set before, which is the
+        // other limb by construction.
+        side = session.suggestedSide(for: exerciseID)
 
         guard let prescription else { return }
         let isFirstSetOfTheExercise = exercise?.sets.last == nil

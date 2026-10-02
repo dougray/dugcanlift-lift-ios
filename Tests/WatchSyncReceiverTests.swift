@@ -169,6 +169,87 @@ final class WatchSyncReceiverTests: XCTestCase {
         XCTAssertTrue(entries.isEmpty)
     }
 
+    // MARK: - A finished session
+
+    private func sessionEnvelope(id: UUID = UUID(), revision: Int = 2,
+                                 reps: Int = 5) -> SyncEnvelope {
+        let started = Date(timeIntervalSince1970: 1_789_891_200)
+        return SyncEnvelope(
+            event: .sessionFinished,
+            workoutID: id,
+            revision: revision,
+            updatedAt: started,
+            origin: .watchOS,
+            session: FinishedSession(
+                name: "Upper A",
+                performedOn: DayKey.make(from: started),
+                startedAt: started,
+                finishedAt: started.addingTimeInterval(3600),
+                exercises: [PerformedExercise(
+                    name: "Bulgarian Split Squat", equipment: "dumbbell",
+                    sets: [PerformedSet(weightKg: 30, reps: reps, rpe: 8, side: .left)]
+                )]
+            ),
+            heartRate: SessionHeartRate(averageBpm: 128.5, maxBpm: 171)
+        )
+    }
+
+    /// The acknowledgement is what lets the watch stop offering the session,
+    /// exactly as it is for a food. Until it arrives the watch holds the
+    /// only other copy.
+    func testAStoredSessionIsAcknowledgedUnderItsOwnID() async throws {
+        let context = makeContext()
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+        let envelope = sessionEnvelope()
+
+        let handled = await sut.handle(envelope)
+
+        XCTAssertTrue(handled)
+        let day = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutDay>()).first)
+        XCTAssertEqual(day.orderedExercises.first?.orderedSets.first?.side, .left)
+        let ack = try XCTUnwrap(sent.first { $0.event == .workoutSyncAck })
+        XCTAssertEqual(ack.workoutID, envelope.workoutID)
+        XCTAssertEqual(ack.revision, envelope.revision)
+        XCTAssertEqual(ack.origin, .ios)
+    }
+
+    /// A resend, or a queued copy arriving after the live one: stored once,
+    /// acknowledged both times, because the first acknowledgement may be the
+    /// thing that was lost.
+    func testTheSameSessionArrivingTwiceIsStoredOnceAndAcknowledgedTwice() async throws {
+        let context = makeContext()
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                    sender: { sent.append($0) })
+        let envelope = sessionEnvelope()
+
+        _ = await sut.handle(envelope)
+        _ = await sut.handle(envelope)
+
+        let days = try context.fetch(FetchDescriptor<WorkoutDay>())
+        XCTAssertEqual(days.count, 1)
+        XCTAssertEqual(days.first?.totalSetCount, 1)
+        XCTAssertEqual(sent.filter { $0.event == .workoutSyncAck }.map(\.workoutID),
+                       [envelope.workoutID, envelope.workoutID])
+    }
+
+    /// Heart rate still travels with it, and is still kept beside the store
+    /// rather than on the day.
+    func testTheSessionsHeartRateIsRecorded() async throws {
+        let context = makeContext()
+        let defaults = isolatedDefaults()
+        let sut = WatchSyncReceiver(context: context, defaults: defaults, sender: { _ in })
+        let envelope = sessionEnvelope()
+
+        _ = await sut.handle(envelope)
+
+        let stored = try XCTUnwrap(WatchSessionHeartRateStore.latest(in: defaults))
+        XCTAssertEqual(stored.workoutID, envelope.workoutID)
+        XCTAssertEqual(stored.maxBpm, 171)
+    }
+
     // MARK: - Phone -> watch mapping (WatchSyncReceiver.makeSnapshot)
 
     /// The pure mapping half of `pushRecentFoodsSnapshot()`. The

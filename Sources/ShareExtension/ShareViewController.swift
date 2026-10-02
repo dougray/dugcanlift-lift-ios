@@ -104,9 +104,13 @@ final class ShareModel: ObservableObject {
         var firstRefusal: PlanLinkIntake.Refusal?
         for text in candidates {
             switch PlanLinkIntake.read(text, expectedLifterID: lifterID) {
-            case .plan(let payload):
+            case .plan(let incoming):
                 guard let fragment = PlanLinkExtractor.fragment(in: text) else { continue }
-                state = .ready(summary: PlanLinkExtractor.summary(of: payload), fragment: fragment)
+                // The picks are named here too, or a plan that is only picks
+                // would be offered as a plan with nothing in it.
+                state = .ready(summary: PlanLinkExtractor.summary(
+                    of: incoming.payload, roadPickCount: incoming.roadPickIDs.count),
+                    fragment: fragment)
                 return
             case .refused(let reason):
                 // Safari hands over the page address as well as the message

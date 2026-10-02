@@ -558,6 +558,38 @@ enum LiftPreSideShapes {
     }
 }
 
+// MARK: - Frozen pre-V9 shape of ScheduledSession
+//
+// V9 adds `coachName` — the coach's own name out of a plan's `n` — to the live
+// `ScheduledSession`. That class is referenced by `.self` from V3 through V8,
+// so the moment the column lands their declared shape drifts to match V9's and
+// SwiftData can no longer tell V8 from V9: `Duplicate version checksums
+// detected`, and no store opens at all. This is what V3-V8 actually shipped.
+//
+// Nothing is frozen alongside it, unlike `LiftPreSideShapes` and
+// `LiftPreGramServingShapes`: a booking holds its routine by id as a plain
+// value, not through a relationship, so there is no graph for the freeze to
+// close over. Never add `coachName` here.
+enum LiftPreCoachNameShapes {
+
+    @Model
+    final class ScheduledSession {
+        var id: UUID = UUID()
+        var routineID: UUID = UUID()
+        var routineName: String = ""
+        var dayKey: String = ""
+        var scheduledFor: Date = Date.now
+
+        init(routineID: UUID, routineName: String, scheduledFor: Date) {
+            self.id = UUID()
+            self.routineID = routineID
+            self.routineName = routineName
+            self.dayKey = DayKey.make(from: scheduledFor)
+            self.scheduledFor = scheduledFor
+        }
+    }
+}
+
 // MARK: - V1 — everything before COOK
 
 enum LiftSchemaV1: VersionedSchema {
@@ -618,7 +650,7 @@ enum LiftSchemaV3: VersionedSchema {
             RoutineExercise.self,
             RoutinePrescribedSet.self,
             ImportedPlan.self,
-            ScheduledSession.self
+            LiftPreCoachNameShapes.ScheduledSession.self
         ]
     }
 }
@@ -645,7 +677,7 @@ enum LiftSchemaV4: VersionedSchema {
             RoutineExercise.self,
             RoutinePrescribedSet.self,
             ImportedPlan.self,
-            ScheduledSession.self,
+            LiftPreCoachNameShapes.ScheduledSession.self,
             // Route recording.
             OutdoorActivity.self
         ]
@@ -674,7 +706,7 @@ enum LiftSchemaV5: VersionedSchema {
             RoutineExercise.self,
             RoutinePrescribedSet.self,
             ImportedPlan.self,
-            ScheduledSession.self,
+            LiftPreCoachNameShapes.ScheduledSession.self,
             // V4, unchanged.
             OutdoorActivity.self
         ]
@@ -706,7 +738,7 @@ enum LiftSchemaV6: VersionedSchema {
             RoutineExercise.self,
             RoutinePrescribedSet.self,
             ImportedPlan.self,
-            ScheduledSession.self,
+            LiftPreCoachNameShapes.ScheduledSession.self,
             OutdoorActivity.self
         ]
     }
@@ -737,7 +769,7 @@ enum LiftSchemaV7: VersionedSchema {
             RoutineExercise.self,
             RoutinePrescribedSet.self,
             ImportedPlan.self,
-            ScheduledSession.self,
+            LiftPreCoachNameShapes.ScheduledSession.self,
             OutdoorActivity.self
         ]
     }
@@ -767,6 +799,33 @@ enum LiftSchemaV8: VersionedSchema {
             RoutineExercise.self,
             RoutinePrescribedSet.self,
             ImportedPlan.self,
+            LiftPreCoachNameShapes.ScheduledSession.self,
+            OutdoorActivity.self
+        ]
+    }
+}
+
+// MARK: - V9 — a booking remembers who sent it
+
+enum LiftSchemaV9: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(9, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            WorkoutDay.self,
+            ExerciseEntry.self,
+            SetEntry.self,
+            FoodEntry.self,
+            BodyMeasurement.self,
+            Recipe.self,
+            RecipeIngredient.self,
+            PlannedMeal.self,
+            ShoppingListCheck.self,
+            Routine.self,
+            RoutineExercise.self,
+            RoutinePrescribedSet.self,
+            ImportedPlan.self,
+            // The one that changed — the live class, with `coachName`.
             ScheduledSession.self,
             OutdoorActivity.self
         ]
@@ -780,11 +839,11 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self,
          LiftSchemaV5.self, LiftSchemaV6.self, LiftSchemaV7.self,
-         LiftSchemaV8.self]
+         LiftSchemaV8.self, LiftSchemaV9.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -859,5 +918,22 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v7ToV8 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV7.self,
         toVersion: LiftSchemaV8.self
+    )
+
+    /// One new optional column on ScheduledSession, `coachName`. No new model
+    /// types, no renames, no type changes, no optional-to-non-optional
+    /// changes — lightweight per this file's own rule above.
+    ///
+    /// **Nothing is backfilled, and there is nothing to backfill from.** A
+    /// booking written before this was accepted from a plan whose `n` was
+    /// read and dropped; the plan is not kept, so the name is simply not
+    /// known. Every existing row reads nil, and nil is "From your coach" --
+    /// the sentence that week already reads, unchanged.
+    ///
+    /// V3-V8 are pointed at `LiftPreCoachNameShapes` so their checksums still
+    /// describe the stores those builds wrote.
+    static let v8ToV9 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV8.self,
+        toVersion: LiftSchemaV9.self
     )
 }

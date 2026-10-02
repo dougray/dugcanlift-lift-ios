@@ -22,7 +22,18 @@ struct RoadFoodView: View {
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage("roadFoodRecent") private var recentRaw = ""
+    /// A coach's picks, if a plan brought any. Read through `@AppStorage` so
+    /// clearing them here, or a new plan arriving, redraws this screen.
+    @AppStorage(RoadPicks.storageKey) private var picksData = Data()
     @State private var path: [RoadFoodPlace] = []
+
+    private var picks: RoadPicks? { RoadPicks.decode(picksData) }
+    private var pickIDs: [String] { picks?.ids ?? [] }
+
+    /// Every item in the file, for counting what is picked across all of it.
+    private var everything: [RoadFoodItem] {
+        catalog.chains.flatMap(\.items) + catalog.snacks
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -54,11 +65,15 @@ struct RoadFoodView: View {
 
             if source == .developmentSample { RoadFoodSampleNotice() }
 
+            picksCard
+
             if !catalog.snacks.isEmpty {
                 AdaptiveGrid(columns: columns) {
                     placeTile(title: "Gas station",
-                              detail: catalog.snackCategories.map(RoadFoodRanking.categoryLabel)
-                                .joined(separator: ", "),
+                              detail: appendingPicked(
+                                to: catalog.snackCategories.map(RoadFoodRanking.categoryLabel)
+                                    .joined(separator: ", "),
+                                count: RoadFoodRanking.pickCount(catalog.snacks, ids: pickIDs)),
                               place: .gasStation)
                 }
             }
@@ -77,11 +92,50 @@ struct RoadFoodView: View {
             }
 
             Text("Numbers come from each chain's own published nutrition, checked by hand, and each "
-                 + "place shows the date they were checked. LIFT never asks where you are.")
+                 + "place shows when the chain published them and when they were checked. LIFT "
+                 + "never asks where you are.")
                 .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .padding(.top, 4)
         }
+    }
+
+    /// What a coach marked, when a plan brought any. Only what this copy of
+    /// the file still has is counted -- an id it does not know is skipped, so
+    /// this card can be absent even while picks are stored, and then nothing
+    /// is drawn rather than a card promising rows nobody can see.
+    @ViewBuilder
+    private var picksCard: some View {
+        let total = RoadFoodRanking.pickCount(everything, ids: pickIDs)
+        if total > 0 {
+            let places = catalog.chains.filter { RoadFoodRanking.pickCount($0.items, ids: pickIDs) > 0 }
+                .count + (RoadFoodRanking.pickCount(catalog.snacks, ids: pickIDs) > 0 ? 1 : 0)
+            LiftCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(RoadPicks.label("picks", from: picks))
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("\(total) \(total == 1 ? "item" : "items") at \(places) "
+                         + "\(places == 1 ? "place" : "places"), at the top of those lists. "
+                         + "The ranking underneath them is unchanged.")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                    // Clearing is this phone's own action: a plan that carries
+                    // no picks says nothing about them rather than retracting
+                    // them, so nothing a coach sends can take them back.
+                    Button("Clear these picks") { picksData = Data() }
+                        .font(Theme.body.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// "22 items · 3 picked for you", web's own wording and order.
+    private func appendingPicked(to detail: String, count: Int) -> String {
+        guard count > 0 else { return detail }
+        return detail.isEmpty ? "\(count) picked for you" : "\(detail) · \(count) picked for you"
     }
 
     private func sectionTitle(_ text: String) -> some View {
@@ -93,7 +147,9 @@ struct RoadFoodView: View {
 
     private func chainTile(_ chain: RoadFoodChain) -> some View {
         let count = chain.items.count
-        var detail = "\(count) \(count == 1 ? "item" : "items")"
+        var detail = appendingPicked(to: "\(count) \(count == 1 ? "item" : "items")",
+                                     count: RoadFoodRanking.pickCount(chain.items, ids: pickIDs))
+        if let published = RoadFoodRanking.publishedText(chain.publishedOn) { detail += " · published \(published)" }
         if let date = RoadFoodRanking.dateText(chain.checkedOn) { detail += " · checked \(date)" }
         return placeTile(title: chain.name, detail: detail, place: .chain(chain.id))
     }
@@ -188,6 +244,7 @@ struct RoadFoodPlaceView: View {
     @AppStorage("goalCalories") private var goalCalories = 1748.0
     @AppStorage("goalProtein") private var goalProtein = 160.0
     @AppStorage("goalIsSet") private var goalIsSet = false
+    @AppStorage(RoadPicks.storageKey) private var picksData = Data()
 
     @State private var meal = MealType.forHour(Calendar.current.component(.hour, from: .now))
     @State private var category: String?
@@ -226,6 +283,18 @@ struct RoadFoodPlaceView: View {
         return items.compactMap(\.checkedOn).filter { CalendarDay($0) != nil }.min()
     }
 
+    /// The date the chain's own document states about itself, where it states
+    /// one. No gas-station snack does, so that screen never shows it.
+    private var publishedOn: String? { chain?.publishedOn }
+
+    /// What the warning measures: the document's own date first, the day a
+    /// person read it second -- a 2021 chart read yesterday is old, whoever
+    /// read it and whenever.
+    private var ageDate: String? {
+        if let chain { return RoadFoodRanking.ageDate(chain) }
+        return checkedOn
+    }
+
     private var rules: [String] {
         if let chain { return RoadFoodRanking.rulesFor(catalog.rules, kind: chain.kind) }
         return RoadFoodRanking.gasStationRules(catalog.rules)
@@ -235,7 +304,13 @@ struct RoadFoodPlaceView: View {
         // Ranked against the whole number the fits line shows, so an item at
         // exactly "640 kcal" fits a screen that says 640 are left.
         let remaining = remaining
-        let ranked = RoadFoodRanking.rank(items, remainingCalories: remaining.map { Double($0.wholeCalories) })
+        // Ranked first, then the coach's picks floated to the top of each
+        // group. Nothing about the ranking changes: the same items fit, in the
+        // same order among themselves, and the same ones are left out.
+        let picks = RoadPicks.decode(picksData)
+        let ranked = RoadFoodRanking.withPicks(
+            RoadFoodRanking.rank(items, remainingCalories: remaining.map { Double($0.wholeCalories) }),
+            ids: picks?.ids ?? [])
 
         RoadFoodPage { contentWidth in
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
@@ -245,12 +320,12 @@ struct RoadFoodPlaceView: View {
 
                 if isGasStation, catalog.snackCategories.count > 1 { categoryChips }
 
-                fitCard(remaining: remaining, ranked: ranked)
+                fitCard(remaining: remaining, ranked: ranked, picks: picks)
 
                 AdaptiveColumns(columns: AdaptiveLayout.columns(for: contentWidth, minWidth: 340)) {
                     VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                         mealPicker
-                        if !ranked.fits.isEmpty { itemCard(ranked.fits) }
+                        if !ranked.fits.isEmpty { itemCard(ranked.fits, ranked: ranked, picks: picks) }
                         if !ranked.over.isEmpty {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("A little over")
@@ -261,7 +336,10 @@ struct RoadFoodPlaceView: View {
                                     .foregroundStyle(Theme.textSecondary)
                             }
                             .padding(.top, 6)
-                            itemCard(ranked.over)
+                            // A pick that is over stays over: the pick is
+                            // about the food, and what is left of the day is
+                            // your own arithmetic.
+                            itemCard(ranked.over, ranked: ranked, picks: picks)
                         }
                     }
                     if !rules.isEmpty { rulesCard }
@@ -298,9 +376,17 @@ struct RoadFoodPlaceView: View {
                 .font(Theme.figure)
                 .foregroundStyle(Theme.textPrimary)
 
+            // What the chain published, and when a person last read it: two
+            // different facts, both on screen.
             HStack(spacing: 4) {
-                if let date = RoadFoodRanking.dateText(checkedOn) {
-                    Text("Checked on \(date)")
+                let published = RoadFoodRanking.publishedText(publishedOn)
+                let checked = RoadFoodRanking.dateText(checkedOn)
+                if let published, let checked {
+                    Text("Published \(published) · checked \(checked)")
+                } else if let published {
+                    Text("Published \(published)")
+                } else if let checked {
+                    Text("Checked on \(checked)")
                 } else {
                     Text("No check date on file for these numbers.")
                 }
@@ -313,11 +399,18 @@ struct RoadFoodPlaceView: View {
             .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
 
-            if RoadFoodRanking.isStale(checkedOn: checkedOn, today: DayKey.today) == true {
-                Text("These numbers are more than six months old. Menus change, so check them "
-                     + "against the board before you count on them.")
-                    .font(Theme.body)
-                    .foregroundStyle(Theme.textPrimary)
+            if RoadFoodRanking.isStale(checkedOn: ageDate, today: DayKey.today) == true {
+                if let published = RoadFoodRanking.publishedText(publishedOn) {
+                    Text("These numbers are from the chain's chart dated \(published). Menus "
+                         + "change, so check them against the board before you count on them.")
+                        .font(Theme.body)
+                        .foregroundStyle(Theme.textPrimary)
+                } else {
+                    Text("These numbers are more than six months old. Menus change, so check them "
+                         + "against the board before you count on them.")
+                        .font(Theme.body)
+                        .foregroundStyle(Theme.textPrimary)
+                }
             }
         }
     }
@@ -337,7 +430,8 @@ struct RoadFoodPlaceView: View {
 
     // MARK: The fits line
 
-    private func fitCard(remaining: RemainingMacros?, ranked: RoadFoodRanking.Ranked) -> some View {
+    private func fitCard(remaining: RemainingMacros?, ranked: RoadFoodRanking.Ranked,
+                         picks: RoadPicks?) -> some View {
         LiftCard {
             VStack(alignment: .leading, spacing: 6) {
                 if let remaining {
@@ -367,6 +461,15 @@ struct RoadFoodPlaceView: View {
                         .foregroundStyle(Theme.textPrimary)
                     Text("So this is ranked by protein per 100 kcal alone, with nothing left out. "
                          + "Set a goal on Home and it will rank against what is left of your day.")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                // One line, whether or not there is a goal. Said, never
+                // scored: nothing here or anywhere judges what was eaten
+                // against what a coach marked.
+                if !ranked.picked.isEmpty {
+                    Text("\(RoadPicks.label("picks", from: picks)) are first, marked. "
+                         + "Nothing else is moved, and nothing that fits is hidden.")
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -412,13 +515,14 @@ struct RoadFoodPlaceView: View {
 
     // MARK: Items
 
-    private func itemCard(_ list: [RoadFoodItem]) -> some View {
+    private func itemCard(_ list: [RoadFoodItem], ranked: RoadFoodRanking.Ranked,
+                          picks: RoadPicks?) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(list.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
                     Rectangle().fill(Theme.hairline).frame(height: 1)
                 }
-                row(item)
+                row(item, isPick: ranked.isPicked(item), picks: picks)
                     .padding(.vertical, 12)
             }
         }
@@ -428,9 +532,18 @@ struct RoadFoodPlaceView: View {
         .liftCardBackground()
     }
 
-    private func row(_ item: RoadFoodItem) -> some View {
+    private func row(_ item: RoadFoodItem, isPick: Bool, picks: RoadPicks?) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
+                // Said in words, above the name, in weight rather than
+                // colour: this is a label on what a coach marked, not a
+                // verdict on the food. Nothing at all on the rest.
+                if isPick {
+                    Text(RoadPicks.label("pick", from: picks).uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .kerning(0.5)
+                        .foregroundStyle(Theme.textSecondary)
+                }
                 Text(item.displayName)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)

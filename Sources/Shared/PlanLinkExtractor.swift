@@ -75,7 +75,7 @@ enum PlanLinkExtractor {
     /// Counts the same four things `PlanImporter.summary` does, but computed
     /// here rather than there: `PlanImporter` imports SwiftData, and this file
     /// is compiled into the share extension, which must not.
-    static func summary(of payload: PlanPayload) -> String {
+    static func summary(of payload: PlanPayload, roadPickCount: Int = 0) -> String {
         let name = payload.n.trimmingCharacters(in: .whitespacesAndNewlines)
         var parts = ["Plan from \(name.isEmpty ? "your coach" : name)"]
         func count(_ n: Int, _ singular: String, _ plural: String) {
@@ -85,6 +85,10 @@ enum PlanLinkExtractor {
         count(payload.r?.count ?? 0, "recipe", "recipes")
         count(payload.m?.count ?? 0, "planned meal", "planned meals")
         count(payload.k?.count ?? 0, "scheduled day", "scheduled days")
+        // `rf` is not on `PlanPayload` (see `RoadPickLink`), so the caller
+        // passes the count. Named like the other halves, so a send that is
+        // only picks is not described as an empty plan.
+        count(roadPickCount, "Road Food pick", "Road Food picks")
         return parts.joined(separator: " · ")
     }
 

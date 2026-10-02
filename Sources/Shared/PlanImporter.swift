@@ -35,12 +35,35 @@ final class ScheduledSession {
     var dayKey: String = ""
     var scheduledFor: Date = Date.now
 
-    init(routineID: UUID, routineName: String, scheduledFor: Date) {
+    /// The coach's name, from the plan's `n` — what the week card's one muted
+    /// line says (`PlanAndLog.sentBy`). Nil when the plan gave none, and nil
+    /// on every row written before schema V9, which read the same way: "From
+    /// your coach".
+    ///
+    /// **On the booking rather than beside it.** A week can hold bookings from
+    /// two plans, so the name has to be readable per booking or a second
+    /// coach's week would be labelled with the first one's name; web keeps it
+    /// per entry (`training[].fromCoach`) for exactly that reason. `PlanSides`
+    /// is a `UserDefaults` side-car because it keys LiftKit's shared routine
+    /// models, where a property is a schema change for two apps — this is
+    /// LIFT's own model, so the change costs one nullable column here and
+    /// nothing anywhere else. It is also the same kind of field
+    /// `routineName` already is: a copy taken when the plan was accepted,
+    /// which is what lets a booking outlive what it was copied from. A
+    /// side-car would pay `ScheduledSession`'s own cost twice over — no
+    /// cascade reaches it, so a removed routine's bookings would leave their
+    /// names behind forever, and a failed `save()` would leave them without a
+    /// booking at all.
+    var coachName: String?
+
+    init(routineID: UUID, routineName: String, scheduledFor: Date,
+         coachName: String? = nil) {
         self.id = UUID()
         self.routineID = routineID
         self.routineName = routineName
         self.dayKey = DayKey.make(from: scheduledFor)
         self.scheduledFor = scheduledFor
+        self.coachName = coachName
     }
 }
 
@@ -50,17 +73,23 @@ struct PlanImportSummary: Equatable {
     var mealCount: Int
     var workoutCount: Int
     var scheduledSessionCount: Int
+    /// `rf`, which is not a field on `PlanPayload` -- it rides beside it from
+    /// the link (see `RoadPickLink`), so it is counted from what the caller
+    /// was handed rather than from the payload.
+    var roadPickCount: Int = 0
 }
 
 enum PlanImporter {
 
-    static func summary(for payload: PlanPayload) -> PlanImportSummary {
-        PlanImportSummary(
+    static func summary(for plan: PlanLinkIntake.IncomingPlan) -> PlanImportSummary {
+        let payload = plan.payload
+        return PlanImportSummary(
             coachName: payload.n,
             recipeCount: payload.r?.count ?? 0,
             mealCount: payload.m?.count ?? 0,
             workoutCount: payload.w?.count ?? 0,
-            scheduledSessionCount: payload.k?.count ?? 0
+            scheduledSessionCount: payload.k?.count ?? 0,
+            roadPickCount: plan.roadPickIDs.count
         )
     }
 
@@ -73,10 +102,16 @@ enum PlanImporter {
     /// `encode(to:)` does not promise the key order a hand-written one
     /// produced. Sorting normalises that away, so a plan already imported
     /// still hashes the same and is not re-imported as if it were new.
-    static func hash(of payload: PlanPayload) throws -> String {
+    /// - Parameter roadPickIDs: `rf`. **Part of the hash**, or a coach who
+    ///   sends the same week again with different picks would have the second
+    ///   link refused as already imported and their new picks silently lost.
+    ///   An empty list writes no key at all, so every plan without picks
+    ///   hashes exactly as it did before road picks existed --
+    ///   `PlanRoadPicksTests` pins that against a value recorded on main.
+    static func hash(of payload: PlanPayload, roadPickIDs: [String] = []) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(HashableMirror(of: payload))
+        let data = try encoder.encode(HashableMirror(of: payload, roadPickIDs: roadPickIDs))
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
@@ -88,10 +123,20 @@ enum PlanImporter {
         return (try? context.fetch(descriptor).isEmpty) == false
     }
 
-    /// - Parameter defaults: where the plan's sides and the per-side logging
-    ///   choice are kept (`PlanSides`, `PerSideLogging`). Written only once
-    ///   the store has saved, so a failed accept leaves neither behind.
-    static func accept(_ payload: PlanPayload, hash: String, in context: ModelContext,
+    /// - Parameter roadPickIDs: `rf`, the Road Food items the coach is happy
+    ///   with (PLAN-FORMAT.md "Road picks"). A non-empty list **replaces**
+    ///   whatever is stored, whole; an empty one leaves it alone, because a
+    ///   plan with no `rf` is silence about picks rather than a retraction.
+    ///   Nothing is checked against `road-food.json` here: an id this build
+    ///   does not have is skipped where the list is drawn, so a later release
+    ///   that has the item again shows the pick rather than having thrown it
+    ///   away on arrival.
+    /// - Parameter defaults: where the plan's sides, the per-side logging
+    ///   choice and the road picks are kept (`PlanSides`, `PerSideLogging`,
+    ///   `RoadPicks`). Written only once the store has saved, so a failed
+    ///   accept leaves none of them behind.
+    static func accept(_ payload: PlanPayload, roadPickIDs: [String] = [], hash: String,
+                       in context: ModelContext,
                        defaults: UserDefaults = .standard) throws {
         guard !isAlreadyImported(hash, in: context) else { return }
 
@@ -140,6 +185,19 @@ enum PlanImporter {
             Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
         }
 
+        // `n`, kept rather than dropped: it is the one thing the week card's lead
+        // line can say instead of "From your coach". Trimmed here, once, so every
+        // booking and every meal from one plan carries the same spelling; empty
+        // is nil, which is what a plan that named nobody has always meant.
+        let trimmedName = payload.n.trimmingCharacters(in: .whitespacesAndNewlines)
+        let coachName = trimmedName.isEmpty ? nil : trimmedName
+
+        // Which planned meals a coach booked, so the week card can show a coach's
+        // and leave the lifter's own alone. A side-car rather than a column,
+        // because `PlannedMeal` is LiftKit's -- see `PlanMeals`.
+        var planMeals = PlanMeals.load(from: defaults)
+        var planMealsChanged = false
+
         for planMeal in payload.m ?? [] {
             guard planMeal.x >= 0, planMeal.x < createdRecipeIDs.count,
                   let mealType = mealType(forSlot: planMeal.s),
@@ -153,9 +211,12 @@ enum PlanImporter {
                 predicate: #Predicate { $0.id == targetRecipeID }
             )
             guard let recipe = try context.fetch(recipeDescriptor).first else { continue }
-            context.insert(PlannedMeal(
+            let meal = PlannedMeal(
                 recipe: recipe, mealType: mealType, plannedFor: date, servings: planMeal.q
-            ))
+            )
+            context.insert(meal)
+            planMeals.book(meal.id, coach: coachName)
+            planMealsChanged = true
         }
 
         var createdRoutineIDs: [UUID] = []
@@ -212,7 +273,8 @@ enum PlanImporter {
             )
             guard let routine = try context.fetch(routineDescriptor).first else { continue }
             context.insert(ScheduledSession(
-                routineID: routineID, routineName: routine.name, scheduledFor: date
+                routineID: routineID, routineName: routine.name, scheduledFor: date,
+                coachName: coachName
             ))
         }
 
@@ -232,6 +294,9 @@ enum PlanImporter {
         }
 
         if sidesChanged { sides.save(to: defaults) }
+        // After the save, like the sides and the picks: a failed accept rolled
+        // its meals back, so it must leave no marker claiming a coach booked one.
+        if planMealsChanged { planMeals.save(to: defaults) }
         // An each-side exercise turns on "Log left and right separately" for
         // that lift when the plan is accepted, as LIFT web does. The lifter can
         // turn it back off; that choice is theirs from then on.
@@ -240,6 +305,16 @@ enum PlanImporter {
             for key in eachSideLifts { raw = PerSideLogging.setting(true, for: key, in: raw) }
             defaults.set(raw, forKey: PerSideLogging.storageKey)
         }
+        RoadPicks.accept(ids: roadPickIDs, from: payload.n, in: defaults)
+    }
+
+    /// The whole accept, from what came in through a door. The one call site
+    /// a view should use: it cannot pass the payload and forget the picks.
+    static func accept(_ plan: PlanLinkIntake.IncomingPlan, hash: String,
+                       in context: ModelContext,
+                       defaults: UserDefaults = .standard) throws {
+        try accept(plan.payload, roadPickIDs: plan.roadPickIDs, hash: hash, in: context,
+                   defaults: defaults)
     }
 
     private static func value(_ tuple: [Double?], _ index: Int) -> Double? {
@@ -271,9 +346,15 @@ private struct HashableMirror: Encodable {
     let w: [PlanWorkout]?
     let k: [PlanSession]?
 
-    init(of payload: PlanPayload) {
+    /// Nil rather than `[]` when there are no picks: a synthesised
+    /// `encode(to:)` leaves a nil optional out entirely, so the bytes hashed
+    /// for a plan without picks are the bytes main hashed.
+    let rf: [String]?
+
+    init(of payload: PlanPayload, roadPickIDs: [String] = []) {
         v = payload.v; t = payload.t; l = payload.l; n = payload.n
         r = payload.r; m = payload.m; w = payload.w; k = payload.k
+        rf = roadPickIDs.isEmpty ? nil : roadPickIDs
     }
 }
 

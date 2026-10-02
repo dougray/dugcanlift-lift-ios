@@ -219,4 +219,84 @@ final class BackupRecipesTests: XCTestCase {
         let recipes = try XCTUnwrap((saved?["data"] as? [String: Any])?["recipes"] as? [[String: Any]])
         XCTAssertEqual(recipes.map { $0["name"] as? String }, ["Mine"])
     }
+    // MARK: - Which meals a coach booked
+
+    /// `fromCoach` on a plan row, LIFT web's own spelling and shape: the coach's
+    /// name, or `true` when the plan named nobody, and absent for a meal the
+    /// lifter placed. Without it a restore would leave a coach's meals in the
+    /// store and empty the meals half of the week card.
+    func testWhichMealsACoachBookedSurvivesARoundTrip() throws {
+        let suite = "backup-plan-meals-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let source = makeContext()
+        let recipe = Recipe(name: "Beef Chilli", servings: 4)
+        source.insert(recipe)
+        let plannedFor = try XCTUnwrap(DayKey.date(from: "2026-10-12"))
+        let named = PlannedMeal(recipe: recipe, mealType: .dinner, plannedFor: plannedFor,
+                                servings: 2)
+        let unnamed = PlannedMeal(recipe: recipe, mealType: .lunch, plannedFor: plannedFor)
+        let mine = PlannedMeal(recipe: recipe, mealType: .breakfast, plannedFor: plannedFor)
+        for meal in [named, unnamed, mine] { source.insert(meal) }
+        var booked = PlanMeals()
+        booked.book(named.id, coach: "Dana Whitfield")
+        booked.book(unnamed.id, coach: nil)
+        booked.save(to: defaults)
+        try source.save()
+
+        let data = try BackupStore.build(context: source, defaults: defaults)
+        let rows = try XCTUnwrap(((try JSONSerialization.jsonObject(with: data)
+            as? [String: Any])?["data"] as? [String: Any])?["plan"] as? [[String: Any]])
+        let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0["id"] as? String ?? "", $0) })
+        XCTAssertEqual(byID[named.id.uuidString]?["fromCoach"] as? String, "Dana Whitfield")
+        XCTAssertEqual(byID[unnamed.id.uuidString]?["fromCoach"] as? Bool, true,
+                       "a coach who named nobody is `true`, web's own shape")
+        XCTAssertNil(byID[mine.id.uuidString]?["fromCoach"],
+                     "a meal you placed yourself carries no coach at all")
+
+        let target = makeContext()
+        let restoreSuite = "backup-plan-meals-in-\(UUID().uuidString)"
+        let into = try XCTUnwrap(UserDefaults(suiteName: restoreSuite))
+        defer { into.removePersistentDomain(forName: restoreSuite) }
+        XCTAssertTrue(BackupStore.restore(context: target, from: data, defaults: into).ok)
+
+        let restored = PlanMeals.load(from: into)
+        XCTAssertEqual(restored.fromCoach, [named.id, unnamed.id])
+        XCTAssertEqual(restored.coachNames, [named.id: "Dana Whitfield"])
+        let meals = PlanAndLog.meals(try target.fetch(FetchDescriptor<PlannedMeal>()),
+                                     coach: restored)
+        XCTAssertEqual(PlanAndLog.bookedMeals(meals).map(\.title),
+                       ["Lunch · Beef Chilli · 1 serving",
+                        "Dinner · Beef Chilli · 2 servings"])
+    }
+
+    /// A file written before any of this says nothing about coaches, so every
+    /// meal in it is the lifter's own -- and the restore leaves this phone's own
+    /// record of who booked what alone rather than emptying it.
+    func testAFileWrittenBeforeTheMarkerLeavesItAlone() throws {
+        let suite = "backup-plan-meals-old-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let held = UUID()
+        var before = PlanMeals()
+        before.book(held, coach: "Dana")
+        before.save(to: defaults)
+
+        let context = makeContext()
+        let result = BackupStore.restore(context: context, from: try file([
+            "recipes": [["id": "a7991786-a81d-438b-8f2a-5e5b822c865a", "name": "Beef Chilli",
+                         "servings": 4]],
+            "plan": [["id": "4601600a-ae05-4e47-9d68-279195ec24da",
+                      "recipeId": "a7991786-a81d-438b-8f2a-5e5b822c865a",
+                      "recipeName": "Beef Chilli", "date": "2026-10-12",
+                      "meal": "DINNER", "servings": 2]]
+        ]), defaults: defaults)
+        XCTAssertTrue(result.ok)
+        let meal = try XCTUnwrap(try context.fetch(FetchDescriptor<PlannedMeal>()).first)
+        let after = PlanMeals.load(from: defaults)
+        XCTAssertFalse(after.isFromCoach(meal), "no `fromCoach` is the lifter's own meal")
+        XCTAssertEqual(after.fromCoach, [held], "and what this phone knew is untouched")
+    }
+
 }

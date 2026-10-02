@@ -327,10 +327,10 @@ final class ExerciseEntry {
     /// `countsLabel`. Sets logged before the toggle went on are still in this
     /// exercise and still real; saying so beats quietly leaving them out of a
     /// count whose whole job is to add up.
+    /// The rule itself is `SetSide.countsLabel(of:)`, which the week card
+    /// (`PlanAndLog`) reads too: one sentence, one place.
     var perSideCountLabel: String {
-        let both = sets.filter { $0.side == nil }.count
-        let text = "L \(setCount(on: .left)) · R \(setCount(on: .right))"
-        return both > 0 ? "\(text) · \(both) both" : text
+        SetSide.countsLabel(of: sets.map(\.side))
     }
 
     /// Which side a new set should start on: whichever has fewer so far, so

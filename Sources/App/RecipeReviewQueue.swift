@@ -12,17 +12,18 @@ struct QueuedRecipe: Identifiable, Equatable {
 /// queue is emptied the moment it is drained.
 ///
 /// SwiftUI shows one presentation at a time on a view and silently drops a
-/// second one, so a recipe must never be offered while an alert, the Paste a
-/// Link sheet, or a sheet RootView cannot see is up. Three things follow:
+/// second one, so a recipe must never be offered while LiftApp's plan sheet or
+/// refusal alert, or a sheet the app root cannot see, is up. Three things follow:
 ///
 /// - `next(canPresent:)` offers nothing unless the caller says it is clear.
 /// - A sheet that was offered but never appeared (`markAppeared` never came)
 ///   was dropped; `activated()` puts it back at the front for another try.
-/// - A link report arriving while a recipe is under review would be dropped
-///   the same way, so it is held and shown when the review ends, before the
-///   next recipe.
+/// - A report arriving while a recipe is under review would be dropped the
+///   same way, so it is held and shown when the review ends, before the next
+///   recipe.
 ///
-/// `Report` is whatever the caller shows for a link import; it is only held.
+/// `Report` is whatever the caller shows -- LIFT holds a plan intake outcome (a
+/// plan sheet or a refusal alert); it is only held.
 struct RecipeReviewQueue<Report> {
 
     private(set) var waiting: [QueuedRecipe] = []

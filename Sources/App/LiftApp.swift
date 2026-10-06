@@ -73,11 +73,14 @@ struct LiftApp: App {
                 }
                 // One presentation at a time on this view: a recipe waits for
                 // the plan sheet and the refusal alert, and tries again when
-                // either goes away (see `RecipeReviewQueue`).
-                .onChange(of: incomingPlan == nil && refusal == nil) { _, clear in
+                // either goes away (see `RecipeReviewQueue`). The sheet's
+                // `onDismiss` runs once its dismissal has finished, which is
+                // when the next presentation may start; an alert has no such
+                // callback, so it is watched.
+                .onChange(of: refusal == nil) { _, clear in
                     if clear { advance() }
                 }
-                .sheet(item: $incomingPlan) { identifiablePlan in
+                .sheet(item: $incomingPlan, onDismiss: advance) { identifiablePlan in
                     PlanPreviewView(plan: identifiablePlan.plan)
                 }
                 .sheet(item: Binding(get: { recipes.reviewing },
@@ -100,7 +103,9 @@ struct LiftApp: App {
     /// through the same intake a pasted link does. There is one preview sheet,
     /// so when several are waiting the last one that decodes is the one shown
     /// — the rest stay out of the library, which is the safe direction: a plan
-    /// is only ever added by tapping Accept.
+    /// is only ever added by tapping Accept. Plans arriving while a recipe is
+    /// under review are different: they are held, and each is shown in order
+    /// once the review ends (see `handle`).
     private func drainSharedPlans() {
         guard let inbox = PendingPlanLinks.shared else { return }
         let queued = inbox.takeAll()
@@ -133,6 +138,9 @@ struct LiftApp: App {
     /// review is shown first, and the next recipe opens once it has gone too;
     /// with none held, it opens at once.
     private func advance() {
+        // Still something up (a sheet's dismissal can finish while an alert
+        // is already showing): the next one waits for that to go too.
+        guard incomingPlan == nil && refusal == nil else { return }
         if let held = recipes.takeHeldReport() { show(held); return }
         presentNextRecipe()
     }

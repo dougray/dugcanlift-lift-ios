@@ -1,4 +1,3 @@
-import MapKit
 import SwiftUI
 import SwiftData
 import WidgetKit
@@ -777,9 +776,10 @@ private struct OutdoorHighlights: View {
                         .followsWindowAppearance()
                 } label: {
                     VStack(alignment: .leading, spacing: 10) {
-                        RouteMap(points: last.routePoints)
-                            .frame(height: 180)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        RouteCanvas(points: last.routePoints.map {
+                            OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
+                        })
+                        .frame(height: 180)
 
                         HStack {
                             Text(last.activityType.displayName)
@@ -842,32 +842,5 @@ private struct OutdoorHighlights: View {
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// A route drawn on a map that does not move. Scrolling Train must scroll
-/// Train; panning belongs to the review screen the card opens.
-private struct RouteMap: View {
-    let points: [RoutePoint]
-
-    var body: some View {
-        let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-        Map(initialPosition: .automatic, interactionModes: []) {
-            MapPolyline(coordinates: coordinates)
-                .stroke(Theme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-            if let start = coordinates.first {
-                Annotation("Start", coordinate: start, anchor: .center) {
-                    Circle().fill(Theme.accentSecondary).frame(width: 10, height: 10)
-                }
-                .annotationTitles(.hidden)
-            }
-            if let end = coordinates.last {
-                Annotation("Finish", coordinate: end, anchor: .center) {
-                    Circle().fill(Theme.accent).frame(width: 12, height: 12)
-                }
-                .annotationTitles(.hidden)
-            }
-        }
-        .allowsHitTesting(false)
     }
 }

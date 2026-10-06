@@ -40,18 +40,18 @@ enum LiftTab: String, CaseIterable, Identifiable, Hashable {
 /// width keeps the top bar.
 struct RootView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.recipeUnderReview) private var recipeUnderReview
+    @Environment(\.appIsPresenting) private var appIsPresenting
     @State private var tab: LiftTab = .home
     @State private var showingSettings = false
 
     /// The gear button and Command-comma. A hardware shortcut can reach this
-    /// view while `LiftApp`'s recipe review sheet covers it, and SwiftUI drops
-    /// a second sheet presented beside the first -- which would leave
-    /// `showingSettings` true with nothing on screen, so Settings would not
-    /// open again. Command-comma waits until the review closes, as Coach's
-    /// Shift-Command-V does.
+    /// view while something `LiftApp` presents covers it -- a recipe review,
+    /// a plan preview or a refusal alert -- and SwiftUI drops a second
+    /// presentation beside the first, which would leave `showingSettings` true
+    /// with nothing on screen, so Settings would not open again. Command-comma
+    /// waits until it closes, as Coach's Shift-Command-V does.
     private func openSettings() {
-        guard !recipeUnderReview else { return }
+        guard !appIsPresenting else { return }
         showingSettings = true
     }
 
@@ -217,17 +217,18 @@ struct RootView: View {
     }
 }
 
-// MARK: - Recipe under review
+// MARK: - Something LiftApp presents
 
-private struct RecipeUnderReviewKey: EnvironmentKey {
+private struct AppIsPresentingKey: EnvironmentKey {
     static let defaultValue = false
 }
 
 extension EnvironmentValues {
-    /// True while `LiftApp` has a recipe from Safari open for review, so
-    /// nothing a keyboard shortcut raises tries to present beside it.
-    var recipeUnderReview: Bool {
-        get { self[RecipeUnderReviewKey.self] }
-        set { self[RecipeUnderReviewKey.self] = newValue }
+    /// True while `LiftApp` has a recipe review, a plan preview or a refusal
+    /// alert up, so nothing a keyboard shortcut raises tries to present
+    /// beside it.
+    var appIsPresenting: Bool {
+        get { self[AppIsPresentingKey.self] }
+        set { self[AppIsPresentingKey.self] = newValue }
     }
 }

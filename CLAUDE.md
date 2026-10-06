@@ -134,7 +134,7 @@ visible to users.
 **LIFT makes no network calls.** Nothing in the app, its share extension or
 its widget requests anything from any server — the in-house rule (LIFT
 superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
-`NoNetworkTests`, which fails the build on `URLSession`, `URLRequest`,
+`NoNetworkTests`, which fails `make test` on `URLSession`, `URLRequest`,
 `NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
 `AsyncImage(` in any Swift file under `Sources/`, and on `fetch(`,
 `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `import(` in any JavaScript file
@@ -151,9 +151,10 @@ review beside `LiftApp`'s plan sheet or refusal alert could strand it, with
 nothing left to retry from. So the queue holds the rules, as a value type with
 no view in it for the reason `PlanLinkIntake` is one. One review at a time. A
 review waits for the plan sheet and the refusal alert, and Command-comma does
-not open Settings while a review is up. A review whose sheet never appeared
-(`markAppeared` never came) was dropped, and is retried on the next activation
-as a new item, so the sheet sees something new to present. A plan or refusal
+not open Settings while `LiftApp` has a review, a plan or a refusal up. A
+review whose sheet never appeared (`markAppeared` never came) was dropped, and
+is retried on the next activation as a new item, so the sheet sees something
+new to present. A plan or refusal
 arriving mid-review is held, and every held one is shown in order, before the
 next recipe. The same recipe queued twice is one review. The sheet closes only
 by Cancel or Save -- no swipe. `RecipeReviewQueueTests` pins the queue's rules,
@@ -175,8 +176,8 @@ or none) and its yield rule (a line must open with a yield word and carry a
 number) are both pinned in the kit, and the looser versions silently removed a
 real line or halved every macro in a dish. Social video is out of reach by
 design — no site among TikTok, Instagram, Reels or YouTube publishes a
-schema.org `Recipe` — so pasting the caption is the supported path, not a
-workaround waiting on a better scraper.
+schema.org `Recipe` — so pasting the caption is the supported path, not a gap
+to close: LIFT never fetches a page.
 
 **A shared route is opt-in and trimmed.** Send to Coach always carries runs,
 walks and hikes as times, distances and bests (`o`, `ob`), but the newest

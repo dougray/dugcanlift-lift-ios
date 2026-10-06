@@ -128,8 +128,8 @@ targets:
             CFBundleURLSchemes:
               - dugcanliftlift
 
-        # The app uses only standard HTTPS (URLSession, fetching a recipe page
-        # the person pastes), which is exempt from export documentation.
+        # LIFT makes no network requests (NoNetworkTests), so it uses no
+        # encryption beyond what iOS itself provides.
         ITSAppUsesNonExemptEncryption: false
 
         # HealthKit — both strings are required or the app is rejected. Each
@@ -200,7 +200,8 @@ targets:
   # Messages, Mail or Notes. It decodes the link to say what plan it is, then
   # queues the fragment in the App Group for the app to open on its next
   # foreground -- see PendingPlanLinks for why it does not open the app, and
-  # why it never writes a routine itself.
+  # why it never writes a routine itself. It also takes a recipe from the page
+  # Safari shares: RecipePage.js hands over the JSON-LD (PendingRecipeImports).
   #
   # A second extension is a second App ID to register, which a free Personal
   # Team rations (ten new ids per seven days). Worth it: without it, and

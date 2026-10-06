@@ -3,14 +3,22 @@ import SwiftUI
 import UniformTypeIdentifiers
 import LiftCore
 
-/// The share sheet's entry point: finds a coach's plan link in what was
-/// shared, says what it is, and queues its fragment for the app
-/// (`PendingPlanLinks`). LIFT shows the plan the next time it comes to the
-/// foreground, through Paste a Plan Link's own code path.
+/// The share sheet's entry point, for one of two things (`RecipeShareDecision`
+/// decides which, and a link always wins):
 ///
-/// Nothing here touches SwiftData, and nothing here accepts a plan. The link
-/// is decoded only to show who it is from and to refuse a bad one before the
-/// lifter leaves the share sheet; Accept still happens on `PlanPreviewView`
+/// - **A coach's plan link** in what was shared, or the LIFT web app's own
+///   address with the plan already read out of it. The lifter sees what the
+///   plan is and its fragment is queued for the app (`PendingPlanLinks`), which
+///   shows it the next time it comes to the foreground, through Paste a Plan
+///   Link's own code path.
+/// - **A recipe from the page Safari shared.** `RecipePage.js` hands over the
+///   page's JSON-LD; the lifter confirms the recipe and its raw block is queued
+///   (`PendingRecipeImports`) for the app to open for review.
+///
+/// Nothing here touches SwiftData or the network, and nothing here accepts a
+/// plan or saves a recipe. A link is decoded, and a recipe read, only to show
+/// what it is and to refuse a bad one before the lifter leaves the share sheet;
+/// Accept still happens on `PlanPreviewView`, and Save on `RecipeImportView`,
 /// in the app.
 ///
 /// A port of Coach iOS's `ShareViewController`, in the other direction: there
@@ -107,19 +115,14 @@ final class ShareModel: ObservableObject {
     var finish: () -> Void = {}
 
     /// A plan link, the LIFT page with no plan in it, or the lifter's own
-    /// log link -- everything the link flow answers. None of these needs the
-    /// lifter's id, so a recipe can be told apart before that gate, and a
-    /// recipe works on a phone where LIFT has never been opened.
-    static func isLink(_ text: String) -> Bool {
-        PlanLinkExtractor.fragment(in: text) != nil
-            || PlanLinkExtractor.isLiftPageWithoutPlan(text)
-            || PlanLinkExtractor.isCoachLogLink(text)
-    }
+    /// log link -- everything the link flow answers.
+    static func isLink(_ text: String) -> Bool { PlanLinkExtractor.isLink(text) }
 
     func resolve(candidates: [String], page: SharedRecipePage?) {
         switch RecipeShareDecision.decide(candidates: candidates, page: page, isLink: Self.isLink) {
-        case .useLinkFlow:
-            resolveLink(candidates: candidates)
+        case let .useLinkFlow(linkCandidates):
+            // Includes the page's own address when Safari passed only the page.
+            resolveLink(candidates: linkCandidates)
         case let .recipe(name, servings, item):
             state = .recipe(name: name, servings: servings, item: item)
         case .noRecipe:

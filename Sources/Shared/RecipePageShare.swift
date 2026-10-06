@@ -41,17 +41,22 @@ struct SharedRecipePage: Equatable {
 /// The share sheet's answer to what was shared, in the order the spec fixes:
 /// a plan link always wins, then a recipe, then neither.
 enum RecipeShareDecision: Equatable {
-    /// Leave it to the link flow that existed before recipes came from Safari.
-    case useLinkFlow
+    /// Leave it to the link flow that existed before recipes came from Safari,
+    /// reading `candidates`: what was shared, plus the page's own address when
+    /// Safari passed the page. Safari may hand over only the page, and the LIFT
+    /// web app's address with no plan in it is a link-flow answer of its own.
+    case useLinkFlow(candidates: [String])
     case recipe(name: String, servings: Double?, item: PendingRecipeImports.Item)
     /// A page from Safari with no link and no recipe card.
     case noRecipe
 
+    /// `isLink` is the app's own link predicate, passed in so this file stays
+    /// Foundation and LiftCore only.
     static func decide(candidates: [String], page: SharedRecipePage?,
                        isLink: (String) -> Bool) -> RecipeShareDecision {
-        if candidates.contains(where: isLink) { return .useLinkFlow }
-        guard let page else { return .useLinkFlow }
-        if isLink(page.url.absoluteString) { return .useLinkFlow }
+        guard let page else { return .useLinkFlow(candidates: candidates) }
+        let withPage = candidates + [page.url.absoluteString]
+        if withPage.contains(where: isLink) { return .useLinkFlow(candidates: withPage) }
         guard let found = page.firstRecipe() else { return .noRecipe }
         return .recipe(name: found.recipe.name, servings: found.recipe.servings,
                        item: .init(block: found.block, pageURL: page.url.absoluteString))

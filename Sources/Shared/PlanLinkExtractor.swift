@@ -110,6 +110,16 @@ enum PlanLinkExtractor {
         coachLinkPattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
+    /// Whether the link flow answers this text: a plan link, the LIFT page with
+    /// no plan in it, or the lifter's own log link -- each has a sentence of its
+    /// own there. The share sheet asks this before it looks for a recipe,
+    /// because a link always wins. None of these needs the lifter's id, so a
+    /// recipe is told apart before that gate and works on a phone where LIFT
+    /// has never been opened.
+    static func isLink(_ text: String) -> Bool {
+        fragment(in: text) != nil || isLiftPageWithoutPlan(text) || isCoachLogLink(text)
+    }
+
     /// The URL that opens LIFT and shows the plan in `fragment`.
     static func openURL(for fragment: String) -> URL? {
         URL(string: "\(urlScheme)://\(urlHost)#\(fragment)")

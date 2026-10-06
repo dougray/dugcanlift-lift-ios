@@ -57,14 +57,66 @@ final class RecipePageShareTests: XCTestCase {
         let page = SharedRecipePage(url: recipePage, blocks: [Self.bare])
         let decision = RecipeShareDecision.decide(candidates: ["a link"], page: page,
                                                   isLink: { $0 == "a link" })
-        XCTAssertEqual(decision, .useLinkFlow)
+        XCTAssertEqual(decision, .useLinkFlow(candidates: ["a link", recipePage.absoluteString]))
+    }
+
+    /// A real plan link in what was shared beats a recipe card on the page,
+    /// read with the predicate the share extension itself uses.
+    func testARealLinkWinsOverARecipePage() {
+        let link = "https://www.dugcanlift.com/lift/#1zABCDEF"
+        let page = SharedRecipePage(url: recipePage, blocks: [Self.bare])
+        let decision = RecipeShareDecision.decide(candidates: [link], page: page, isLink: PlanLinkExtractor.isLink)
+        guard case let .useLinkFlow(candidates) = decision else { return XCTFail("expected the link flow, got \(decision)") }
+        XCTAssertTrue(candidates.contains(link))
     }
 
     func testAPageThatIsItselfALinkUsesTheLinkFlow() {
         let page = SharedRecipePage(url: URL(string: "https://www.dugcanlift.com/coach/")!, blocks: [])
         let decision = RecipeShareDecision.decide(candidates: [], page: page,
                                                   isLink: { $0.contains("dugcanlift.com/coach/") })
-        XCTAssertEqual(decision, .useLinkFlow)
+        XCTAssertEqual(decision, .useLinkFlow(candidates: ["https://www.dugcanlift.com/coach/"]))
+    }
+
+    /// Safari may hand over only the page (no `public.url`). The LIFT web
+    /// app's own address must still reach the link flow, or the lifter is told
+    /// "not a plan link" instead of "the plan isn't in this address".
+    func testAPageOnlyLiftPageReachesTheLinkFlowWithItsAddress() {
+        let liftPage = URL(string: "https://www.dugcanlift.com/lift/")!
+        let page = SharedRecipePage(url: liftPage, blocks: [])
+        let decision = RecipeShareDecision.decide(candidates: [], page: page, isLink: PlanLinkExtractor.isLink)
+        guard case let .useLinkFlow(candidates) = decision else { return XCTFail("expected the link flow, got \(decision)") }
+        XCTAssertTrue(candidates.contains(liftPage.absoluteString), "the page's address is what the link flow reads")
+        XCTAssertTrue(candidates.contains(where: PlanLinkExtractor.isLiftPageWithoutPlan),
+                      "which the link flow answers as the LIFT page with no plan in its address")
+        // And the link flow's own reading of those candidates, as the share
+        // extension's `resolveLink` reads them, says exactly that.
+        XCTAssertTrue(candidates.contains { PlanLinkIntake.read($0, expectedLifterID: "a1b2c3d4") == .refused(.pageWithoutPlan) },
+                      "the lifter is told the plan isn't in this address")
+    }
+
+    /// The lifter's own log link, shared from Safari with the page, is the link
+    /// flow's to refuse in its own words -- never offered as a recipe.
+    func testACoachLogLinkWinsOverARecipePage() {
+        let log = "https://www.dugcanlift.com/coach/#1zABCDEF"
+        let page = SharedRecipePage(url: recipePage, blocks: [Self.bare])
+        let decision = RecipeShareDecision.decide(candidates: [log], page: page, isLink: PlanLinkExtractor.isLink)
+        guard case let .useLinkFlow(candidates) = decision else { return XCTFail("expected the link flow, got \(decision)") }
+        XCTAssertTrue(candidates.contains { PlanLinkIntake.read($0, expectedLifterID: "a1b2c3d4") == .refused(.ownLogLink) })
+    }
+
+    func testARecipePageWithNoLinkIsARecipeUnderTheRealPredicate() {
+        let page = SharedRecipePage(url: recipePage, blocks: [Self.bare])
+        let decision = RecipeShareDecision.decide(candidates: [recipePage.absoluteString], page: page,
+                                                  isLink: PlanLinkExtractor.isLink)
+        guard case .recipe = decision else { return XCTFail("expected a recipe, got \(decision)") }
+    }
+
+    func testTheLinkPredicate() {
+        XCTAssertTrue(PlanLinkExtractor.isLink("https://www.dugcanlift.com/lift/#1zABCDEF"))
+        XCTAssertTrue(PlanLinkExtractor.isLink("https://www.dugcanlift.com/lift/"), "the LIFT page with no plan")
+        XCTAssertTrue(PlanLinkExtractor.isLink("https://www.dugcanlift.com/coach/#1zABCDEF"), "the lifter's own log link")
+        XCTAssertFalse(PlanLinkExtractor.isLink(recipePage.absoluteString))
+        XCTAssertFalse(PlanLinkExtractor.isLink("https://example.org/#1zABCDEF"), "another site's fragment")
     }
 
     func testAPageWithNoRecipeSaysSo() {
@@ -78,6 +130,6 @@ final class RecipePageShareTests: XCTestCase {
 
     func testNotFromSafariLeavesItToTheLinkFlow() {
         XCTAssertEqual(RecipeShareDecision.decide(candidates: ["some text"], page: nil, isLink: noLinks),
-                       .useLinkFlow, "the link flow already says what it says for stray text")
+                       .useLinkFlow(candidates: ["some text"]), "the link flow already says what it says for stray text")
     }
 }

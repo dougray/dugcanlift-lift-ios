@@ -29,7 +29,8 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
   local `Sources/Reference/` — that directory no longer exists here.
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
 - **`Sources/ShareExtension/`** — the `LiftShare` share extension (see "A
-  coach's plan link, and why Universal Links are not the answer" below).
+  coach's plan link, and why Universal Links are not the answer" below, and
+  "LIFT makes no network calls" for how a recipe arrives from Safari).
 
 The SwiftData store lives in the App Group container
 (`group.com.dugcanlift.lift`) so the widget extension can read it. Do not move it
@@ -58,7 +59,7 @@ so a link that opens one way opens every way and one that fails, fails alike:
    push, not a sheet: Settings is itself a sheet, and a second `.sheet` on
    `CoachSection` opened the screen and closed both again.
 3. **The share extension** (`LiftShare`, `Sources/ShareExtension/`). "LIFT"
-   appears in the share sheet for a URL or text; it says what the plan is
+   appears in the share sheet for a URL, text or web page; it says what the plan is
    ("Plan from Doug · 1 workout · 1 scheduled day") or why it will not take it,
    and on Add queues the *fragment* in the existing App Group
    `group.com.dugcanlift.lift` (`PendingPlanLinks`). `LiftApp` drains the queue
@@ -73,9 +74,12 @@ The extension in particular **does not open the app and does not write
 SwiftData** -- iOS gives a share extension no supported way to open its
 containing app, and a routine appearing in someone's library from a share
 sheet is not a decision the share sheet gets to make. It compiles only
-`PlanLinkExtractor.swift`, `PlanLinkIntake.swift` and `PendingPlanLinks.swift`
+`PlanLinkExtractor.swift`, `PlanLinkIntake.swift`, `RoadPickLink.swift`,
+`PendingPlanLinks.swift`, `PendingRecipeImports.swift` and `RecipePageShare.swift`
 from `Sources/Shared`, listed file by file, and links `LiftCore` only: never
-SwiftData models, never `LiftReference`. It has its own
+SwiftData models, never `LiftReference`. The recipe path is decided before the
+lifter-id gate, because a recipe needs no id; a plan link always wins over a
+recipe. It has its own
 `PrivacyInfo.xcprivacy`, because an extension is its own bundle. It is a new
 bundle id, `com.dugcanlift.lift.share`, so the next free-team device build
 registers one more App ID (ten per seven days is the cap).
@@ -121,6 +125,17 @@ string key, not date-range predicates. The two must stay consistent.
 **HealthKit writes must be idempotent.** Check `healthKitUUID` before writing;
 set it after. Background sync retries, and duplicated Health entries are very
 visible to users.
+
+**LIFT makes no network calls.** Nothing in the app, its share extension or
+its widget requests anything from any server — the in-house rule (LIFT
+superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
+`NoNetworkTests`, which fails the build on `URLSession`, `URLRequest`,
+`NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
+`AsyncImage(` in shipped source. A recipe on the web arrives **from Safari**:
+the share extension's `RecipePage.js` hands over the page's JSON-LD, the
+extension queues the raw block (`PendingRecipeImports`), and `RecipeImportView`
+re-reads it with `LiftCore.RecipeJSONLD` for review. LIFT never fetches the
+page.
 
 **A pasted recipe is edited, not reviewed.** `RecipeImportView` can review
 because a page's JSON-LD is labelled — the publisher said which strings are

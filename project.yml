@@ -212,7 +212,7 @@ targets:
     sources:
       - path: Sources/ShareExtension
       # Only what the extension needs from Shared: no SwiftData, no views, no
-      # models. Listing the three files rather than the folder is what keeps
+      # models. Listing the files rather than the folder is what keeps
       # that true -- a new file in Sources/Shared does not silently join a
       # share sheet with a tight memory limit.
       - path: Sources/Shared/PlanLinkExtractor.swift
@@ -224,6 +224,8 @@ targets:
       # extension still imports nothing.
       - path: Sources/Shared/RoadPickLink.swift
       - path: Sources/Shared/PendingPlanLinks.swift
+      - path: Sources/Shared/PendingRecipeImports.swift
+      - path: Sources/Shared/RecipePageShare.swift
     dependencies:
       # LiftCore only. LiftReference's GRDB and its reference databases have
       # no business in a share sheet.
@@ -249,12 +251,16 @@ targets:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
           NSExtensionAttributes:
+            # Safari runs RecipePage.js on a shared page and hands over its
+            # JSON-LD, so a recipe arrives without LIFT requesting anything.
+            NSExtensionJavaScriptPreprocessingFile: RecipePage
             # A web URL (Safari, Messages' link previews) or text (Notes, Mail,
             # a message body) -- a plan link can arrive as either. Text means
             # LIFT is offered for any text; the extension says plainly when it
             # isn't a plan link.
             NSExtensionActivationRule:
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
               NSExtensionActivationSupportsText: true
 
   # --------------------------------------------------------------- tests

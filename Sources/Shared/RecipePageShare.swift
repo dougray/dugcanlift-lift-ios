@@ -4,8 +4,8 @@ import LiftCore
 /// What Safari's `RecipePage.js` hands the share extension when a page is
 /// shared: the page's address and the text of every `application/ld+json`
 /// block on it. Safari already has the page on screen, so LIFT requests
-/// nothing. Compiled into the app, its share extension and the widget; Foundation and
-/// LiftCore only.
+/// nothing. Compiled into the app, its share extension and the widget;
+/// Foundation and LiftCore only.
 struct SharedRecipePage: Equatable {
     var url: URL
     var blocks: [String]

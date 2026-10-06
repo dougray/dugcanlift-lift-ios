@@ -39,18 +39,25 @@ final class ShareViewController: UIViewController {
 
         let items = (extensionContext?.inputItems as? [NSExtensionItem]) ?? []
         Task { @MainActor in
-            model.resolve(candidates: await Self.candidateTexts(in: items))
+            let shared = await Self.sharedContent(in: items)
+            model.resolve(candidates: shared.texts, page: shared.page)
         }
     }
 
-    /// Every string the share could be carrying a link in: shared URLs,
-    /// shared text, and the item's own text (Messages and Mail put the
-    /// message body there). Order is only a preference; the first that
-    /// decodes wins.
-    private static func candidateTexts(in items: [NSExtensionItem]) async -> [String] {
+    /// Every string the share could be carrying a link in -- shared URLs,
+    /// shared text, the item's own text (Messages and Mail put the message
+    /// body there) -- and, when the share came from Safari, what RecipePage.js
+    /// returned. Order is only a preference; the first that decodes wins.
+    private static func sharedContent(in items: [NSExtensionItem]) async -> (texts: [String], page: SharedRecipePage?) {
         var texts: [String] = []
+        var page: SharedRecipePage?
         for item in items {
             for provider in item.attachments ?? [] {
+                if provider.hasItemConformingToTypeIdentifier(UTType.propertyList.identifier),
+                   let loaded = try? await provider.loadItem(forTypeIdentifier: UTType.propertyList.identifier),
+                   let results = (loaded as? NSDictionary)?[NSExtensionJavaScriptPreprocessingResultsKey] {
+                    page = page ?? SharedRecipePage(preprocessingResults: results)
+                }
                 if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
                    let url = try? await provider.loadItem(forTypeIdentifier: UTType.url.identifier) as? URL {
                     texts.append(url.absoluteString)
@@ -65,7 +72,7 @@ final class ShareViewController: UIViewController {
                 texts.append(body)
             }
         }
-        return texts
+        return (texts, page)
     }
 }
 
@@ -86,12 +93,49 @@ final class ShareModel: ObservableObject {
         /// The build is missing the App Group entitlement, so nothing written
         /// here would reach the app. Said plainly rather than failing quietly.
         case noSharedStorage
+        /// The same missing App Group, met while adding a recipe rather than a
+        /// link. Kept apart from `noSharedStorage`, whose words are about
+        /// links; the way round for a recipe is Paste a recipe.
+        case noSharedStorageForRecipe
+        /// A schema.org recipe on the page Safari shared.
+        case recipe(name: String, servings: Double?, item: PendingRecipeImports.Item)
+        /// A page from Safari with no plan link and no recipe card.
+        case noRecipe
     }
 
     @Published var state: State = .reading
     var finish: () -> Void = {}
 
-    func resolve(candidates: [String]) {
+    /// A plan link, the LIFT page with no plan in it, or the lifter's own
+    /// log link -- everything the link flow answers. None of these needs the
+    /// lifter's id, so a recipe can be told apart before that gate, and a
+    /// recipe works on a phone where LIFT has never been opened.
+    static func isLink(_ text: String) -> Bool {
+        PlanLinkExtractor.fragment(in: text) != nil
+            || PlanLinkExtractor.isLiftPageWithoutPlan(text)
+            || PlanLinkExtractor.isCoachLogLink(text)
+    }
+
+    func resolve(candidates: [String], page: SharedRecipePage?) {
+        switch RecipeShareDecision.decide(candidates: candidates, page: page, isLink: Self.isLink) {
+        case .useLinkFlow:
+            resolveLink(candidates: candidates)
+        case let .recipe(name, servings, item):
+            state = .recipe(name: name, servings: servings, item: item)
+        case .noRecipe:
+            state = .noRecipe
+        }
+    }
+
+    func addRecipe(_ item: PendingRecipeImports.Item) {
+        guard let inbox = PendingRecipeImports.shared, (try? inbox.add(item)) != nil else {
+            state = .noSharedStorageForRecipe
+            return
+        }
+        finish()
+    }
+
+    private func resolveLink(candidates: [String]) {
         guard let inbox = PendingPlanLinks.shared else {
             state = .noSharedStorage
             return
@@ -161,6 +205,13 @@ struct SharePlanView: View {
                             .foregroundStyle(Theme.accent)
                     }
                 }
+                if case .recipe(_, _, let item) = model.state {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Add") { model.addRecipe(item) }
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
             }
         }
         .tint(Theme.accent)
@@ -207,6 +258,38 @@ struct SharePlanView: View {
                 Text("This build of LIFT can't pass links from the share sheet. Copy the link and use Paste a Plan Link in Settings instead.")
                     .font(.subheadline)
                     .foregroundStyle(Theme.textPrimary)
+            }
+        case .noSharedStorageForRecipe:
+            LiftCard {
+                Text("This build of LIFT can't pass recipes from the share sheet")
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Copy the recipe's text and use Paste a recipe in LIFT instead.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        case let .recipe(name, servings, _):
+            LiftCard(title: "Add to LIFT") {
+                Text("Add \(name)")
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                if let servings {
+                    Text("Serves \(CookFormat.trimmed(servings))")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textPrimary)
+                }
+                Text("LIFT shows it for review the next time you open it.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        case .noRecipe:
+            LiftCard {
+                Text("There's no recipe card on this page")
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Copy the recipe's text and use Paste a recipe in LIFT instead.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
     }

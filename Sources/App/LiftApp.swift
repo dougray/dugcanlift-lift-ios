@@ -27,6 +27,11 @@ struct LiftApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var incomingPlan: IdentifiablePlan?
     @State private var refusal: PlanLinkIntake.Refusal?
+    /// Recipes Safari handed over, and the rules for when each may open. Its
+    /// held "reports" are plan outcomes: a plan sheet or a refusal alert that
+    /// arrives while a recipe is under review would be dropped by SwiftUI,
+    /// which presents one thing at a time on this view, so it waits here.
+    @State private var recipes = RecipeReviewQueue<PlanLinkIntake.Outcome>()
 
     // `WatchSyncReceiver` doesn't drive any UI, so it isn't `@State` — it
     // just needs to exist for the app's lifetime so its `WCSessionDelegate`
@@ -56,12 +61,31 @@ struct LiftApp: App {
                 // `.active` covers both a cold launch and returning from the
                 // share sheet, which is when the extension's queue has
                 // something in it.
+                // Plans first, then recipes, the order the extension decides in.
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     guard phase == .active else { return }
+                    recipes.activated()
                     drainSharedPlans()
+                    if let drained = PendingRecipeImports.shared {
+                        recipes.enqueue(drained.takeAll())
+                    }
+                    presentNextRecipe()
+                }
+                // One presentation at a time on this view: a recipe waits for
+                // the plan sheet and the refusal alert, and tries again when
+                // either goes away (see `RecipeReviewQueue`).
+                .onChange(of: incomingPlan == nil && refusal == nil) { _, clear in
+                    if clear { advance() }
                 }
                 .sheet(item: $incomingPlan) { identifiablePlan in
                     PlanPreviewView(plan: identifiablePlan.plan)
+                }
+                .sheet(item: Binding(get: { recipes.reviewing },
+                                     set: { if $0 == nil { recipes.dismissed() } }),
+                       onDismiss: afterRecipeReview) { queued in
+                    RecipeImportView(item: queued.item)
+                        .onAppear { recipes.markAppeared() }
+                        .liftAppearance()
                 }
                 .alert("Couldn't open this plan", isPresented: .constant(refusal != nil), presenting: refusal) { _ in
                     Button("OK") { refusal = nil }
@@ -86,7 +110,34 @@ struct LiftApp: App {
         }
     }
 
+    /// A plan or refusal ready to show. With a recipe under review it is held
+    /// instead (nothing else may present beside it) and shown when the review
+    /// ends, before the next recipe.
     private func handle(_ outcome: PlanLinkIntake.Outcome) {
+        if case .ignored = outcome { return }
+        if let now = recipes.report(outcome) { show(now) }
+    }
+
+    /// Opens the next waiting recipe, unless something is already on screen.
+    private func presentNextRecipe() {
+        _ = recipes.next(canPresent: incomingPlan == nil && refusal == nil)
+    }
+
+    /// A review ended: end it (idempotently), then `advance()`.
+    private func afterRecipeReview() {
+        recipes.dismissed()
+        advance()
+    }
+
+    /// Whatever is on screen has gone. A plan or refusal that arrived during a
+    /// review is shown first, and the next recipe opens once it has gone too;
+    /// with none held, it opens at once.
+    private func advance() {
+        if let held = recipes.takeHeldReport() { show(held); return }
+        presentNextRecipe()
+    }
+
+    private func show(_ outcome: PlanLinkIntake.Outcome) {
         switch outcome {
         case .ignored:
             return

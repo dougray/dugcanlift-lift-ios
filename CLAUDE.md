@@ -135,8 +135,8 @@ schema.org `Recipe` — so pasting the caption is the supported path, not a
 workaround waiting on a better scraper.
 
 **A shared route is opt-in and trimmed.** Send to Coach always carries runs,
-walks and hikes as times, distances and bests (`o`, `ob`), but the map of the
-newest one (`lr`) goes only when `coachShareLastRoute` is on, and it is off by
+walks and hikes as times, distances and bests (`o`, `ob`), but the newest
+one's route (`lr`) goes only when `coachShareLastRoute` is on, and it is off by
 default. Even then the first and last 200 m are cut: a route usually starts and
 ends at someone's front door, and a link sits in a coach's inbox indefinitely.
 `CoachShare` only maps `OutdoorActivity` in — what is sent, the rounding, the

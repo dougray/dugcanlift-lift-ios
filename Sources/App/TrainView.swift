@@ -756,7 +756,7 @@ private struct OutdoorDaySection: View {
     }
 }
 
-/// The space under Outdoor: the newest route on a map, and the best distance,
+/// The space under Outdoor: the newest route, drawn without a map, and the best distance,
 /// time and pace for each kind of activity. All-time rather than the selected
 /// day's, so it is still there on a rest day.
 private struct OutdoorHighlights: View {

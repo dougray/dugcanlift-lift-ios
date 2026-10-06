@@ -50,6 +50,7 @@ struct LiftApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(\.recipeUnderReview, recipes.reviewing != nil)
                 // `dugcanliftlift://plan#1z...`, LIFT's own scheme, which
                 // needs no entitlement — and, on a paid team where Associated
                 // Domains can be signed, a `www.dugcanlift.com/lift/#...`
@@ -88,6 +89,10 @@ struct LiftApp: App {
                        onDismiss: afterRecipeReview) { queued in
                     RecipeImportView(item: queued.item)
                         .onAppear { recipes.markAppeared() }
+                        // Cancel and Save only: a swipe that ended the review
+                        // would drop a recipe that is already gone from the
+                        // App Group.
+                        .interactiveDismissDisabled()
                         .liftAppearance()
                 }
                 .alert("Couldn't open this plan", isPresented: .constant(refusal != nil), presenting: refusal) { _ in

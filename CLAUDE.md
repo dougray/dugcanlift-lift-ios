@@ -59,7 +59,8 @@ so a link that opens one way opens every way and one that fails, fails alike:
    push, not a sheet: Settings is itself a sheet, and a second `.sheet` on
    `CoachSection` opened the screen and closed both again.
 3. **The share extension** (`LiftShare`, `Sources/ShareExtension/`). "LIFT"
-   appears in the share sheet for a URL, text or web page; it says what the plan is
+   appears in the share sheet for a URL or text, or a web page in Safari (where
+   a page with no plan link may offer its recipe instead); it says what the plan is
    ("Plan from Doug · 1 workout · 1 scheduled day") or why it will not take it,
    and on Add queues the *fragment* in the existing App Group
    `group.com.dugcanlift.lift` (`PendingPlanLinks`). `LiftApp` drains the queue
@@ -106,7 +107,11 @@ queueing a plan it could not check.
 fragment with `history.replaceState` as soon as it has read it, exactly as the
 Coach web app does, so sharing from Safari after the page loaded sends
 `https://www.dugcanlift.com/lift/`. `isLiftPageWithoutPlan` recognises that and
-says to share from the message it arrived in instead.
+says to share from the message it arrived in instead. Safari may pass only the
+page, with no URL of its own, so `RecipeShareDecision.useLinkFlow` carries the
+page's address to the link flow beside the shared text, and
+`PlanLinkExtractor.isLink` is the one predicate both the decision and its tests
+use.
 
 ## Conventions that matter
 
@@ -131,11 +136,35 @@ its widget requests anything from any server — the in-house rule (LIFT
 superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
 `NoNetworkTests`, which fails the build on `URLSession`, `URLRequest`,
 `NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
-`AsyncImage(` in shipped source. A recipe on the web arrives **from Safari**:
+`AsyncImage(` in any Swift file under `Sources/`, and on `fetch(`,
+`XMLHttpRequest`, `WebSocket`, `sendBeacon` or `import(` in any JavaScript file
+there (`RecipePage.js`). A recipe on the web arrives **from Safari**:
 the share extension's `RecipePage.js` hands over the page's JSON-LD, the
 extension queues the raw block (`PendingRecipeImports`), and `RecipeImportView`
 re-reads it with `LiftCore.RecipeJSONLD` for review. LIFT never fetches the
 page.
+
+**A shared recipe opens through `RecipeReviewQueue`, one at a time.** A recipe
+drained from the App Group is gone from disk, and SwiftUI shows one
+presentation at a time on a view and silently drops a second: presenting a
+review beside `LiftApp`'s plan sheet or refusal alert could strand it, with
+nothing left to retry from. So the queue holds the rules, as a value type with
+no view in it for the reason `PlanLinkIntake` is one. One review at a time. A
+review waits for the plan sheet and the refusal alert, and Command-comma does
+not open Settings while a review is up. A review whose sheet never appeared
+(`markAppeared` never came) was dropped, and is retried on the next activation
+as a new item, so the sheet sees something new to present. A plan or refusal
+arriving mid-review is held, and every held one is shown in order, before the
+next recipe. The same recipe queued twice is one review. The sheet closes only
+by Cancel or Save -- no swipe. `RecipeReviewQueueTests` pins the queue's rules,
+and the queue is Coach iOS's, kept in step with it. Do not simplify back to binding the
+sheet to the first waiting item: that is the version that loses a recipe
+whenever anything else is on screen.
+
+**The loss window is accepted, and it is this one.** The App Group queue is
+emptied when it is drained, not when a review is saved, so Cancel, or the app
+being killed mid-review, means sharing the page from Safari again -- the step
+the lifter took the first time. Accepted, not an oversight to work around.
 
 **A pasted recipe is edited, not reviewed.** `RecipeImportView` can review
 because a page's JSON-LD is labelled — the publisher said which strings are

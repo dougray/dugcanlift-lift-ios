@@ -142,4 +142,18 @@ final class RecipeReviewQueueTests: XCTestCase {
         _ = q.dismissed()
         XCTAssertEqual(q.next(canPresent: true)?.item, item(2))
     }
+
+    /// The same page shared twice before LIFT opened, or shared again while
+    /// it is open for review, is one review, not two.
+    func testTheSameRecipeIsNotQueuedTwice() {
+        var q = Queue()
+        q.enqueue([item(1), item(2), item(1)])
+        XCTAssertEqual(q.waiting.map(\.item), [item(1), item(2)], "a duplicate in one drain")
+        q.enqueue([item(2)])
+        XCTAssertEqual(q.waiting.map(\.item), [item(1), item(2)], "a duplicate of one still waiting")
+        _ = q.next(canPresent: true)
+        q.markAppeared()
+        q.enqueue([item(1), item(3)])
+        XCTAssertEqual(q.waiting.map(\.item), [item(2), item(3)], "a duplicate of the one under review")
+    }
 }

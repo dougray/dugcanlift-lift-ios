@@ -71,10 +71,18 @@ final class RecipePageShareTests: XCTestCase {
     }
 
     func testAPageThatIsItselfALinkUsesTheLinkFlow() {
-        let page = SharedRecipePage(url: URL(string: "https://www.dugcanlift.com/coach/")!, blocks: [])
+        let page = SharedRecipePage(url: URL(string: "https://www.dugcanlift.com/lift/")!, blocks: [])
         let decision = RecipeShareDecision.decide(candidates: [], page: page,
-                                                  isLink: { $0.contains("dugcanlift.com/coach/") })
-        XCTAssertEqual(decision, .useLinkFlow(candidates: ["https://www.dugcanlift.com/coach/"]))
+                                                  isLink: { $0.contains("dugcanlift.com/lift/") })
+        XCTAssertEqual(decision, .useLinkFlow(candidates: ["https://www.dugcanlift.com/lift/"]))
+    }
+
+    /// The Coach web page with no log in it is not a link LIFT answers, so a
+    /// page-only share of it is a page with no recipe card -- by design.
+    func testAPageOnlyCoachWebPageHasNoRecipeCard() {
+        let page = SharedRecipePage(url: URL(string: "https://www.dugcanlift.com/coach/")!, blocks: [])
+        XCTAssertEqual(RecipeShareDecision.decide(candidates: [], page: page, isLink: PlanLinkExtractor.isLink),
+                       .noRecipe)
     }
 
     /// Safari may hand over only the page (no `public.url`). The LIFT web
@@ -115,6 +123,7 @@ final class RecipePageShareTests: XCTestCase {
         XCTAssertTrue(PlanLinkExtractor.isLink("https://www.dugcanlift.com/lift/#1zABCDEF"))
         XCTAssertTrue(PlanLinkExtractor.isLink("https://www.dugcanlift.com/lift/"), "the LIFT page with no plan")
         XCTAssertTrue(PlanLinkExtractor.isLink("https://www.dugcanlift.com/coach/#1zABCDEF"), "the lifter's own log link")
+        XCTAssertFalse(PlanLinkExtractor.isLink("https://www.dugcanlift.com/coach/"), "the Coach web page, no log")
         XCTAssertFalse(PlanLinkExtractor.isLink(recipePage.absoluteString))
         XCTAssertFalse(PlanLinkExtractor.isLink("https://example.org/#1zABCDEF"), "another site's fragment")
     }

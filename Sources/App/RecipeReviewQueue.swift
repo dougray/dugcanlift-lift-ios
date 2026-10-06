@@ -75,10 +75,10 @@ struct RecipeReviewQueue<Report> {
         return true
     }
 
-    /// A link report is ready: returned to be shown now, or held (nil) while a
-    /// recipe is under review or earlier reports are still waiting to be shown.
-    /// Every held report is kept, in arrival order: a "Couldn't import" must
-    /// never be replaced by a later "Log imported".
+    /// A plan outcome is ready: returned to be shown now, or held (nil) while a
+    /// recipe is under review or earlier outcomes are still waiting to be
+    /// shown. Every outcome held during a review is kept, in arrival order: a
+    /// refusal must never be replaced by a later plan.
     mutating func report(_ report: Report) -> Report? {
         guard reviewing != nil || !heldReports.isEmpty else { return report }
         heldReports.append(report)

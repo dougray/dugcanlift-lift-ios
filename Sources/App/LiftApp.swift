@@ -50,7 +50,8 @@ struct LiftApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environment(\.recipeUnderReview, recipes.reviewing != nil)
+                .environment(\.appIsPresenting,
+                             recipes.reviewing != nil || incomingPlan != nil || refusal != nil)
                 // `dugcanliftlift://plan#1z...`, LIFT's own scheme, which
                 // needs no entitlement — and, on a paid team where Associated
                 // Domains can be signed, a `www.dugcanlift.com/lift/#...`

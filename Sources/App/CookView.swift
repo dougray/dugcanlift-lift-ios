@@ -52,7 +52,7 @@ struct RecipeListView: View {
 
     @State private var editing: Recipe?
     @State private var creatingNew = false
-    @State private var importingFromLink = false
+    @State private var showingFromSafari = false
     @State private var browsingCatalogue = false
     @State private var pasting = false
     @Environment(\.pageWidth) private var pageWidth
@@ -96,12 +96,12 @@ struct RecipeListView: View {
                     .buttonStyle(.plain)
 
                     // Second, not first: typing in a recipe you already cook is
-                    // the normal way in, and an import always lands in the same
-                    // editor afterwards anyway.
+                    // the normal way in. A recipe on the web arrives from
+                    // Safari's share sheet; this says how.
                     Button {
-                        importingFromLink = true
+                        showingFromSafari = true
                     } label: {
-                        Label("Import from a link", systemImage: "link")
+                        Label("Import from Safari", systemImage: "safari")
                             .font(Theme.body.weight(.semibold))
                             .foregroundStyle(Theme.accent)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,9 +110,9 @@ struct RecipeListView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Last of the four: a link reads a page properly wherever one
-                    // exists, so this is what is left when no page does -- a video
-                    // caption, an email, a card off the fridge.
+                    // Last of the four: Safari reads a page properly wherever one
+                    // publishes a recipe, so this is what is left when no page does --
+                    // a video caption, an email, a card off the fridge.
                     Button {
                         pasting = true
                     } label: {
@@ -159,9 +159,7 @@ struct RecipeListView: View {
         .sheet(isPresented: $creatingNew) {
             RecipeEditorView(recipe: nil).liftAppearance()
         }
-        .sheet(isPresented: $importingFromLink) {
-            RecipeImportView().liftAppearance()
-        }
+        .sheet(isPresented: $showingFromSafari) { FromSafariView() }
         .sheet(isPresented: $browsingCatalogue) {
             RecipeCatalogView().liftAppearance()
         }

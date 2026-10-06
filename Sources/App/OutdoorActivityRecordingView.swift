@@ -1,10 +1,9 @@
-import MapKit
 import SwiftData
 import SwiftUI
 import LiftCore
 
-/// Live recording: elapsed time, distance, pace, and a live-updating map
-/// trace. `LocationTracker` is the source of truth for points while
+/// Live recording: elapsed time, distance, pace, and a live-updating
+/// route. `LocationTracker` is the source of truth for points while
 /// recording; nothing here reads from HealthKit — that only happens once
 /// this screen calls `finish()` and hands off to the review screen.
 ///
@@ -42,15 +41,11 @@ struct OutdoorActivityRecordingView: View {
                 )
             } else {
                 VStack(spacing: 16) {
-                    Map {
-                        if tracker.points.count > 1 {
-                            MapPolyline(coordinates: tracker.points.map {
-                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                            })
-                            .stroke(.orange, lineWidth: 4)
-                        }
-                    }
-                    .frame(height: 300)
+                    // The line on its own, as LIFT Android draws it: no tile
+                    // server learns where you are running.
+                    RouteCanvas(points: tracker.points.map {
+                        OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
+                    }, aspectRatio: 1)
 
                     statsRow
 

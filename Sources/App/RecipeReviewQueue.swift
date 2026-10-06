@@ -31,8 +31,12 @@ struct RecipeReviewQueue<Report> {
     private(set) var reviewingAppeared = false
     private(set) var heldReports: [Report] = []
 
+    /// Adds what the share extension queued, skipping a recipe already waiting
+    /// or under review: the same page shared twice is one review, not two.
     mutating func enqueue(_ items: [PendingRecipeImports.Item]) {
-        waiting += items.map { QueuedRecipe(item: $0) }
+        for item in items where reviewing?.item != item && !waiting.contains(where: { $0.item == item }) {
+            waiting.append(QueuedRecipe(item: item))
+        }
     }
 
     /// Starts the next review, only when nothing is under review and the
@@ -59,8 +63,10 @@ struct RecipeReviewQueue<Report> {
         reviewing = nil
     }
 
-    /// The review sheet closed. True when this ended a review, so the caller
-    /// advances once however many times SwiftUI says it closed.
+    /// The review sheet closed. Idempotent: the first call ends the review and
+    /// returns true, and any later one finds nothing under review and returns
+    /// false. The sheet's binding setter and its `onDismiss` may both call it;
+    /// the caller advances only from `onDismiss`, so a close is one advance.
     @discardableResult
     mutating func dismissed() -> Bool {
         guard reviewing != nil else { return false }

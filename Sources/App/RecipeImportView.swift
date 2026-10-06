@@ -17,18 +17,36 @@ struct RecipeImportView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
-    @State private var stage: Stage = .reading
+    @State private var stage: Stage
     /// Set when the page stated no yield. Every macro is divided by this, so
     /// the parser leaves it nil and the reviewer supplies it here instead of
     /// the import inventing a number.
-    @State private var servings: Double = 1
-    @State private var pageDidNotStateServings = false
+    @State private var servings: Double
+    @State private var pageDidNotStateServings: Bool
     @State private var showingSource = false
 
     private enum Stage {
-        case reading
         case review(ImportedRecipe, URL)
         case failed(String)
+    }
+
+    /// Re-reads the queued block here rather than on appear, so the first frame
+    /// is already the review (or already the "couldn't be read" card) and the
+    /// failure never flashes before the recipe. Nothing is fetched. An address
+    /// that is not a URL, or a block that no longer parses, is said in words. A
+    /// scheme other than http(s) is not a failure -- it is only never made
+    /// tappable.
+    init(item: PendingRecipeImports.Item) {
+        self.item = item
+        if let url = URL(string: item.pageURL), let imported = RecipeJSONLD.recipe(fromJSON: item.block) {
+            _stage = State(initialValue: .review(imported, url))
+            _servings = State(initialValue: imported.servings ?? 1)
+            _pageDidNotStateServings = State(initialValue: imported.servings == nil)
+        } else {
+            _stage = State(initialValue: .failed("This recipe couldn't be read. Share the page from Safari again, or use Paste a recipe."))
+            _servings = State(initialValue: 1)
+            _pageDidNotStateServings = State(initialValue: false)
+        }
     }
 
     var body: some View {
@@ -36,8 +54,6 @@ struct RecipeImportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     switch stage {
-                    case .reading:
-                        ProgressView().tint(Theme.accent).frame(maxWidth: .infinity)
                     case let .review(imported, url):
                         reviewCards(imported, url)
                     case let .failed(message):
@@ -63,7 +79,6 @@ struct RecipeImportView: View {
                     }
                 }
             }
-            .onAppear(perform: load)
         }
     }
 
@@ -202,23 +217,6 @@ struct RecipeImportView: View {
                 }
             }
         }
-    }
-
-    // MARK: - Load
-
-    /// Re-reads the queued block. Nothing is fetched. An address that is not a
-    /// URL, or a block that no longer parses, is said in words. A scheme other
-    /// than http(s) is not a failure -- it is only never made tappable.
-    private func load() {
-        guard case .reading = stage else { return }
-        guard let url = URL(string: item.pageURL),
-              let imported = RecipeJSONLD.recipe(fromJSON: item.block) else {
-            stage = .failed("This recipe couldn't be read. Share the page from Safari again, or use Paste a recipe.")
-            return
-        }
-        servings = imported.servings ?? 1
-        pageDidNotStateServings = imported.servings == nil
-        stage = .review(imported, url)
     }
 
     // MARK: - Save

@@ -47,5 +47,8 @@ struct FromSafariView: View {
                 .font(Theme.body)
                 .foregroundStyle(Theme.textPrimary)
         }
+        // One element per step, so VoiceOver reads "1. Open the recipe…" as a
+        // sentence rather than the number on its own.
+        .accessibilityElement(children: .combine)
     }
 }

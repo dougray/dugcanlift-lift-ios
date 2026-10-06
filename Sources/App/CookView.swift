@@ -81,8 +81,8 @@ struct RecipeListView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Third, and the only one that needs neither typing nor a
-                    // network: 600+ recipes ship in the app.
+                    // Third, and the only one that needs no typing: 600+
+                    // recipes ship in the app. None of the four needs a network.
                     Button {
                         browsingCatalogue = true
                     } label: {

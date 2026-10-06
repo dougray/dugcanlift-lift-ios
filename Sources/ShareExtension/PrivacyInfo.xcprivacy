@@ -5,10 +5,11 @@
 	<!-- The share extension's own manifest: an extension is its own bundle,
 	     and the app's manifest does not cover it. It reads the plan link the
 	     lifter shared, decodes it on the device, and writes the link's
-	     fragment to LIFT's App Group for the app to open. From Safari it
-	     likewise queues the recipe data the page itself carries, which Safari
-	     hands over; the extension requests nothing. No network, no
-	     tracking. -->
+	     fragment to LIFT's App Group for the app to open. Shared from a page
+	     in Safari, it also reads the JSON-LD Safari passes it (RecipePage.js
+	     runs on the page already on screen) and writes that text as a file
+	     into LIFT's App Group container for the app to review; the extension
+	     requests nothing. Still no network, no tracking. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>

@@ -40,8 +40,20 @@ enum LiftTab: String, CaseIterable, Identifiable, Hashable {
 /// width keeps the top bar.
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.recipeUnderReview) private var recipeUnderReview
     @State private var tab: LiftTab = .home
     @State private var showingSettings = false
+
+    /// The gear button and Command-comma. A hardware shortcut can reach this
+    /// view while `LiftApp`'s recipe review sheet covers it, and SwiftUI drops
+    /// a second sheet presented beside the first -- which would leave
+    /// `showingSettings` true with nothing on screen, so Settings would not
+    /// open again. Command-comma waits until the review closes, as Coach's
+    /// Shift-Command-V does.
+    private func openSettings() {
+        guard !recipeUnderReview else { return }
+        showingSettings = true
+    }
 
     var body: some View {
         // Measured, not asked of the device: an iPad window in Split View is
@@ -126,7 +138,7 @@ struct RootView: View {
             Spacer(minLength: 0)
 
             Button {
-                showingSettings = true
+                openSettings()
             } label: {
                 HStack(spacing: 12) {
                     Color.clear.frame(width: 3, height: 22)
@@ -185,7 +197,7 @@ struct RootView: View {
             // button existed nothing in the app presented SettingsView, so
             // both were unreachable however far you dug.
             Button {
-                showingSettings = true
+                openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 15, weight: .semibold))
@@ -202,5 +214,20 @@ struct RootView: View {
         .padding(.vertical, 8)
         .clearOfWindowControls(.leading)
         .background(Theme.background)
+    }
+}
+
+// MARK: - Recipe under review
+
+private struct RecipeUnderReviewKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True while `LiftApp` has a recipe from Safari open for review, so
+    /// nothing a keyboard shortcut raises tries to present beside it.
+    var recipeUnderReview: Bool {
+        get { self[RecipeUnderReviewKey.self] }
+        set { self[RecipeUnderReviewKey.self] = newValue }
     }
 }

@@ -135,14 +135,22 @@ schema.org `Recipe` — so pasting the caption is the supported path, not a
 workaround waiting on a better scraper.
 
 **A shared route is opt-in and trimmed.** Send to Coach always carries runs,
-walks and hikes as times, distances and bests (`o`, `ob`), but the map of the
-newest one (`lr`) goes only when `coachShareLastRoute` is on, and it is off by
+walks and hikes as times, distances and bests (`o`, `ob`), but the newest
+one's route (`lr`) goes only when `coachShareLastRoute` is on, and it is off by
 default. Even then the first and last 200 m are cut: a route usually starts and
 ends at someone's front door, and a link sits in a coach's inbox indefinitely.
 `CoachShare` only maps `OutdoorActivity` in — what is sent, the rounding, the
 trim, the thinning and the polyline all live in LiftKit's `OutdoorShare`, and
 `Tests/Fixtures/outdoor-share-*.json` were written by LIFT web. Copy them from
 there; never regenerate them from this encoder, or they stop proving anything.
+
+**Routes are drawn without a map.** The recording screen, the review screen and
+Train's Last route card all use LiftKit's `RouteCanvas` -- a port of Coach web's
+canvas and LIFT Android's `RoutePolylineCanvas`: the line, a dot where it began
+and one where it ends, on `Theme.background`, and "Waiting for GPS…" under two
+points. There is no map behind it, so no tile server learns where the lifter
+runs. Do not bring MapKit back for a nicer backdrop; the distance and time beside
+each card carry the facts.
 
 **Light and dark both exist, and System is the default.** `Theme`'s tokens
 resolve per interface style (LiftKit 1.7.0). Apply `.liftAppearance()` — never

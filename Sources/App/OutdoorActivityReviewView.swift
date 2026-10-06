@@ -1,4 +1,3 @@
-import MapKit
 import SwiftUI
 import LiftCore
 
@@ -33,15 +32,9 @@ struct OutdoorActivityReviewView: View {
 
     private var activityBody: some View {
         List {
-            Map {
-                if activity.routePoints.count > 1 {
-                    MapPolyline(coordinates: activity.routePoints.map {
-                        CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                    })
-                    .stroke(.orange, lineWidth: 4)
-                }
-            }
-            .frame(height: 250)
+            RouteCanvas(points: activity.routePoints.map {
+                OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
+            }, aspectRatio: 1)
             .listRowInsets(EdgeInsets())
 
             Section {

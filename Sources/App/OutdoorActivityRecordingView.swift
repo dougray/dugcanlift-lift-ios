@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 import LiftCore
 
-/// Live recording: elapsed time, distance, pace, and a live-updating map
-/// trace. `LocationTracker` is the source of truth for points while
+/// Live recording: elapsed time, distance, pace, and a live-updating
+/// route. `LocationTracker` is the source of truth for points while
 /// recording; nothing here reads from HealthKit — that only happens once
 /// this screen calls `finish()` and hands off to the review screen.
 ///

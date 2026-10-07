@@ -29,7 +29,8 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
   local `Sources/Reference/` — that directory no longer exists here.
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
 - **`Sources/ShareExtension/`** — the `LiftShare` share extension (see "A
-  coach's plan link, and why Universal Links are not the answer" below).
+  coach's plan link, and why Universal Links are not the answer" below, and
+  "LIFT makes no network calls" for how a recipe arrives from Safari).
 
 The SwiftData store lives in the App Group container
 (`group.com.dugcanlift.lift`) so the widget extension can read it. Do not move it
@@ -58,7 +59,8 @@ so a link that opens one way opens every way and one that fails, fails alike:
    push, not a sheet: Settings is itself a sheet, and a second `.sheet` on
    `CoachSection` opened the screen and closed both again.
 3. **The share extension** (`LiftShare`, `Sources/ShareExtension/`). "LIFT"
-   appears in the share sheet for a URL or text; it says what the plan is
+   appears in the share sheet for a URL or text, or a web page in Safari (where
+   a page with no plan link may offer its recipe instead); it says what the plan is
    ("Plan from Doug · 1 workout · 1 scheduled day") or why it will not take it,
    and on Add queues the *fragment* in the existing App Group
    `group.com.dugcanlift.lift` (`PendingPlanLinks`). `LiftApp` drains the queue
@@ -73,9 +75,12 @@ The extension in particular **does not open the app and does not write
 SwiftData** -- iOS gives a share extension no supported way to open its
 containing app, and a routine appearing in someone's library from a share
 sheet is not a decision the share sheet gets to make. It compiles only
-`PlanLinkExtractor.swift`, `PlanLinkIntake.swift` and `PendingPlanLinks.swift`
+`PlanLinkExtractor.swift`, `PlanLinkIntake.swift`, `RoadPickLink.swift`,
+`PendingPlanLinks.swift`, `PendingRecipeImports.swift` and `RecipePageShare.swift`
 from `Sources/Shared`, listed file by file, and links `LiftCore` only: never
-SwiftData models, never `LiftReference`. It has its own
+SwiftData models, never `LiftReference`. The recipe path is decided before the
+lifter-id gate, because a recipe needs no id; a plan link always wins over a
+recipe. It has its own
 `PrivacyInfo.xcprivacy`, because an extension is its own bundle. It is a new
 bundle id, `com.dugcanlift.lift.share`, so the next free-team device build
 registers one more App ID (ten per seven days is the cap).
@@ -102,7 +107,11 @@ queueing a plan it could not check.
 fragment with `history.replaceState` as soon as it has read it, exactly as the
 Coach web app does, so sharing from Safari after the page loaded sends
 `https://www.dugcanlift.com/lift/`. `isLiftPageWithoutPlan` recognises that and
-says to share from the message it arrived in instead.
+says to share from the message it arrived in instead. Safari may pass only the
+page, with no URL of its own, so `RecipeShareDecision.useLinkFlow` carries the
+page's address to the link flow beside the shared text, and
+`PlanLinkExtractor.isLink` is the one predicate both the decision and its tests
+use.
 
 ## Conventions that matter
 
@@ -122,6 +131,42 @@ string key, not date-range predicates. The two must stay consistent.
 set it after. Background sync retries, and duplicated Health entries are very
 visible to users.
 
+**LIFT makes no network calls.** Nothing in the app, its share extension or
+its widget requests anything from any server — the in-house rule (LIFT
+superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
+`NoNetworkTests`, which fails `make test` on `URLSession`, `URLRequest`,
+`NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
+`AsyncImage(` in any Swift file under `Sources/`, and on `fetch(`,
+`XMLHttpRequest`, `WebSocket`, `sendBeacon` or `import(` in any JavaScript file
+there (`RecipePage.js`). A recipe on the web arrives **from Safari**:
+the share extension's `RecipePage.js` hands over the page's JSON-LD, the
+extension queues the raw block (`PendingRecipeImports`), and `RecipeImportView`
+re-reads it with `LiftCore.RecipeJSONLD` for review. LIFT never fetches the
+page.
+
+**A shared recipe opens through `RecipeReviewQueue`, one at a time.** A recipe
+drained from the App Group is gone from disk, and SwiftUI shows one
+presentation at a time on a view and silently drops a second: presenting a
+review beside `LiftApp`'s plan sheet or refusal alert could strand it, with
+nothing left to retry from. So the queue holds the rules, as a value type with
+no view in it for the reason `PlanLinkIntake` is one. One review at a time. A
+review waits for the plan sheet and the refusal alert, and Command-comma does
+not open Settings while `LiftApp` has a review, a plan or a refusal up. A
+review whose sheet never appeared (`markAppeared` never came) was dropped, and
+is retried on the next activation as a new item, so the sheet sees something
+new to present. A plan or refusal
+arriving mid-review is held, and every held one is shown in order, before the
+next recipe. The same recipe queued twice is one review. The sheet closes only
+by Cancel or Save -- no swipe. `RecipeReviewQueueTests` pins the queue's rules,
+and the queue is Coach iOS's, kept in step with it. Do not simplify back to binding the
+sheet to the first waiting item: that is the version that loses a recipe
+whenever anything else is on screen.
+
+**The loss window is accepted, and it is this one.** The App Group queue is
+emptied when it is drained, not when a review is saved, so Cancel, or the app
+being killed mid-review, means sharing the page from Safari again -- the step
+the lifter took the first time. Accepted, not an oversight to work around.
+
 **A pasted recipe is edited, not reviewed.** `RecipeImportView` can review
 because a page's JSON-LD is labelled — the publisher said which strings are
 ingredients. A caption is prose, so `LiftCore.CaptionRecipe` only *proposes* a
@@ -131,8 +176,8 @@ or none) and its yield rule (a line must open with a yield word and carry a
 number) are both pinned in the kit, and the looser versions silently removed a
 real line or halved every macro in a dish. Social video is out of reach by
 design — no site among TikTok, Instagram, Reels or YouTube publishes a
-schema.org `Recipe` — so pasting the caption is the supported path, not a
-workaround waiting on a better scraper.
+schema.org `Recipe` — so pasting the caption is the supported path, not a gap
+to close: LIFT never fetches a page.
 
 **A shared route is opt-in and trimmed.** Send to Coach always carries runs,
 walks and hikes as times, distances and bests (`o`, `ob`), but the newest

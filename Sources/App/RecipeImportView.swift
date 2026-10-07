@@ -2,36 +2,51 @@ import SwiftUI
 import SwiftData
 import LiftCore
 
-/// Import a recipe from a link.
+/// Review a recipe Safari handed over. LIFT never fetched the page: Safari's
+/// `RecipePage.js` passed its JSON-LD to the share extension, which queued the
+/// raw block (`PendingRecipeImports`), and this re-reads it with `LiftCore`'s
+/// `RecipeJSONLD`.
 ///
-/// Two steps, never one: fetch and parse, then show what was read next to the
-/// source it came from and wait. `Recipe.sourceTranscript`'s contract is that
-/// an import is reviewed before it is saved, so there is no "fetch and save"
-/// path here and nothing is ever logged straight off a page.
-///
-/// The network call lives here rather than in `LiftCore`. `RecipeJSONLD` is
-/// pure Foundation so the widget extension can still link the module, which
-/// means the app target owns fetching — the same split as everything else that
-/// needs the outside world.
+/// Two steps, never one: what was read is shown next to the page it came from,
+/// and nothing is saved until Save. `Recipe.sourceTranscript`'s contract is
+/// that an import is reviewed before it is saved.
 struct RecipeImportView: View {
+
+    let item: PendingRecipeImports.Item
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
-    @State private var address = ""
-    @State private var stage: Stage = .entry
+    @State private var stage: Stage
     /// Set when the page stated no yield. Every macro is divided by this, so
     /// the parser leaves it nil and the reviewer supplies it here instead of
     /// the import inventing a number.
-    @State private var servings: Double = 1
-    @State private var pageDidNotStateServings = false
+    @State private var servings: Double
+    @State private var pageDidNotStateServings: Bool
     @State private var showingSource = false
 
     private enum Stage {
-        case entry
-        case loading
         case review(ImportedRecipe, URL)
         case failed(String)
+    }
+
+    /// Re-reads the queued block here rather than on appear, so the first frame
+    /// is already the review (or already the "couldn't be read" card) and the
+    /// failure never flashes before the recipe. Nothing is fetched. An address
+    /// that is not a URL, or a block that no longer parses, is said in words. A
+    /// scheme other than http(s) is not a failure -- it is only never made
+    /// tappable.
+    init(item: PendingRecipeImports.Item) {
+        self.item = item
+        if let url = URL(string: item.pageURL), let imported = RecipeJSONLD.recipe(fromJSON: item.block) {
+            _stage = State(initialValue: .review(imported, url))
+            _servings = State(initialValue: imported.servings ?? 1)
+            _pageDidNotStateServings = State(initialValue: imported.servings == nil)
+        } else {
+            _stage = State(initialValue: .failed("This recipe couldn't be read. Share the page from Safari again, or use Paste a recipe."))
+            _servings = State(initialValue: 1)
+            _pageDidNotStateServings = State(initialValue: false)
+        }
     }
 
     var body: some View {
@@ -39,10 +54,6 @@ struct RecipeImportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     switch stage {
-                    case .entry:
-                        entryCard
-                    case .loading:
-                        loadingCard
                     case let .review(imported, url):
                         reviewCards(imported, url)
                     case let .failed(message):
@@ -55,7 +66,7 @@ struct RecipeImportView: View {
             }
             .liftScreen()
             .background(Theme.background)
-            .navigationTitle("Import a recipe")
+            .navigationTitle("Import from Safari")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -71,50 +82,7 @@ struct RecipeImportView: View {
         }
     }
 
-    // MARK: - Entry
-
-    private var entryCard: some View {
-        card("Link") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Paste a recipe's web address. Most recipe sites publish their ingredients and method in a form this can read directly.")
-                    .font(Theme.detail)
-                    .foregroundStyle(Theme.textSecondary)
-
-                TextField("https://", text: $address)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .font(Theme.body)
-                    .foregroundStyle(Theme.textPrimary)
-                    .onSubmit(fetch)
-
-                Button(action: fetch) {
-                    Text("Fetch recipe")
-                        .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.onAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Theme.accent, in: .rect(cornerRadius: Theme.pillRadius))
-                }
-                .buttonStyle(.plain)
-                .disabled(normalisedURL == nil)
-                .opacity(normalisedURL == nil ? 0.4 : 1)
-            }
-        }
-    }
-
-    private var loadingCard: some View {
-        card("Reading the page") {
-            HStack(spacing: 10) {
-                ProgressView().tint(Theme.accent)
-                Text(address)
-                    .font(Theme.detail)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-        }
-    }
+    // MARK: - Failure
 
     private func failureCard(_ message: String) -> some View {
         card("Could not import") {
@@ -122,7 +90,7 @@ struct RecipeImportView: View {
                 Text(message)
                     .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
-                Button("Try another link") { stage = .entry }
+                Button("Close") { dismiss() }
                     .font(Theme.body.weight(.semibold))
                     .foregroundStyle(Theme.accent)
                     .buttonStyle(.plain)
@@ -229,11 +197,7 @@ struct RecipeImportView: View {
 
         card("Source") {
             VStack(alignment: .leading, spacing: 10) {
-                Text(url.absoluteString)
-                    .font(Theme.detail)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+                sourceAddress(url)
 
                 Button(showingSource ? "Hide what the page published" : "Show what the page published") {
                     showingSource.toggle()
@@ -251,78 +215,6 @@ struct RecipeImportView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-        }
-    }
-
-    // MARK: - Fetch
-
-    /// Accepts "example.com/recipe" as well as a full address, because that is
-    /// what comes off a share sheet or a paste half of the time.
-    private var normalisedURL: URL? {
-        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
-        guard let url = URL(string: candidate), let host = url.host(), host.contains(".") else { return nil }
-        return url
-    }
-
-    private func fetch() {
-        guard let url = normalisedURL else { return }
-        stage = .loading
-        showingSource = false
-
-        Task {
-            do {
-                let html = try await Self.loadPage(at: url)
-                guard let imported = RecipeJSONLD.recipe(fromHTML: html) else {
-                    stage = .failed("That page doesn't publish a recipe in a form this can read. Sites that show a recipe card usually do; a blog post about a recipe often doesn't. You can still add it by hand.")
-                    return
-                }
-                servings = imported.servings ?? 1
-                pageDidNotStateServings = imported.servings == nil
-                stage = .review(imported, url)
-            } catch {
-                stage = .failed("Couldn't load that page. \(error.localizedDescription)")
-            }
-        }
-    }
-
-    /// Fetches the page and decodes it as text.
-    ///
-    /// The User-Agent names LIFT rather than impersonating a browser. Some
-    /// sites will refuse it; being refused is a better failure than pretending
-    /// to be something else, and the error above says plainly what happened.
-    ///
-    /// Encoding is guessed in the order that actually occurs: UTF-8 for almost
-    /// everything, then Windows-1252 for the older food blogs that never
-    /// declared one. A page that decodes as neither is reported rather than
-    /// rendered as mojibake.
-    private static func loadPage(at url: URL) async throws -> String {
-        var request = URLRequest(url: url)
-        request.setValue("LIFT (recipe import)", forHTTPHeaderField: "User-Agent")
-        request.setValue("text/html", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 20
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        if let http = response as? HTTPURLResponse, !(200 ..< 300).contains(http.statusCode) {
-            throw ImportError.badStatus(http.statusCode)
-        }
-        if let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .windowsCP1252) {
-            return text
-        }
-        throw ImportError.undecodable
-    }
-
-    private enum ImportError: LocalizedError {
-        case badStatus(Int)
-        case undecodable
-
-        var errorDescription: String? {
-            switch self {
-            case let .badStatus(code): return "The site answered with \(code)."
-            case .undecodable: return "The page wasn't readable as text."
             }
         }
     }
@@ -357,6 +249,30 @@ struct RecipeImportView: View {
     }
 
     // MARK: - Small shared chrome
+
+    /// The page's address. Tappable only for http and https: the address came
+    /// from a page, and a `tel:` or app-scheme link is not something to open
+    /// from a recipe's review.
+    @ViewBuilder
+    private func sourceAddress(_ url: URL) -> some View {
+        let text = url.absoluteString
+        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            Link(text, destination: url)
+                .font(Theme.detail)
+                .foregroundStyle(Theme.accent)
+                .tint(Theme.accent)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(text)
+                .font(Theme.detail)
+                .foregroundStyle(Theme.textSecondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
     private func card(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {

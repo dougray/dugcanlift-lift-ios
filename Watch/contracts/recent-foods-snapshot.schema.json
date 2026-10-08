@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "LIFT Recent Foods Snapshot",
-  "description": "Pushed phone -> watch via WCSession.updateApplicationContext so the watch's local 'recent foods' cache stays warm without a round trip. See the iOS side's Sources/Shared/RecentFoodsSnapshot.swift for the Swift type this schema documents.",
+  "description": "Pushed phone -> watch via WCSession.updateApplicationContext so the watch's local 'recent foods' cache stays warm without a round trip. See the iOS side's Sources/Shared/RecentFoodsSnapshot.swift for the Swift type this schema documents. The same application-context dictionary also carries two keys that are NOT part of this snapshot type (so not properties here, and an older watch ignores them): \"weightUnit\" (\"pounds\" | \"kilograms\") and \"distanceUnit\" (\"miles\" | \"kilometers\"), the phone's display settings. See LiftSync's DisplayUnitsContext. Display only: weights still travel in kilograms and distances in metres.",
   "type": "object",
   "required": ["items", "generatedAt"],
   "properties": {

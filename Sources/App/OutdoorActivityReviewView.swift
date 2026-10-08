@@ -38,7 +38,7 @@ struct OutdoorActivityReviewView: View {
                     MapPolyline(coordinates: activity.routePoints.map {
                         CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                     })
-                    .stroke(.orange, lineWidth: 4)
+                    .stroke(Theme.accent, lineWidth: 4)
                 }
             }
             .frame(height: 250)
@@ -51,9 +51,7 @@ struct OutdoorActivityReviewView: View {
                 if let duration = activity.duration {
                     LabeledContent("Duration", value: formatted(duration))
                 }
-                LabeledContent("Elevation gain", value: String(
-                    format: "%.0f m", activity.elevationGainMeters
-                ))
+                LabeledContent("Elevation gain", value: elevationText)
             }
         }
         .readableListMargins()
@@ -93,6 +91,13 @@ struct OutdoorActivityReviewView: View {
             removed = true
             dismiss()
         }
+    }
+
+    /// Feet beside miles, metres beside kilometres: one system per screen.
+    private var elevationText: String {
+        unit == .miles
+            ? String(format: "%.0f ft", activity.elevationGainMeters * 3.28084)
+            : String(format: "%.0f m", activity.elevationGainMeters)
     }
 
     private func formatted(_ duration: TimeInterval) -> String {

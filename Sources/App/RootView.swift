@@ -30,9 +30,17 @@ enum LiftTab: String, CaseIterable, Identifiable, Hashable {
 
 /// Top tab bar of equal-width pill buttons, matching the Android build.
 /// This is deliberately not a UITabView — the Android information architecture
-/// won out over the iOS convention here. Swiping the content area pages
-/// between tabs the same way tapping a pill does; both drive the same
-/// `tab` selection so the highlight always matches what's on screen.
+/// won out over the iOS convention here. Tapping a tab switches to it.
+///
+/// No paging swipe. A `.page` TabView used to sit under the strip, and its
+/// horizontal swipe competed with the chip rows (Focus, Activity, category)
+/// and with swipe actions in lists, and slid regardless of Reduce Motion. The
+/// web-parity look is the brief; the paging gesture never was.
+///
+/// Tabs are built the first time they are opened and then kept alive
+/// (hidden, not destroyed), so a tab's state -- Train's selected day, Cook's
+/// segment, a scroll position -- survives switching away, as it did under the
+/// TabView.
 ///
 /// From 1024pt of window width (an iPad Pro 13", any iPad in landscape, a wide
 /// Stage Manager window) the same tabs become a sidebar instead. The decision
@@ -40,8 +48,11 @@ enum LiftTab: String, CaseIterable, Identifiable, Hashable {
 /// width keeps the top bar.
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: LiftTab = .home
+    @State private var visited: Set<LiftTab> = [.home]
     @State private var showingSettings = false
+    @State private var undo = UndoToastCenter.shared
 
     var body: some View {
         // Measured, not asked of the device: an iPad window in Split View is
@@ -50,9 +61,9 @@ struct RootView: View {
             let showsSidebar = proxy.size.width >= AdaptiveLayout.sidebarMinWidth
 
             // The sidebar and the tab bar are conditional siblings of one
-            // TabView, which keeps its identity when a window crosses the
-            // breakpoint -- every tab keeps its state (Train's date, Cook's
-            // segment) through a rotation or a resize.
+            // page container, which keeps its identity when a window crosses
+            // the breakpoint -- every tab keeps its state (Train's date,
+            // Cook's segment) through a rotation or a resize.
             HStack(spacing: 0) {
                 if showsSidebar {
                     sidebar
@@ -67,15 +78,16 @@ struct RootView: View {
                         tabBar
                     }
 
-                    TabView(selection: $tab) {
-                        HomeView().tag(LiftTab.home)
-                        FoodView().tag(LiftTab.food)
-                        CookView().tag(LiftTab.cook)
-                        TrainView().tag(LiftTab.train)
-                        RoutinesView().tag(LiftTab.routines)
+                    ZStack {
+                        ForEach(LiftTab.allCases) { item in
+                            if visited.contains(item) {
+                                page(item)
+                                    .opacity(tab == item ? 1 : 0)
+                                    .allowsHitTesting(tab == item)
+                                    .accessibilityHidden(tab != item)
+                            }
+                        }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .indexViewStyle(.page(backgroundDisplayMode: .never))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.pageWidth, showsSidebar
                                  ? proxy.size.width - AdaptiveLayout.sidebarWidth - 1
@@ -84,12 +96,44 @@ struct RootView: View {
             }
         }
         .background(Theme.background)
+        .tint(AppColor.accentText)
+        .overlay(alignment: .bottom) {
+            if let toast = undo.current {
+                UndoToastBar(toast: toast, center: undo)
+                    .frame(maxWidth: AdaptiveLayout.readableWidth)
+                    .id(toast.id)
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: undo.current?.id)
         .liftAppearance()
         .sheet(isPresented: $showingSettings) {
             SettingsView()
+                .tint(AppColor.accentText)
                 .liftAppearance()
         }
         .task { FoodEntryGramMigration.run(context: context) }
+    }
+
+    @ViewBuilder
+    private func page(_ item: LiftTab) -> some View {
+        switch item {
+        case .home: HomeView()
+        case .food: FoodView()
+        case .cook: CookView()
+        case .train: TrainView()
+        case .routines: RoutinesView()
+        }
+    }
+
+    /// A crossfade, and none at all under Reduce Motion.
+    private func select(_ item: LiftTab) {
+        visited.insert(item)
+        if reduceMotion {
+            tab = item
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) { tab = item }
+        }
     }
 
     /// The tabs as a column, for a window wide enough that a top bar of five
@@ -100,27 +144,27 @@ struct RootView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(LiftTab.allCases) { item in
                 Button {
-                    tab = item
+                    select(item)
                 } label: {
                     HStack(spacing: 12) {
                         Rectangle()
                             .fill(tab == item ? Theme.accent : Color.clear)
                             .frame(width: 3, height: 22)
                         Image(systemName: item.systemImage)
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .frame(width: 24)
                         Text(item.rawValue)
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .tracking(0.5)
                         Spacer(minLength: 0)
                     }
-                    .foregroundStyle(tab == item ? Theme.accent : Theme.textSecondary)
+                    .foregroundStyle(tab == item ? AppColor.accentText : Theme.textSecondary)
                     .padding(.vertical, 10)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(item.shortcut, modifiers: .command)
-                .accessibilityAddTraits(tab == item ? .isSelected : [])
+                .accessibilitySelected(tab == item)
             }
 
             Spacer(minLength: 0)
@@ -131,10 +175,10 @@ struct RootView: View {
                 HStack(spacing: 12) {
                     Color.clear.frame(width: 3, height: 22)
                     Image(systemName: "gearshape")
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                         .frame(width: 24)
                     Text("Settings")
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                         .tracking(0.5)
                     Spacer(minLength: 0)
                 }
@@ -157,7 +201,7 @@ struct RootView: View {
         HStack(spacing: 4) {
             ForEach(LiftTab.allCases) { item in
                 Button {
-                    withAnimation(.easeOut(duration: 0.18)) { tab = item }
+                    select(item)
                 } label: {
                     // The browser build underlines the selected tab and turns
                     // its text accent; it does not fill the tab. A solid accent
@@ -165,20 +209,23 @@ struct RootView: View {
                     // difference between this app and the web.
                     VStack(spacing: 0) {
                         Text(item.rawValue)
-                            .font(.system(size: 13, weight: .semibold))
+                            .scaledFont(size: 13, weight: .semibold)
                             .tracking(1.0)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
-                            .foregroundStyle(tab == item ? Theme.accent : Theme.textSecondary)
+                            .foregroundStyle(tab == item ? AppColor.accentText : Theme.textSecondary)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity)
                         Rectangle()
                             .fill(tab == item ? Theme.accent : Color.clear)
                             .frame(height: 2)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(item.shortcut, modifiers: .command)
+                .accessibilitySelected(tab == item)
+                .accessibilityShowsLargeContentViewer()
             }
 
             // Settings holds the coach card and the backup file. Until this
@@ -188,19 +235,25 @@ struct RootView: View {
                 showingSettings = true
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 15, weight: .semibold))
+                    .scaledFont(size: 15, weight: .semibold)
                     .foregroundStyle(Theme.textSecondary)
                     .frame(width: 32, height: 32)
                     .background(Theme.surface)
                     .clipShape(Capsule())
+                    // 32pt to look at, 44pt to hit.
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .keyboardShortcut(",", modifiers: .command)
             .accessibilityLabel("Settings")
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 8)
+        .padding(.vertical, 2)
         .clearOfWindowControls(.leading)
         .background(Theme.background)
+        // Five labels share one row; past this size they would shrink to
+        // illegibility. The Large Content Viewer (long-press) covers the rest.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 }

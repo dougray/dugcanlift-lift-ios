@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SummaryView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
+    @State private var confirmingFinish = false
 
     var body: some View {
         List {
@@ -30,11 +31,18 @@ struct SummaryView: View {
             }
 
             Section {
+                // Ends the HealthKit session and sends the workout: asks
+                // first, since a stray tap mid-session can't be taken back.
                 Button("Finish Workout", role: .destructive) {
-                    session.finishWorkout()
+                    confirmingFinish = true
                 }
             }
         }
         .navigationTitle("Summary")
+        .confirmationDialog("Finish this workout?", isPresented: $confirmingFinish,
+                            titleVisibility: .visible) {
+            Button("Finish Workout", role: .destructive) { session.finishWorkout() }
+            Button("Keep Training", role: .cancel) {}
+        }
     }
 }

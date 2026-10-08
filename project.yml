@@ -47,7 +47,7 @@ packages:
   # this line, never something that happens on a `swift package update`.
   LiftKit:
     url: https://github.com/dougray/dugcanlift-kit
-    exactVersion: 1.13.0
+    exactVersion: 1.14.0
   # The watch app's own domain package, in this repo (Watch/LiftWatchKit).
   # Its package is named LiftWatchKit, not LiftKit, so Xcode does not take it
   # for a local override of dugcanlift-kit above, whose package is also named

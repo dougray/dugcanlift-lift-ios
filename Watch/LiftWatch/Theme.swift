@@ -24,7 +24,14 @@ enum DclTheme {
     /// fills (progress, prominent buttons, whose light label is 5.08:1 on it
     /// but 3.38:1 on `accentText`).
     static let accentText = Color(red: 0xE0 / 255, green: 0x67 / 255, blue: 0x4D / 255)
+    /// Sage as a FILL or LINE only. #7C8B7A is 4.40:1 on `surface` and fails
+    /// AA as text; use `accent2Text` for sage words.
     static let accent2    = Color(red: 0x7C / 255, green: 0x8B / 255, blue: 0x7A / 255)
+    /// Sage lifted for text: #879585, the phone kit's dark
+    /// `Theme.accentSecondaryText` (dugcanlift-kit 1.14.0), is 5.46:1 on
+    /// `background`, 5.03:1 on `surface` and 6.67:1 on black, where `accent2`
+    /// is 4.78:1 / 4.40:1. Use for sage-coloured words (plan source, notes).
+    static let accent2Text = Color(red: 0x87 / 255, green: 0x95 / 255, blue: 0x85 / 255)
     static let rule       = Color(red: 0x3A / 255, green: 0x37 / 255, blue: 0x33 / 255)
     static let onAccent   = Color(red: 0xF7 / 255, green: 0xF1 / 255, blue: 0xE8 / 255)
 }

@@ -67,7 +67,7 @@ struct NowView: View {
             if let note = exercise.note, !note.isEmpty {
                 Text(note)
                     .font(.caption2)
-                    .foregroundStyle(DclTheme.accent2)
+                    .foregroundStyle(DclTheme.accent2Text)
                     .lineLimit(2)
             }
 

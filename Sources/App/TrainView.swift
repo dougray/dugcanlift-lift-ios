@@ -73,7 +73,7 @@ struct TrainView: View {
                 .padding(.bottom, 40)
                 .adaptivePageWidth()
             }
-            .appScreen()
+            .liftScreen()
             // Number pads have no return key: Done above the keyboard, and a
             // drag on the page puts it away.
             .keyboardDoneButton()
@@ -252,7 +252,7 @@ private struct DayEditor: View {
         LiftCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Workout name")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
 
                 TextField("Push, Pull, Legs…", text: nameBinding)
@@ -262,7 +262,7 @@ private struct DayEditor: View {
 
                 if let day, day.totalSetCount > 0 {
                     Text(day.summary(unit: unit))
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
 
@@ -396,7 +396,7 @@ private struct ExerciseBlock: View {
                     // the header rather than waiting to be counted by eye.
                     if let countLabel {
                         Text(countLabel)
-                            .scaledFont(size: 14)
+                            .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }

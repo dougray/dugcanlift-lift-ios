@@ -151,7 +151,7 @@ private struct RoutineRow: View {
                 }
                 .font(.caption.weight(.semibold))
                 .buttonStyle(.borderless)
-                .tint(Theme.accent)
+                .tint(Theme.accentText)
             }
         }
         .alert("Delete \u{201C}\(routine.name)\u{201D}?", isPresented: $confirmingDelete) {

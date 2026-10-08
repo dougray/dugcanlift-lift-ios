@@ -55,7 +55,7 @@ struct RecipePasteImportView: View {
                 .padding(.vertical, 14)
                 .readableContentWidth()
             }
-            .appScreen()
+            .liftScreen()
             .background(Theme.background)
             .navigationTitle(parsed == nil ? "Paste a recipe" : "Check it over")
             .navigationBarTitleDisplayMode(.inline)
@@ -103,7 +103,7 @@ struct RecipePasteImportView: View {
 
                     Button("Read it") { read() }
                         .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(canRead ? Theme.accent : Theme.textSecondary)
+                        .foregroundStyle(canRead ? Theme.accentText : Theme.textSecondary)
                         .disabled(!canRead)
                 }
 
@@ -168,7 +168,7 @@ struct RecipePasteImportView: View {
         }
 
         Button("Start over") { reset() }
-            .scaledFont(size: 14)
+            .font(Theme.detail)
             .foregroundStyle(Theme.accentText)
             .buttonStyle(.plain)
     }
@@ -278,7 +278,7 @@ struct RecipePasteImportView: View {
 
     private func detail(_ text: String) -> some View {
         Text(text)
-            .scaledFont(size: 14)
+            .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

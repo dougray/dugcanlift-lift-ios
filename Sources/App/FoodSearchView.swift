@@ -89,7 +89,7 @@ struct FoodSearchView: View {
                 .foregroundStyle(Theme.textPrimary)
             if let brand = record.brand, !brand.isEmpty {
                 Text(brand)
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
         }
@@ -134,7 +134,7 @@ struct FoodSearchView: View {
                         .foregroundStyle(Theme.accentText)
                     if let brand = record.brand, !brand.isEmpty {
                         Text(brand)
-                            .scaledFont(size: 14)
+                            .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
@@ -168,7 +168,7 @@ struct FoodSearchView: View {
             .padding(.vertical, 14)
             .readableContentWidth()
         }
-        .appScreen()
+        .liftScreen()
         .keyboardDoneButton()
         .background(Theme.background)
         .navigationTitle("Log Food")
@@ -190,7 +190,7 @@ struct FoodSearchView: View {
     private func previewCard(_ nutrition: NutritionFacts) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("\(Int(nutrition.calories)) kcal")
-                .scaledFont(size: 26, weight: .bold)
+                .font(Theme.figure)
                 .foregroundStyle(Theme.textPrimary)
             HStack(spacing: 10) {
                 Text("P \(Int(nutrition.proteinG))")
@@ -200,14 +200,14 @@ struct FoodSearchView: View {
                     Text("Fib \(Int(fiber))")
                 }
             }
-            .scaledFont(size: 14)
+            .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
             // Saturated fat, sugar and sodium when the database has them —
             // `FoodRecord.nutrition(grams:)` fills all three, and the entry
             // logged below snapshots them with the rest.
             if let details = NutrientDetailsDisplay.entryLine(nutrition) {
                 Text(details)
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
         }

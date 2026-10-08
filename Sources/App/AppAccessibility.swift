@@ -7,8 +7,8 @@ import LiftCore
 // Kit 1.12.0 supplies the text-safe rust (`Theme.accentText`), Dynamic Type
 // type tokens, and the selected/header traits on its own components; use
 // those. What stays here is app-only: a Dynamic Type font for sizes that are
-// not a kit token, the text-safe screen tint, the keyboard Done button, the
-// delete glyph and the undo toast.
+// not a kit token, the keyboard Done button, the delete glyph and the undo
+// toast. Kit 1.13.0's `liftScreen()` tints with `Theme.accentText` itself.
 
 // MARK: - Dynamic Type
 
@@ -49,16 +49,6 @@ extension View {
     func scaledFont(size: CGFloat, weight: Font.Weight = .regular,
                     design: Font.Design = .default) -> some View {
         modifier(ScaledSystemFont(size: size, weight: weight, design: design))
-    }
-
-    /// The kit's `liftScreen()`, tinted with `Theme.accentText` rather than
-    /// the kit's `Theme.accent`. Every plain `Button` and toolbar item takes
-    /// its text colour from the tint, so this is where most small rust text
-    /// comes from. The inner tint wins over the kit's.
-    func appScreen() -> some View {
-        self
-            .tint(Theme.accentText)
-            .liftScreen()
     }
 
     /// Number and decimal pads have no return key. One Done button above the

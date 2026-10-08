@@ -109,7 +109,7 @@ struct RecipeEditorView: View {
                 .padding(.vertical, 14)
                 .readableContentWidth()
             }
-            .appScreen()
+            .liftScreen()
             .keyboardDoneButton()
             .background(Theme.background)
             .navigationTitle(isEditing ? "Edit recipe" : "New recipe")
@@ -134,7 +134,7 @@ struct RecipeEditorView: View {
                 .foregroundStyle(Theme.accentText)
 
             Text("Leave blank if you don't know them. Blank stays unknown — it will not log as zero.")
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
 
             // Calories on its own row, the four gram figures under it. Five
@@ -182,7 +182,7 @@ struct RecipeEditorView: View {
 
             if showingMoreNutrients {
                 Text("Per serving. No goals — blank stays unknown.")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
                 HStack(alignment: .top, spacing: 10) {
                     macroField("Saturated fat", unit: "g", text: $saturatedFat)
@@ -202,7 +202,7 @@ struct RecipeEditorView: View {
     private func macroField(_ label: String, unit: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(label) (\(unit))")
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -227,7 +227,7 @@ struct RecipeEditorView: View {
 
             if let hint {
                 Text(hint)
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
 

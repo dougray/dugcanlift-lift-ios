@@ -94,7 +94,7 @@ struct RoadFoodView: View {
             Text("Numbers come from each chain's own published nutrition, checked by hand, and each "
                  + "place shows when the chain published them and when they were checked. LIFT "
                  + "never asks where you are.")
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .padding(.top, 4)
         }
@@ -125,7 +125,7 @@ struct RoadFoodView: View {
                     // them, so nothing a coach sends can take them back.
                     Button("Clear these picks") { picksData = Data() }
                         .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                         .buttonStyle(.plain)
                 }
             }
@@ -170,7 +170,7 @@ struct RoadFoodView: View {
                         .multilineTextAlignment(.leading)
                     if !detail.isEmpty {
                         Text(detail)
-                            .scaledFont(size: 14)
+                            .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                             .multilineTextAlignment(.leading)
                     }
@@ -212,7 +212,7 @@ private struct RoadFoodPage<Content: View>: View {
                     .adaptivePageWidth()
             }
         }
-        .appScreen()
+        .liftScreen()
         .background(Theme.background)
     }
 }
@@ -223,7 +223,7 @@ private struct RoadFoodSampleNotice: View {
     var body: some View {
         Text("Development sample: made-up places and numbers. The curated list replaces them "
              + "once Resources/road-food.json is in the app.")
-            .scaledFont(size: 14)
+            .font(Theme.detail)
             .foregroundStyle(Theme.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
@@ -332,7 +332,7 @@ struct RoadFoodPlaceView: View {
                                     .font(Theme.cardTitle)
                                     .foregroundStyle(Theme.accentText)
                                 Text("Within 10% of what is left.")
-                                    .scaledFont(size: 14)
+                                    .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
                             }
                             .padding(.top, 6)
@@ -373,7 +373,7 @@ struct RoadFoodPlaceView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(chain?.name ?? "Gas station")
-                .scaledFont(size: 26, weight: .bold)
+                .font(Theme.figure)
                 .foregroundStyle(Theme.textPrimary)
 
             // What the chain published, and when a person last read it: two
@@ -396,7 +396,7 @@ struct RoadFoodPlaceView: View {
                         .foregroundStyle(Theme.accentText)
                 }
             }
-            .scaledFont(size: 14)
+            .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
 
             if RoadFoodRanking.isStale(checkedOn: ageDate, today: DayKey.today) == true {
@@ -446,7 +446,7 @@ struct RoadFoodPlaceView: View {
                         .foregroundStyle(Theme.textPrimary)
                     Text("Most protein per 100 kcal first; lower sodium breaks a tie. Anything more "
                          + "than 10% over what is left is not shown.")
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                     if ranked.fits.isEmpty && ranked.over.isEmpty {
                         Text(remaining.calories <= 0
@@ -461,7 +461,7 @@ struct RoadFoodPlaceView: View {
                         .foregroundStyle(Theme.textPrimary)
                     Text("So this is ranked by protein per 100 kcal alone, with nothing left out. "
                          + "Set a goal on Home and it will rank against what is left of your day.")
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
                 // One line, whether or not there is a goal. Said, never
@@ -549,25 +549,25 @@ struct RoadFoodPlaceView: View {
                     .foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(macroLine(item))
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
                 if let about = aboutLine(item) {
-                    Text(about).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
+                    Text(about).font(Theme.detail).foregroundStyle(Theme.textSecondary)
                 }
                 // Shown, never targeted: plain text, no colour, no threshold.
                 if let details = NutrientDetailsDisplay.entryLine(
                     NutritionFacts(sugarG: item.sugarG, sodiumMg: item.sodiumMg,
                                    saturatedFatG: item.saturatedFatG)) {
-                    Text(details).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
+                    Text(details).font(Theme.detail).foregroundStyle(Theme.textSecondary)
                 }
                 if let modification = item.modification {
-                    Text(modification).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
+                    Text(modification).font(Theme.detail).foregroundStyle(Theme.textSecondary)
                 }
                 if let barcode = item.barcode {
-                    Text("Barcode \(barcode)").scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
+                    Text("Barcode \(barcode)").font(Theme.detail).foregroundStyle(Theme.textSecondary)
                 }
                 if let reason = RoadFoodRanking.cannotLogReason(item) {
-                    Text(reason).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
+                    Text(reason).font(Theme.detail).foregroundStyle(Theme.textSecondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

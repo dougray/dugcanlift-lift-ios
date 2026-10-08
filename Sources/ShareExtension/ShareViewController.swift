@@ -158,12 +158,12 @@ struct SharePlanView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Add") { model.add(fragment) }
                             .fontWeight(.semibold)
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                     }
                 }
             }
         }
-        .tint(Theme.accent)
+        .tint(Theme.accentText)
         .liftAppearance()
     }
 

@@ -82,7 +82,7 @@ struct FoodView: View {
                                     .font(Theme.body.weight(.semibold))
                                     .foregroundStyle(Theme.accentText)
                                 Text("Fast food and gas stations, ranked against what's left today")
-                                    .scaledFont(size: 14)
+                                    .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
                                     .multilineTextAlignment(.leading)
                             }
@@ -115,7 +115,7 @@ struct FoodView: View {
             .padding(.bottom, 40)
             .adaptivePageWidth()
         }
-        .appScreen()
+        .liftScreen()
         .sheet(isPresented: $showingSearch) {
             FoodSearchView(mealType: MealType.forHour(Calendar.current.component(.hour, from: .now)))
                 .liftAppearance()
@@ -147,7 +147,7 @@ struct FoodView: View {
 
             if mealEntries.isEmpty {
                 Text("Nothing logged")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             } else {
                 ForEach(mealEntries) { entry in
@@ -161,11 +161,11 @@ struct FoodView: View {
                                         .font(Theme.body)
                                         .foregroundStyle(Theme.textPrimary)
                                     Text(macroLine(entry))
-                                        .scaledFont(size: 14)
+                                        .font(Theme.detail)
                                         .foregroundStyle(Theme.textSecondary)
                                     if let details = NutrientDetailsDisplay.entryLine(entry.nutrition) {
                                         Text(details)
-                                            .scaledFont(size: 14)
+                                            .font(Theme.detail)
                                             .foregroundStyle(Theme.textSecondary)
                                     }
                                 }
@@ -196,7 +196,7 @@ struct FoodView: View {
                     .foregroundStyle(Theme.accentText)
 
                 Text("Tap to log it again, into the meal that fits the time of day.")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
 
                 ForEach(recent) { entry in
@@ -209,7 +209,7 @@ struct FoodView: View {
                                     .font(Theme.body)
                                     .foregroundStyle(Theme.textPrimary)
                                 Text(macroLine(entry))
-                                    .scaledFont(size: 14)
+                                    .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
                             }
                             Spacer()
@@ -405,7 +405,7 @@ struct NutrientTotalRows: View {
                     StatRow(label: total.nutrient.label, value: total.value)
                     if let coverage = total.coverage {
                         Text(coverage)
-                            .scaledFont(size: 14)
+                            .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }

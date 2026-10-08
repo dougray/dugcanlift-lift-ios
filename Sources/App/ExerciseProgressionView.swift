@@ -43,7 +43,7 @@ struct ExerciseProgressionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 Text(displayName)
-                    .font(.system(size: 22, weight: .heavy))
+                    .scaledFont(size: 22, weight: .heavy)
                     .foregroundStyle(Theme.textPrimary)
 
                 Picker("Window", selection: $weeks) {
@@ -61,7 +61,7 @@ struct ExerciseProgressionView: View {
             .padding(.bottom, 40)
             .adaptivePageWidth()
         }
-        .liftScreen()
+        .appScreen()
         // Pushed inside Train's NavigationStack, which paints the system
         // background; the cards sit on Theme.background everywhere else.
         .background(Theme.background)
@@ -74,10 +74,10 @@ struct ExerciseProgressionView: View {
 
     @ViewBuilder
     private var chartCard: some View {
-        LiftCard(title: "Estimated 1RM") {
+        AppCard(title: "Estimated 1RM") {
             if series.isEmpty {
                 Text("No working sets of this lift in the last \(weeks) weeks. A set needs a weight and reps before it can be estimated, and warmups are left out.")
-                    .font(.system(size: 15))
+                    .scaledFont(size: 15)
                     .foregroundStyle(Theme.textSecondary)
             } else {
                 Chart {
@@ -123,7 +123,7 @@ struct ExerciseProgressionView: View {
                          + (line.sessionCount >= LiftProgression.minimumSessionsPerSide
                             ? (line.recentMeanOneRepMaxKg.map { " · last 3 average \(weightText($0))" } ?? "")
                             : ""))
-                        .font(Theme.detail)
+                        .liftFont(.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -137,14 +137,14 @@ struct ExerciseProgressionView: View {
     /// card states the figure and what it was measured over, and nothing else.
     @ViewBuilder
     private var imbalanceCard: some View {
-        LiftCard(title: "Left and right") {
+        AppCard(title: "Left and right") {
             // Coach web's imbalanceLines, word for word (ImbalanceLines).
             Text(imbalanceLines.headline)
-                .font(Theme.figure)
+                .liftFont(.figure)
                 .foregroundStyle(Theme.textPrimary)
 
             Text(imbalanceLines.detail)
-                .font(Theme.detail)
+                .liftFont(.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

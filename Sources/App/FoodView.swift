@@ -58,8 +58,8 @@ struct FoodView: View {
                     showingSearch = true
                 } label: {
                     Label("Log food", systemImage: "plus")
-                        .liftFont(.body, weight: .semibold)
-                        .foregroundStyle(AppColor.accentText)
+                        .font(Theme.body.weight(.semibold))
+                        .foregroundStyle(Theme.accentText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.cardPadding)
                         .liftCardBackground()
@@ -76,13 +76,13 @@ struct FoodView: View {
                         HStack(alignment: .center, spacing: 12) {
                             Image(systemName: "car")
                                 .scaledFont(size: 17, weight: .semibold)
-                                .foregroundStyle(AppColor.accentText)
+                                .foregroundStyle(Theme.accentText)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Road Food")
-                                    .liftFont(.body, weight: .semibold)
-                                    .foregroundStyle(AppColor.accentText)
+                                    .font(Theme.body.weight(.semibold))
+                                    .foregroundStyle(Theme.accentText)
                                 Text("Fast food and gas stations, ranked against what's left today")
-                                    .liftFont(.detail)
+                                    .scaledFont(size: 14)
                                     .foregroundStyle(Theme.textSecondary)
                                     .multilineTextAlignment(.leading)
                             }
@@ -137,8 +137,8 @@ struct FoodView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(meal.displayName)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 Spacer()
                 Text("\(Int(mealEntries.totalNutrition.calories)) kcal")
                     .scaledFont(size: 15, weight: .bold)
@@ -147,7 +147,7 @@ struct FoodView: View {
 
             if mealEntries.isEmpty {
                 Text("Nothing logged")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             } else {
                 ForEach(mealEntries) { entry in
@@ -158,14 +158,14 @@ struct FoodView: View {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(entry.displayName)
-                                        .liftFont(.body)
+                                        .font(Theme.body)
                                         .foregroundStyle(Theme.textPrimary)
                                     Text(macroLine(entry))
-                                        .liftFont(.detail)
+                                        .scaledFont(size: 14)
                                         .foregroundStyle(Theme.textSecondary)
                                     if let details = NutrientDetailsDisplay.entryLine(entry.nutrition) {
                                         Text(details)
-                                            .liftFont(.detail)
+                                            .scaledFont(size: 14)
                                             .foregroundStyle(Theme.textSecondary)
                                     }
                                 }
@@ -192,11 +192,11 @@ struct FoodView: View {
         if !recent.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Recent")
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
 
                 Text("Tap to log it again, into the meal that fits the time of day.")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
 
                 ForEach(recent) { entry in
@@ -206,17 +206,17 @@ struct FoodView: View {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(entry.displayName)
-                                    .liftFont(.body)
+                                    .font(Theme.body)
                                     .foregroundStyle(Theme.textPrimary)
                                 Text(macroLine(entry))
-                                    .liftFont(.detail)
+                                    .scaledFont(size: 14)
                                     .foregroundStyle(Theme.textSecondary)
                             }
                             Spacer()
                             Image(systemName: "arrow.counterclockwise")
                                 .accessibilityHidden(true)
                                 .scaledFont(size: 15, weight: .semibold)
-                                .foregroundStyle(AppColor.accentText)
+                                .foregroundStyle(Theme.accentText)
                         }
                         .contentShape(Rectangle())
                     }
@@ -386,8 +386,8 @@ struct NutrientTotalsSection: View {
             // different kind of thing.
             VStack(alignment: .leading, spacing: 12) {
                 Text("Also tracked today")
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 NutrientTotalRows(totals: totals)
             }
         }
@@ -402,10 +402,10 @@ struct NutrientTotalRows: View {
         VStack(spacing: 9) {
             ForEach(totals) { total in
                 VStack(alignment: .leading, spacing: 1) {
-                    AppStatRow(label: total.nutrient.label, value: total.value)
+                    StatRow(label: total.nutrient.label, value: total.value)
                     if let coverage = total.coverage {
                         Text(coverage)
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }

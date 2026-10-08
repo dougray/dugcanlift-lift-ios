@@ -74,7 +74,7 @@ struct ExerciseProgressionView: View {
 
     @ViewBuilder
     private var chartCard: some View {
-        AppCard(title: "Estimated 1RM") {
+        LiftCard(title: "Estimated 1RM") {
             if series.isEmpty {
                 Text("No working sets of this lift in the last \(weeks) weeks. A set needs a weight and reps before it can be estimated, and warmups are left out.")
                     .scaledFont(size: 15)
@@ -123,7 +123,7 @@ struct ExerciseProgressionView: View {
                          + (line.sessionCount >= LiftProgression.minimumSessionsPerSide
                             ? (line.recentMeanOneRepMaxKg.map { " · last 3 average \(weightText($0))" } ?? "")
                             : ""))
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -137,14 +137,14 @@ struct ExerciseProgressionView: View {
     /// card states the figure and what it was measured over, and nothing else.
     @ViewBuilder
     private var imbalanceCard: some View {
-        AppCard(title: "Left and right") {
+        LiftCard(title: "Left and right") {
             // Coach web's imbalanceLines, word for word (ImbalanceLines).
             Text(imbalanceLines.headline)
-                .liftFont(.figure)
+                .scaledFont(size: 26, weight: .bold)
                 .foregroundStyle(Theme.textPrimary)
 
             Text(imbalanceLines.detail)
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

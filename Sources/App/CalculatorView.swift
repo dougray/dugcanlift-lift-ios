@@ -98,12 +98,12 @@ struct CalculatorView: View {
                     }
 
                     Text("Activity")
-                        .liftFont(.sectionLabel)
+                        .font(Theme.sectionLabel)
                         .foregroundStyle(Theme.textPrimary)
                     chipRow(ActivityLevel.allCases, selection: activity) { activity = $0 }
 
                     Text("Goal")
-                        .liftFont(.sectionLabel)
+                        .font(Theme.sectionLabel)
                         .foregroundStyle(Theme.textPrimary)
                     chipRow(CalorieGoal.allCases, selection: goal) { goal = $0 }
 
@@ -111,7 +111,7 @@ struct CalculatorView: View {
                         resultCard(result)
                     } else {
                         Text("Enter age, weight, and height to see your numbers.")
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textSecondary)
                             .padding(.top, 4)
                     }
@@ -140,7 +140,6 @@ struct CalculatorView: View {
                 LiftChip(label: option.rawValue, isSelected: sex == option) {
                     sex = option
                 }
-                .accessibilitySelected(sex == option)
             }
         }
         .padding(.top, 8)
@@ -154,13 +153,13 @@ struct CalculatorView: View {
                         focus: Field) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(prompt)
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
                 .accessibilityHidden(true)
             TextField(prompt, text: text)
                 .keyboardType(keyboard)
                 .focused($focusedField, equals: focus)
-                .liftFont(.body)
+                .font(Theme.body)
                 .foregroundStyle(Theme.textPrimary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
@@ -185,7 +184,6 @@ struct CalculatorView: View {
                     LiftChip(label: item.rawValue, isSelected: item == selection) {
                         onSelect(item)
                     }
-                    .accessibilitySelected(item == selection)
                 }
             }
         }
@@ -234,12 +232,12 @@ struct CalculatorView: View {
             LiftCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("\(Int(result.calories)) kcal / day")
-                        .liftFont(.figure)
+                        .scaledFont(size: 26, weight: .bold)
                         .foregroundStyle(Theme.textPrimary)
-                    AppStatRow(label: "Protein", value: "\(Int(result.proteinG)) g")
-                    AppStatRow(label: "Fat", value: "\(Int(result.fatG)) g")
-                    AppStatRow(label: "Carbs", value: "\(Int(result.carbsG)) g")
-                    AppStatRow(label: "Fiber", value: "\(Int(result.fiberG)) g")
+                    StatRow(label: "Protein", value: "\(Int(result.proteinG)) g")
+                    StatRow(label: "Fat", value: "\(Int(result.fatG)) g")
+                    StatRow(label: "Carbs", value: "\(Int(result.carbsG)) g")
+                    StatRow(label: "Fiber", value: "\(Int(result.fiberG)) g")
                 }
             }
 

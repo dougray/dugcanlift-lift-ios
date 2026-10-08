@@ -96,7 +96,7 @@ struct RootView: View {
             }
         }
         .background(Theme.background)
-        .tint(AppColor.accentText)
+        .tint(Theme.accentText)
         .overlay(alignment: .bottom) {
             if let toast = undo.current {
                 UndoToastBar(toast: toast, center: undo)
@@ -109,7 +109,7 @@ struct RootView: View {
         .liftAppearance()
         .sheet(isPresented: $showingSettings) {
             SettingsView()
-                .tint(AppColor.accentText)
+                .tint(Theme.accentText)
                 .liftAppearance()
         }
         .task { FoodEntryGramMigration.run(context: context) }
@@ -158,13 +158,13 @@ struct RootView: View {
                             .tracking(0.5)
                         Spacer(minLength: 0)
                     }
-                    .foregroundStyle(tab == item ? AppColor.accentText : Theme.textSecondary)
+                    .foregroundStyle(tab == item ? Theme.accentText : Theme.textSecondary)
                     .padding(.vertical, 10)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(item.shortcut, modifiers: .command)
-                .accessibilitySelected(tab == item)
+                .accessibilityAddTraits(tab == item ? .isSelected : [])
             }
 
             Spacer(minLength: 0)
@@ -213,7 +213,7 @@ struct RootView: View {
                             .tracking(1.0)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
-                            .foregroundStyle(tab == item ? AppColor.accentText : Theme.textSecondary)
+                            .foregroundStyle(tab == item ? Theme.accentText : Theme.textSecondary)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity)
                         Rectangle()
@@ -224,7 +224,7 @@ struct RootView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(item.shortcut, modifiers: .command)
-                .accessibilitySelected(tab == item)
+                .accessibilityAddTraits(tab == item ? .isSelected : [])
                 .accessibilityShowsLargeContentViewer()
             }
 

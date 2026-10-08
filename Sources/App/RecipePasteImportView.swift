@@ -55,7 +55,7 @@ struct RecipePasteImportView: View {
                 .padding(.vertical, 14)
                 .readableContentWidth()
             }
-            .liftScreen()
+            .appScreen()
             .background(Theme.background)
             .navigationTitle(parsed == nil ? "Paste a recipe" : "Check it over")
             .navigationBarTitleDisplayMode(.inline)
@@ -66,7 +66,7 @@ struct RecipePasteImportView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if parsed != nil {
                         Button("Save") { save() }
-                            .font(Theme.body.weight(.semibold))
+                            .liftFont(.body, weight: .semibold)
                             .disabled(!canSave)
                     }
                 }
@@ -84,7 +84,7 @@ struct RecipePasteImportView: View {
                     .scrollContentBackground(.hidden)
                     .padding(8)
                     .background(Theme.background, in: .rect(cornerRadius: 10))
-                    .font(Theme.body)
+                    .liftFont(.body)
                     .foregroundStyle(Theme.textPrimary)
 
                 HStack(spacing: 12) {
@@ -102,7 +102,7 @@ struct RecipePasteImportView: View {
                     Spacer()
 
                     Button("Read it") { read() }
-                        .font(Theme.body.weight(.semibold))
+                        .liftFont(.body, weight: .semibold)
                         .foregroundStyle(canRead ? Theme.accent : Theme.textSecondary)
                         .disabled(!canRead)
                 }
@@ -129,14 +129,14 @@ struct RecipePasteImportView: View {
         card("Recipe") {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Name", text: $name)
-                    .font(Theme.body)
+                    .liftFont(.body)
                     .foregroundStyle(Theme.textPrimary)
                     .padding(10)
                     .background(Theme.background, in: .rect(cornerRadius: 10))
 
                 Stepper(value: $servings, in: 1...48, step: 1) {
                     Text(CookFormat.servingsLabel(servings))
-                        .font(Theme.body)
+                        .liftFont(.body)
                         .foregroundStyle(Theme.textPrimary)
                 }
 
@@ -168,8 +168,8 @@ struct RecipePasteImportView: View {
         }
 
         Button("Start over") { reset() }
-            .font(Theme.detail)
-            .foregroundStyle(Theme.accent)
+            .liftFont(.detail)
+            .foregroundStyle(AppColor.accentText)
             .buttonStyle(.plain)
     }
 
@@ -179,7 +179,7 @@ struct RecipePasteImportView: View {
             .scrollContentBackground(.hidden)
             .padding(8)
             .background(Theme.background, in: .rect(cornerRadius: 10))
-            .font(Theme.body)
+            .liftFont(.body)
             .foregroundStyle(Theme.textPrimary)
     }
 
@@ -267,8 +267,8 @@ struct RecipePasteImportView: View {
     private func card(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .liftFont(.sectionLabel)
+                .foregroundStyle(AppColor.accentText)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -278,7 +278,7 @@ struct RecipePasteImportView: View {
 
     private func detail(_ text: String) -> some View {
         Text(text)
-            .font(Theme.detail)
+            .liftFont(.detail)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

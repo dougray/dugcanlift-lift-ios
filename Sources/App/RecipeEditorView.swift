@@ -17,6 +17,7 @@ struct RecipeEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
 
+    @State private var confirmingDelete = false
     @State private var name = ""
     @State private var servings: Double = 1
     @State private var ingredientText = ""
@@ -88,16 +89,28 @@ struct RecipeEditorView: View {
                     macrosSection
 
                     if isEditing {
-                        Button("Delete recipe", role: .destructive) { delete() }
-                            .font(Theme.body)
+                        Button("Delete recipe", role: .destructive) { confirmingDelete = true }
+                            .liftFont(.body)
+                            .frame(minHeight: 44)
                             .padding(.top, 4)
+                            .confirmationDialog(
+                                "Delete \(name.isEmpty ? "this recipe" : name)?",
+                                isPresented: $confirmingDelete,
+                                titleVisibility: .visible
+                            ) {
+                                Button("Delete Recipe", role: .destructive) { delete() }
+                                Button("Cancel", role: .cancel) {}
+                            } message: {
+                                Text("Food already logged from it keeps its numbers. This can't be undone.")
+                            }
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .readableContentWidth()
             }
-            .liftScreen()
+            .appScreen()
+            .keyboardDoneButton()
             .background(Theme.background)
             .navigationTitle(isEditing ? "Edit recipe" : "New recipe")
             .navigationBarTitleDisplayMode(.inline)
@@ -117,11 +130,11 @@ struct RecipeEditorView: View {
     private var macrosSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Macros per serving")
-                .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .liftFont(.sectionLabel)
+                .foregroundStyle(AppColor.accentText)
 
             Text("Leave blank if you don't know them. Blank stays unknown — it will not log as zero.")
-                .font(Theme.detail)
+                .liftFont(.detail)
                 .foregroundStyle(Theme.textSecondary)
 
             // Calories on its own row, the four gram figures under it. Five
@@ -153,11 +166,11 @@ struct RecipeEditorView: View {
             } label: {
                 HStack {
                     Text("More nutrients")
-                        .font(Theme.body.weight(.semibold))
+                        .liftFont(.body, weight: .semibold)
                         .foregroundStyle(Theme.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundStyle(Theme.textSecondary)
                         .rotationEffect(.degrees(showingMoreNutrients ? 180 : 0))
                 }
@@ -169,7 +182,7 @@ struct RecipeEditorView: View {
 
             if showingMoreNutrients {
                 Text("Per serving. No goals — blank stays unknown.")
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
                 HStack(alignment: .top, spacing: 10) {
                     macroField("Saturated fat", unit: "g", text: $saturatedFat)
@@ -189,13 +202,13 @@ struct RecipeEditorView: View {
     private func macroField(_ label: String, unit: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(label) (\(unit))")
-                .font(Theme.detail)
+                .liftFont(.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             TextField("—", text: text)
                 .keyboardType(.decimalPad)
-                .font(Theme.body)
+                .liftFont(.body)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
@@ -209,17 +222,17 @@ struct RecipeEditorView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .liftFont(.sectionLabel)
+                .foregroundStyle(AppColor.accentText)
 
             if let hint {
                 Text(hint)
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
 
             content()
-                .font(Theme.body)
+                .liftFont(.body)
                 .foregroundStyle(Theme.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

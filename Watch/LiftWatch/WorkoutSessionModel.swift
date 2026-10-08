@@ -2,6 +2,7 @@ import Foundation
 import LiftKit
 import SwiftUI
 import LiftSync
+import WatchKit
 
 /// Owns the workout the watch is training against right now.
 ///
@@ -18,8 +19,23 @@ final class WorkoutSessionModel: ObservableObject {
     /// `StandaloneFoodLog`'s doc comment for why `SyncOutbox` cannot serve
     /// this purpose.
     let foodLog = StandaloneFoodLog()
-    @Published var restTimer = RestTimer()
-    @Published var unit: WeightUnit = .pounds
+    /// Every start, stop and skip goes through here (the Rest page and
+    /// `logSet` both assign it), so this is where the end-of-rest alert is
+    /// scheduled -- not in `RestTimerView`, whose timer only runs while that
+    /// page is on screen. After Log Set the lifter is on the exercise list.
+    @Published var restTimer = RestTimer() {
+        didSet { scheduleRestAlert() }
+    }
+    /// The phone's kg/lb setting, as its application context last carried it
+    /// (`DisplayUnitsContext`), and kept across launches. Pounds until a phone
+    /// says otherwise, which is what this always was.
+    @Published var unit: WeightUnit = WorkoutSessionModel.storedUnit(DisplayUnitsContext.weightUnitKey, .pounds) {
+        didSet { UserDefaults.standard.set(unit.rawValue, forKey: DisplayUnitsContext.weightUnitKey) }
+    }
+    /// The phone's mi/km setting, for outdoor distance, pace and elevation.
+    @Published var distanceUnit: DistanceUnit = WorkoutSessionModel.storedUnit(DisplayUnitsContext.distanceUnitKey, .miles) {
+        didSet { UserDefaults.standard.set(distanceUnit.rawValue, forKey: DisplayUnitsContext.distanceUnitKey) }
+    }
     @Published var servingUnit: ServingUnit = .grams
     @Published private(set) var isPhoneReachable = false
     @Published private(set) var recentFoodsSnapshot: RecentFoodsSnapshot?
@@ -243,6 +259,33 @@ final class WorkoutSessionModel: ObservableObject {
         draft = nil
     }
 
+    // MARK: - Rest alert
+
+    private var restAlert: Task<Void, Never>?
+
+    /// One haptic when the rest runs out, wherever the lifter is in the app.
+    /// A lifting `HKWorkoutSession` keeps the process running wrist-down, so
+    /// the sleeping task still fires. Rescheduled on every change to
+    /// `restTimer`; a stop or a fresh start cancels the one before.
+    private func scheduleRestAlert() {
+        restAlert?.cancel()
+        restAlert = nil
+        guard restTimer.isRunning, let remaining = restTimer.remaining(), remaining > 0 else { return }
+        let startedAt = restTimer.startedAt
+        restAlert = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(remaining))
+            guard !Task.isCancelled, let self,
+                  self.restTimer.isRunning, self.restTimer.startedAt == startedAt
+            else { return }
+            WKInterfaceDevice.current().play(.notification)
+        }
+    }
+
+    private static func storedUnit<U: RawRepresentable>(_ key: String, _ fallback: U) -> U
+    where U.RawValue == String {
+        UserDefaults.standard.string(forKey: key).flatMap(U.init(rawValue:)) ?? fallback
+    }
+
     // MARK: - Plans
 
     /// Asks the phone for today's plan. Fire and forget: the answer arrives
@@ -391,6 +434,16 @@ final class WorkoutSessionModel: ObservableObject {
     }
 
     private func receiveApplicationContext(_ context: [String: Any]) {
+        // Units first, and whether or not the snapshot decodes: they are
+        // separate keys in the same dictionary.
+        if let raw = DisplayUnitsContext.weightUnit(in: context),
+           let received = WeightUnit(rawValue: raw), received != unit {
+            unit = received
+        }
+        if let raw = DisplayUnitsContext.distanceUnit(in: context),
+           let received = DistanceUnit(rawValue: raw), received != distanceUnit {
+            distanceUnit = received
+        }
         guard let snapshot = try? RecentFoodsSnapshot(messageBody: context) else { return }
         recentFoodsSnapshot = snapshot
         foodSnapshotStore.save(snapshot)

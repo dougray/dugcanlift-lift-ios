@@ -27,16 +27,14 @@ struct ExerciseListView: View {
             if let draft = session.draft {
                 ForEach(draft.exercises) { exercise in
                     NavigationLink {
+                        // Opening an exercise out of order moves the guided
+                        // session with it: LogSetView does that as it
+                        // appears (see its `seed()`), not a tap gesture on
+                        // this row, so a VoiceOver activation moves it too.
                         LogSetView(exerciseID: exercise.id)
                     } label: {
                         ExerciseRow(exercise: exercise, unit: session.unit)
                     }
-                    // Opening an exercise out of order moves the guided
-                    // session with it, so the prescription on the next screen
-                    // belongs to the exercise the lifter actually opened.
-                    .simultaneousGesture(TapGesture().onEnded {
-                        session.focusGuidedSession(on: exercise.id)
-                    })
                 }
             }
             NavigationLink("Add Exercise") { ExercisePickerView() }

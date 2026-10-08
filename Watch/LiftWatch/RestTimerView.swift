@@ -1,11 +1,12 @@
 import LiftKit
 import SwiftUI
-import WatchKit
 
 struct RestTimerView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
     @State private var now = Date()
-    @State private var didAlert = false
+
+    /// 44pt at the default size, growing with the wearer's text size.
+    @ScaledMetric(relativeTo: .largeTitle) private var countdownSize: CGFloat = 44
 
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -14,13 +15,19 @@ struct RestTimerView: View {
             Text("REST")
                 .font(.caption2)
                 .foregroundStyle(DclTheme.muted)
+                .accessibilityHidden(true)
 
             Text(RestTimer.format(session.restTimer.remaining(at: now) ?? session.restTimer.interval))
-                .font(.system(size: 44, weight: .semibold, design: .rounded))
+                .font(.system(size: countdownSize, weight: .semibold, design: .rounded))
                 .monospacedDigit()
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+                .accessibilityLabel("Rest remaining")
+                .accessibilityValue(RestTimer.format(session.restTimer.remaining(at: now) ?? session.restTimer.interval))
 
             ProgressView(value: session.restTimer.progress(at: now))
                 .tint(DclTheme.accent)
+                .accessibilityHidden(true)
 
             if session.restTimer.isRunning {
                 Button("Skip") { session.restTimer.stop() }
@@ -31,22 +38,8 @@ struct RestTimerView: View {
             }
         }
         .padding(.horizontal)
-        .onReceive(tick) { date in
-            now = date
-            alertIfFinished()
-        }
-    }
-
-    /// The point of a watch rest timer is not having to look at it.
-    private func alertIfFinished() {
-        guard session.restTimer.isRunning else { return }
-        if session.restTimer.hasFinished(at: now) {
-            if !didAlert {
-                WKInterfaceDevice.current().play(.notification)
-                didAlert = true
-            }
-        } else {
-            didAlert = false
-        }
+        // Display only. The end-of-rest haptic lives in WorkoutSessionModel,
+        // so it fires whichever page is showing.
+        .onReceive(tick) { now = $0 }
     }
 }

@@ -1,6 +1,7 @@
 import LiftKit
 import SwiftUI
 import LiftSync
+import WatchKit
 
 /// Digital Crown entry, mirroring `LogSetView`'s weight stepper exactly —
 /// the user is dialing in an amount by feel, not typing a number.
@@ -75,6 +76,9 @@ struct FoodAmountEntryView: View {
                     } else {
                         session.foodLog.recordSkipped(syncID: syncID)
                     }
+                    // Back to the list with nothing on screen to say it
+                    // worked; the tap on the wrist does.
+                    WKInterfaceDevice.current().play(.success)
                     dismiss()
                 }
             }

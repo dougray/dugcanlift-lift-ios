@@ -25,10 +25,33 @@ struct RootView: View {
 struct StartWorkoutView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
     @EnvironmentObject private var outdoorRecorder: OutdoorActivityRecorder
+    @EnvironmentObject private var outdoorLibrary: OutdoorActivityLibrary
     @State private var focus: TrainingFocus = .bodybuilding
+    @State private var retrying = false
 
     var body: some View {
         List {
+            // A finished run whose Health export failed. Shown here because
+            // this is where Finish lands; the recording screen that used to
+            // carry the message is gone before the export settles.
+            if let failed = outdoorLibrary.failedExport {
+                Section {
+                    Text("Your \(failed.activityType.displayName.lowercased()) is saved on the watch, but didn't reach Health.")
+                        .font(.caption2)
+                        .foregroundStyle(DclTheme.accentText)
+                    Button(retrying ? "Trying…" : "Try Again") {
+                        retrying = true
+                        Task {
+                            await outdoorLibrary.retryFailedExport()
+                            retrying = false
+                        }
+                    }
+                    .disabled(retrying)
+                    Button("Not Now") { outdoorLibrary.dismissFailedExport() }
+                        .disabled(retrying)
+                }
+            }
+
             // Today's plan, when the phone has pushed one. Everything below
             // it is unchanged: a day with no plan is the free-entry flow this
             // app has always had, in the same place on the same screen.

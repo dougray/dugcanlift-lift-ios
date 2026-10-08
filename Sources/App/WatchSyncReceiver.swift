@@ -311,7 +311,14 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
         let recent = RecentFoodsQuery.recent(context: context, limit: 20)
         let snapshot = Self.makeSnapshot(from: recent)
         guard let dict = try? snapshot.messageBody() else { return }
-        try? WCSession.default.updateApplicationContext(dict)
+        // The kg/lb and mi/km settings ride along, so the watch shows a
+        // kilogram lifter kilograms. Display only: weights travel in kg.
+        let defaults = UserDefaults.standard
+        let withUnits = DisplayUnitsContext.adding(
+            weightUnit: defaults.string(forKey: "weightUnit") ?? WeightUnit.pounds.rawValue,
+            distanceUnit: defaults.string(forKey: "distanceUnit") ?? DistanceUnit.miles.rawValue,
+            to: dict)
+        try? WCSession.default.updateApplicationContext(withUnits)
     }
 
     /// The pure phone -> watch mapping half of `pushRecentFoodsSnapshot()`,

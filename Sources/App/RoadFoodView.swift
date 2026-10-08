@@ -60,7 +60,7 @@ struct RoadFoodView: View {
         return VStack(alignment: .leading, spacing: Theme.cardSpacing) {
             Text("Pick where you are stopping. The list is ranked against what is left of today, "
                  + "and works with no signal.")
-                .liftFont(.body)
+                .font(Theme.body)
                 .foregroundStyle(Theme.textSecondary)
 
             if source == .developmentSample { RoadFoodSampleNotice() }
@@ -94,7 +94,7 @@ struct RoadFoodView: View {
             Text("Numbers come from each chain's own published nutrition, checked by hand, and each "
                  + "place shows when the chain published them and when they were checked. LIFT "
                  + "never asks where you are.")
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
                 .padding(.top, 4)
         }
@@ -140,8 +140,8 @@ struct RoadFoodView: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .liftFont(.cardTitle)
-            .foregroundStyle(AppColor.accentText)
+            .font(Theme.cardTitle)
+            .foregroundStyle(Theme.accentText)
             .padding(.top, 6)
     }
 
@@ -170,7 +170,7 @@ struct RoadFoodView: View {
                         .multilineTextAlignment(.leading)
                     if !detail.isEmpty {
                         Text(detail)
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                             .multilineTextAlignment(.leading)
                     }
@@ -223,7 +223,7 @@ private struct RoadFoodSampleNotice: View {
     var body: some View {
         Text("Development sample: made-up places and numbers. The curated list replaces them "
              + "once Resources/road-food.json is in the app.")
-            .liftFont(.detail)
+            .scaledFont(size: 14)
             .foregroundStyle(Theme.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
@@ -329,10 +329,10 @@ struct RoadFoodPlaceView: View {
                         if !ranked.over.isEmpty {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("A little over")
-                                    .liftFont(.cardTitle)
-                                    .foregroundStyle(AppColor.accentText)
+                                    .font(Theme.cardTitle)
+                                    .foregroundStyle(Theme.accentText)
                                 Text("Within 10% of what is left.")
-                                    .liftFont(.detail)
+                                    .scaledFont(size: 14)
                                     .foregroundStyle(Theme.textSecondary)
                             }
                             .padding(.top, 6)
@@ -351,7 +351,7 @@ struct RoadFoodPlaceView: View {
         .safeAreaInset(edge: .bottom) {
             if let note {
                 Text(note)
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
                     .frame(maxWidth: AdaptiveLayout.readableWidth, alignment: .leading)
                     .padding(Theme.cardPadding)
@@ -373,7 +373,7 @@ struct RoadFoodPlaceView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(chain?.name ?? "Gas station")
-                .liftFont(.figure)
+                .scaledFont(size: 26, weight: .bold)
                 .foregroundStyle(Theme.textPrimary)
 
             // What the chain published, and when a person last read it: two
@@ -393,22 +393,22 @@ struct RoadFoodPlaceView: View {
                 if let link = chain?.source, link.hasPrefix("https://"), let url = URL(string: link) {
                     Text("·")
                     Link("source", destination: url)
-                        .foregroundStyle(AppColor.accentText)
+                        .foregroundStyle(Theme.accentText)
                 }
             }
-            .liftFont(.detail)
+            .scaledFont(size: 14)
             .foregroundStyle(Theme.textSecondary)
 
             if RoadFoodRanking.isStale(checkedOn: ageDate, today: DayKey.today) == true {
                 if let published = RoadFoodRanking.publishedText(publishedOn) {
                     Text("These numbers are from the chain's chart dated \(published). Menus "
                          + "change, so check them against the board before you count on them.")
-                        .liftFont(.body)
+                        .font(Theme.body)
                         .foregroundStyle(Theme.textPrimary)
                 } else {
                     Text("These numbers are more than six months old. Menus change, so check them "
                          + "against the board before you count on them.")
-                        .liftFont(.body)
+                        .font(Theme.body)
                         .foregroundStyle(Theme.textPrimary)
                 }
             }
@@ -419,12 +419,10 @@ struct RoadFoodPlaceView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 LiftChip(label: "All", isSelected: category == nil) { category = nil }
-                    .accessibilitySelected(category == nil)
                 ForEach(catalog.snackCategories, id: \.self) { c in
                     LiftChip(label: RoadFoodRanking.categoryLabel(c), isSelected: category == c) {
                         category = c
                     }
-                    .accessibilitySelected(category == c)
                 }
             }
         }
@@ -448,13 +446,13 @@ struct RoadFoodPlaceView: View {
                         .foregroundStyle(Theme.textPrimary)
                     Text("Most protein per 100 kcal first; lower sodium breaks a tie. Anything more "
                          + "than 10% over what is left is not shown.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                     if ranked.fits.isEmpty && ranked.over.isEmpty {
                         Text(remaining.calories <= 0
                              ? "Today's calories are used, so nothing here fits what is left."
                              : "Nothing here fits what is left today.")
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                     }
                 } else {
@@ -463,7 +461,7 @@ struct RoadFoodPlaceView: View {
                         .foregroundStyle(Theme.textPrimary)
                     Text("So this is ranked by protein per 100 kcal alone, with nothing left out. "
                          + "Set a goal on Home and it will rank against what is left of your day.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
                 // One line, whether or not there is a goal. Said, never
@@ -483,13 +481,13 @@ struct RoadFoodPlaceView: View {
 
     /// Right after a menu changes, when the numbers are not.
     private var rulesCard: some View {
-        AppCard(title: "Ordering") {
+        LiftCard(title: "Ordering") {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(rules, id: \.self) { rule in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("•").foregroundStyle(AppColor.accentText)
+                        Text("•").foregroundStyle(Theme.accentText)
                         Text(rule)
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -503,13 +501,12 @@ struct RoadFoodPlaceView: View {
     private var mealPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Log to")
-                .liftFont(.sectionLabel)
+                .font(Theme.sectionLabel)
                 .foregroundStyle(Theme.textSecondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(MealType.allCases) { m in
                         LiftChip(label: m.displayName, isSelected: meal == m) { meal = m }
-                            .accessibilitySelected(meal == m)
                     }
                 }
             }
@@ -552,25 +549,25 @@ struct RoadFoodPlaceView: View {
                     .foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(macroLine(item))
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
                 if let about = aboutLine(item) {
-                    Text(about).liftFont(.detail).foregroundStyle(Theme.textSecondary)
+                    Text(about).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
                 }
                 // Shown, never targeted: plain text, no colour, no threshold.
                 if let details = NutrientDetailsDisplay.entryLine(
                     NutritionFacts(sugarG: item.sugarG, sodiumMg: item.sodiumMg,
                                    saturatedFatG: item.saturatedFatG)) {
-                    Text(details).liftFont(.detail).foregroundStyle(Theme.textSecondary)
+                    Text(details).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
                 }
                 if let modification = item.modification {
-                    Text(modification).liftFont(.detail).foregroundStyle(Theme.textSecondary)
+                    Text(modification).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
                 }
                 if let barcode = item.barcode {
-                    Text("Barcode \(barcode)").liftFont(.detail).foregroundStyle(Theme.textSecondary)
+                    Text("Barcode \(barcode)").scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
                 }
                 if let reason = RoadFoodRanking.cannotLogReason(item) {
-                    Text(reason).liftFont(.detail).foregroundStyle(Theme.textSecondary)
+                    Text(reason).scaledFont(size: 14).foregroundStyle(Theme.textSecondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -40,7 +40,7 @@ struct TrainView: View {
                         for: AdaptiveLayout.contentWidth(forPage: pageWidth), minWidth: 394)) {
                         VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                             Text("Focus")
-                                .liftFont(.sectionLabel)
+                                .font(Theme.sectionLabel)
                                 .foregroundStyle(Theme.textPrimary)
 
                             FocusPicker(date: selectedDate)
@@ -95,14 +95,14 @@ struct TrainView: View {
     private var dayNavigator: some View {
         HStack {
             Button("Previous") { shift(-1) }
-                .foregroundStyle(AppColor.accentText)
+                .foregroundStyle(Theme.accentText)
             Spacer()
             Text(relativeLabel)
                 .scaledFont(size: 22, weight: .heavy)
                 .foregroundStyle(Theme.textPrimary)
             Spacer()
             Button("Next") { shift(1) }
-                .foregroundStyle(isToday ? Theme.textSecondary : AppColor.accentText)
+                .foregroundStyle(isToday ? Theme.textSecondary : Theme.accentText)
                 .disabled(isToday)
         }
         .scaledFont(size: 16, weight: .semibold)
@@ -178,7 +178,6 @@ private struct FocusPicker: View {
                     LiftChip(label: focus.displayName, isSelected: currentFocus == focus) {
                         setFocus(focus)
                     }
-                    .accessibilitySelected(currentFocus == focus)
                 }
             }
         }
@@ -253,7 +252,7 @@ private struct DayEditor: View {
         LiftCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Workout name")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
 
                 TextField("Push, Pull, Legs…", text: nameBinding)
@@ -263,7 +262,7 @@ private struct DayEditor: View {
 
                 if let day, day.totalSetCount > 0 {
                     Text(day.summary(unit: unit))
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
 
@@ -280,7 +279,7 @@ private struct DayEditor: View {
                 } label: {
                     Label("Add exercise", systemImage: "plus")
                         .scaledFont(size: 16, weight: .semibold)
-                        .foregroundStyle(AppColor.accentText)
+                        .foregroundStyle(Theme.accentText)
                 }
 
                 liveSessionControl
@@ -305,14 +304,14 @@ private struct DayEditor: View {
         if let day, day.isLive {
             HStack {
                 Label("Live session", systemImage: "record.circle")
-                    .foregroundStyle(AppColor.accentText)
+                    .foregroundStyle(Theme.accentText)
                 Spacer()
                 Button("End") {
                     day.liveEndedAt = .now
                     try? context.save()
                     Task { await HealthKitManager.shared.syncPending(context: context) }
                 }
-                .foregroundStyle(AppColor.accentText)
+                .foregroundStyle(Theme.accentText)
             }
             .scaledFont(size: 15, weight: .semibold)
         } else if Calendar.current.isDateInToday(date), day?.liveEndedAt == nil {
@@ -397,7 +396,7 @@ private struct ExerciseBlock: View {
                     // the header rather than waiting to be counted by eye.
                     if let countLabel {
                         Text(countLabel)
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
@@ -406,7 +405,7 @@ private struct ExerciseBlock: View {
                 // first. Single sets stay one tap, with Undo instead.
                 Button("Remove") { confirmingRemove = true }
                     .scaledFont(size: 15, weight: .semibold)
-                    .foregroundStyle(AppColor.accentText)
+                    .foregroundStyle(Theme.accentText)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
                     .accessibilityLabel("Remove \(exercise.displayName)")
@@ -434,7 +433,7 @@ private struct ExerciseBlock: View {
                 Label("Log left and right separately",
                       systemImage: perSide ? "checkmark.square.fill" : "square")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundStyle(perSide ? AppColor.accentText : Theme.textSecondary)
+                    .foregroundStyle(perSide ? Theme.accentText : Theme.textSecondary)
                     .frame(minHeight: 44, alignment: .leading)
                     .contentShape(Rectangle())
             }
@@ -592,7 +591,7 @@ private struct SetRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Text("\(index).")
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textSecondary)
                     .frame(width: numberColumn, alignment: .leading)
                     .accessibilityHidden(true)
@@ -664,7 +663,7 @@ private struct SetRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(side.displayName)
-                .accessibilitySelected(set.side == side)
+                .accessibilityAddTraits(set.side == side ? .isSelected : [])
             }
         }
     }
@@ -855,7 +854,7 @@ private struct OutdoorDaySection: View {
     }
 
     var body: some View {
-        AppCard(title: "Outdoor") {
+        LiftCard(title: "Outdoor") {
             HStack(spacing: 16) {
                 Button { startingActivityType = .run } label: {
                     Label("Run", systemImage: "figure.run")
@@ -874,7 +873,7 @@ private struct OutdoorDaySection: View {
                 .foregroundStyle(Theme.textSecondary)
             }
             .scaledFont(size: 15, weight: .semibold)
-            .foregroundStyle(AppColor.accentText)
+            .foregroundStyle(Theme.accentText)
 
             ForEach(activities) { activity in
                 NavigationLink {
@@ -922,7 +921,7 @@ private struct OutdoorHighlights: View {
         let bests = OutdoorRecords.bests(in: activities)
 
         if let last {
-            AppCard(title: "Last route") {
+            LiftCard(title: "Last route") {
                 NavigationLink {
                     OutdoorActivityReviewView(activity: last)
                         .followsWindowAppearance()
@@ -956,13 +955,13 @@ private struct OutdoorHighlights: View {
         }
 
         if bests.isEmpty {
-            AppCard(title: "Personal bests") {
+            LiftCard(title: "Personal bests") {
                 Text("Your last route and your best distance, time and pace show up here after your first run, walk or hike.")
                     .scaledFont(size: 15)
                     .foregroundStyle(Theme.textSecondary)
             }
         } else {
-            AppCard(title: "Personal bests") {
+            LiftCard(title: "Personal bests") {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(bests, id: \.type) { best in
                         VStack(alignment: .leading, spacing: 6) {

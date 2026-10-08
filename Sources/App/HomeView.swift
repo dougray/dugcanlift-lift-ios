@@ -57,12 +57,12 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 Text("LIFT")
                     .scaledFont(size: 30, weight: .heavy)
-                    .foregroundStyle(AppColor.accentText)
+                    .foregroundStyle(Theme.accentText)
                     .padding(.top, 8)
 
                 Text("Today")
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
 
                 // Two columns of cards once each can be a phone's width.
                 AdaptiveColumns(columns: AdaptiveLayout.columns(
@@ -72,20 +72,20 @@ struct HomeView: View {
                             VStack(alignment: .leading, spacing: 14) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(calorieHeadline)
-                                        .liftFont(.figure)
+                                        .scaledFont(size: 26, weight: .bold)
                                         .foregroundStyle(Theme.textPrimary)
                                     Text("\(Int(totals.calories)) of \(Int(goalCalories))")
-                                        .liftFont(.detail)
+                                        .scaledFont(size: 14)
                                         .foregroundStyle(Theme.textSecondary)
                                 }
 
-                                AppMacroProgressRow(label: "Protein", current: totals.proteinG,
+                                MacroProgressRow(label: "Protein", current: totals.proteinG,
                                                  goal: goalProtein, unit: "g")
-                                AppMacroProgressRow(label: "Fat", current: totals.fatG,
+                                MacroProgressRow(label: "Fat", current: totals.fatG,
                                                  goal: goalFat, unit: "g")
-                                AppMacroProgressRow(label: "Carbs", current: totals.carbsG,
+                                MacroProgressRow(label: "Carbs", current: totals.carbsG,
                                                  goal: goalCarbs, unit: "g")
-                                AppMacroProgressRow(label: "Fiber", current: totals.fiberG ?? 0,
+                                MacroProgressRow(label: "Fiber", current: totals.fiberG ?? 0,
                                                  goal: goalFiber, unit: "g")
                             }
                         }
@@ -96,7 +96,7 @@ struct HomeView: View {
                                     .scaledFont(size: 17, weight: .bold)
                                     .foregroundStyle(Theme.textPrimary)
                                 Text("Work out your daily calories and macros to start tracking against them.")
-                                    .liftFont(.body)
+                                    .font(Theme.body)
                                     .foregroundStyle(Theme.textSecondary)
                                 // A filled pill, as the browser build renders a
                                 // primary action. Bare accent text reads as a link
@@ -107,9 +107,9 @@ struct HomeView: View {
                         }
                     }
 
-                    AppCard(title: "Steps") {
+                    LiftCard(title: "Steps") {
                         VStack(alignment: .leading, spacing: 10) {
-                            AppMacroProgressRow(label: "Today", current: todaySteps,
+                            MacroProgressRow(label: "Today", current: todaySteps,
                                              goal: goalSteps, unit: "steps")
                             // HealthKit never says whether reading steps was
                             // refused, so no steps after LIFT has asked may be
@@ -117,7 +117,7 @@ struct HomeView: View {
                             // allow it -- never ask again from here.
                             if todaySteps == 0 && health.isAvailable && health.hasAskedForAuthorization {
                                 Text("No steps from Apple Health yet. If LIFT isn't allowed to read them, turn Steps on in Settings › Privacy & Security › Health › LIFT.")
-                                    .liftFont(.detail)
+                                    .scaledFont(size: 14)
                                     .foregroundStyle(Theme.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -131,34 +131,34 @@ struct HomeView: View {
                                 }
                             }
                             .scaledFont(size: 13, weight: .semibold)
-                            .foregroundStyle(AppColor.accentText)
+                            .foregroundStyle(Theme.accentText)
                         }
                     }
 
-                    AppCard(title: "Training") {
+                    LiftCard(title: "Training") {
                         if let day, day.totalSetCount > 0 {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(day.name.isEmpty ? day.focus.displayName : day.name)
                                     .scaledFont(size: 18, weight: .semibold)
                                     .foregroundStyle(Theme.textPrimary)
                                 Text("\(day.exercises.count) exercises · \(day.summary(unit: unit))")
-                                    .liftFont(.detail)
+                                    .scaledFont(size: 14)
                                     .foregroundStyle(Theme.textSecondary)
                             }
                         } else {
                             Text("Nothing logged yet")
-                                .liftFont(.body)
+                                .font(Theme.body)
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
 
-                    AppCard(title: "Fuel so far today") {
+                    LiftCard(title: "Fuel so far today") {
                         VStack(spacing: 9) {
-                            AppStatRow(label: "Calories", value: "\(Int(totals.calories)) kcal")
-                            AppStatRow(label: "Protein", value: "\(Int(totals.proteinG)) g")
-                            AppStatRow(label: "Carbs", value: "\(Int(totals.carbsG)) g")
-                            AppStatRow(label: "Fat", value: "\(Int(totals.fatG)) g")
-                            AppStatRow(label: "Fiber", value: "\(Int(totals.fiberG ?? 0)) g")
+                            StatRow(label: "Calories", value: "\(Int(totals.calories)) kcal")
+                            StatRow(label: "Protein", value: "\(Int(totals.proteinG)) g")
+                            StatRow(label: "Carbs", value: "\(Int(totals.carbsG)) g")
+                            StatRow(label: "Fat", value: "\(Int(totals.fatG)) g")
+                            StatRow(label: "Fiber", value: "\(Int(totals.fiberG ?? 0)) g")
                             // Saturated fat, sugar and sodium, when any food today
                             // recorded them. Totals only, never against a goal.
                             NutrientTotalRows(totals: NutrientDetailsDisplay.dayTotals(todaysFood.map(\.nutrition)))

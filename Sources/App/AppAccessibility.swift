@@ -2,53 +2,15 @@ import SwiftUI
 import UIKit
 import LiftCore
 
-// App-local accessibility shims over kit 1.10.0.
+// App-local accessibility helpers the kit does not provide.
 //
-// The kit pinned in project.yml has fixed-size type tokens, and its rust fails
-// AA as small text in dark mode. Both belong in the kit, and a kit bump is a
-// deliberate, schema-affecting edit (see CLAUDE.md), so until it happens the
-// fixes live here. When the kit gains a text-safe accent and Dynamic-Type
-// tokens, delete this file's colour and font helpers and switch call sites back.
-
-// MARK: - Colour
-
-enum AppColor {
-    /// Rust that passes WCAG AA as small text on both grounds, in both
-    /// appearances. Dark: #E0684F is 5.13:1 on `Theme.background` (#1C1B19)
-    /// and 4.73:1 on `Theme.surface` (#242220), where `Theme.accent`
-    /// (#C1442C) is only 3.39 / 3.12:1. Light: the kit's own light rust
-    /// (#B23C25, 5.14 / 5.75:1) already passes, so it is reused unchanged.
-    ///
-    /// Use this for accent-coloured *text and glyphs*. Keep `Theme.accent`
-    /// for fills, rules, progress bars and display-size text.
-    static let accentText = Color(light: 0xB23C25, dark: 0xE0684F)
-}
+// Kit 1.12.0 supplies the text-safe rust (`Theme.accentText`), Dynamic Type
+// type tokens, and the selected/header traits on its own components; use
+// those. What stays here is app-only: a Dynamic Type font for sizes that are
+// not a kit token, the text-safe screen tint, the keyboard Done button, the
+// delete glyph and the undo toast.
 
 // MARK: - Dynamic Type
-
-/// The kit's type tokens, re-expressed so they follow the reader's text size.
-/// Same base sizes and weights as kit 1.10.0 `Theme`, so the default-size look
-/// is unchanged.
-enum LiftTextStyle {
-    case cardTitle, figure, body, detail, sectionLabel
-
-    var size: CGFloat {
-        switch self {
-        case .cardTitle: 17
-        case .figure: 26
-        case .body: 16
-        case .detail: 14
-        case .sectionLabel: 15
-        }
-    }
-
-    var weight: Font.Weight {
-        switch self {
-        case .cardTitle, .figure, .sectionLabel: .bold
-        case .body, .detail: .regular
-        }
-    }
-}
 
 /// Scales a fixed base size with Dynamic Type, relative to the system text
 /// style nearest that size, so 16pt grows the way Callout does.
@@ -89,24 +51,14 @@ extension View {
         modifier(ScaledSystemFont(size: size, weight: weight, design: design))
     }
 
-    /// A kit type token (`Theme.body` etc.) that follows Dynamic Type.
-    func liftFont(_ style: LiftTextStyle, weight: Font.Weight? = nil) -> some View {
-        scaledFont(size: style.size, weight: weight ?? style.weight)
-    }
-
-    /// The kit's `liftScreen()`, with a text-safe tint. Every plain `Button`
-    /// and toolbar item takes its text colour from the tint, so this is where
-    /// most small rust text comes from. The inner tint wins over the kit's.
+    /// The kit's `liftScreen()`, tinted with `Theme.accentText` rather than
+    /// the kit's `Theme.accent`. Every plain `Button` and toolbar item takes
+    /// its text colour from the tint, so this is where most small rust text
+    /// comes from. The inner tint wins over the kit's.
     func appScreen() -> some View {
         self
-            .tint(AppColor.accentText)
+            .tint(Theme.accentText)
             .liftScreen()
-    }
-
-    /// `.isSelected` for a hand-built selectable control, so VoiceOver says
-    /// "selected" for the active tab or chip.
-    func accessibilitySelected(_ isSelected: Bool) -> some View {
-        accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     /// Number and decimal pads have no return key. One Done button above the
@@ -147,7 +99,7 @@ struct DeleteGlyphButton: View {
         Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: glyph, weight: .bold))
-                .foregroundStyle(AppColor.accentText)
+                .foregroundStyle(Theme.accentText)
                 .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
         }
@@ -214,13 +166,13 @@ struct UndoToastBar: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(toast.message)
-                .liftFont(.body)
+                .font(Theme.body)
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(2)
             Spacer(minLength: 8)
             Button("Undo") { center.performUndo() }
-                .liftFont(.body, weight: .bold)
-                .foregroundStyle(AppColor.accentText)
+                .font(Theme.body.weight(.bold))
+                .foregroundStyle(Theme.accentText)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
                 .buttonStyle(.plain)
@@ -236,91 +188,5 @@ struct UndoToastBar: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .accessibilityElement(children: .contain)
-    }
-}
-
-// MARK: - Kit components, text-safe
-
-// Kit 1.10.0's LiftCard, MacroProgressRow and StatRow draw their text with
-// the fixed-size tokens, and LiftCard's title and MacroProgressRow's value in
-// `Theme.accent`, which fails AA in dark. These are the same layouts with the
-// app's scaled fonts and text-safe rust. Delete them and switch back once the
-// kit's own components do this.
-
-/// `LiftCard`, with a title that scales and passes contrast, and is a
-/// VoiceOver heading.
-struct AppCard<Content: View>: View {
-    var title: String?
-    @ViewBuilder var content: Content
-
-    init(title: String? = nil, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let title {
-                Text(title)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
-                    .accessibilityAddTraits(.isHeader)
-            }
-            content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.cardPadding)
-        .liftCardBackground()
-    }
-}
-
-/// `MacroProgressRow`: label left, value right, a progress rule beneath.
-struct AppMacroProgressRow: View {
-    let label: String
-    let current: Double
-    let goal: Double
-    let unit: String
-
-    private var fraction: Double {
-        guard goal > 0 else { return 0 }
-        return min(current / goal, 1)
-    }
-
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Text(label)
-                    .liftFont(.body)
-                    .foregroundStyle(Theme.textPrimary)
-                Spacer()
-                Text("\(Int(current)) / \(Int(goal)) \(unit)")
-                    .liftFont(.body)
-                    .foregroundStyle(AppColor.accentText)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.hairline.opacity(0.5))
-                    Capsule().fill(Theme.accent).frame(width: geo.size.width * fraction)
-                }
-            }
-            .frame(height: 3)
-            .accessibilityHidden(true)
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// `StatRow`: plain label and value.
-struct AppStatRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(label).liftFont(.body).foregroundStyle(Theme.textPrimary)
-            Spacer()
-            Text(value).liftFont(.body).foregroundStyle(Theme.textPrimary)
-        }
-        .accessibilityElement(children: .combine)
     }
 }

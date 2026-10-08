@@ -64,7 +64,7 @@ struct RecipeImportView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if case let .review(imported, url) = stage {
                         Button("Save") { save(imported, from: url) }
-                            .liftFont(.body, weight: .semibold)
+                            .font(Theme.body.weight(.semibold))
                     }
                 }
             }
@@ -77,20 +77,20 @@ struct RecipeImportView: View {
         card("Link") {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Paste a recipe's web address. Most recipe sites publish their ingredients and method in a form this can read directly.")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
 
                 TextField("https://", text: $address)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
                     .onSubmit(fetch)
 
                 Button(action: fetch) {
                     Text("Fetch recipe")
-                        .liftFont(.body, weight: .semibold)
+                        .font(Theme.body.weight(.semibold))
                         .foregroundStyle(Theme.onAccent)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -108,7 +108,7 @@ struct RecipeImportView: View {
             HStack(spacing: 10) {
                 ProgressView().tint(Theme.accent)
                 Text(address)
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -120,11 +120,11 @@ struct RecipeImportView: View {
         card("Could not import") {
             VStack(alignment: .leading, spacing: 12) {
                 Text(message)
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
                 Button("Try another link") { stage = .entry }
-                    .liftFont(.body, weight: .semibold)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.body.weight(.semibold))
+                    .foregroundStyle(Theme.accentText)
                     .buttonStyle(.plain)
             }
         }
@@ -145,7 +145,7 @@ struct RecipeImportView: View {
 
                 Stepper(value: $servings, in: 1...48, step: 1) {
                     Text(CookFormat.servingsLabel(servings))
-                        .liftFont(.body)
+                        .font(Theme.body)
                         .foregroundStyle(Theme.textPrimary)
                 }
 
@@ -174,14 +174,14 @@ struct RecipeImportView: View {
                 ForEach(Array(parsedIngredients(imported).enumerated()), id: \.offset) { _, parsed in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(parsed.displayText)
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                         Spacer(minLength: 0)
                         if parsed.qty == nil {
                             // Kept, shown, and flagged. The shopping list falls
                             // back to the raw line for these.
                             Text("as written")
-                                .liftFont(.detail)
+                                .scaledFont(size: 14)
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -195,10 +195,10 @@ struct RecipeImportView: View {
                     ForEach(Array(imported.steps.enumerated()), id: \.offset) { index, step in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(index + 1).")
-                                .liftFont(.detail)
-                                .foregroundStyle(AppColor.accentText)
+                                .scaledFont(size: 14)
+                                .foregroundStyle(Theme.accentText)
                             Text(step)
-                                .liftFont(.body)
+                                .font(Theme.body)
                                 .foregroundStyle(Theme.textPrimary)
                         }
                     }
@@ -215,7 +215,7 @@ struct RecipeImportView: View {
                         Text("C \(Int(nutrition.carbsG))")
                         Text("F \(Int(nutrition.fatG))")
                     }
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
 
                     if let details = NutrientDetailsDisplay.entryLine(nutrition) {
@@ -230,7 +230,7 @@ struct RecipeImportView: View {
         card("Source") {
             VStack(alignment: .leading, spacing: 10) {
                 Text(url.absoluteString)
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(2)
                     .truncationMode(.middle)
@@ -238,8 +238,8 @@ struct RecipeImportView: View {
                 Button(showingSource ? "Hide what the page published" : "Show what the page published") {
                     showingSource.toggle()
                 }
-                .liftFont(.detail)
-                .foregroundStyle(AppColor.accentText)
+                .scaledFont(size: 14)
+                .foregroundStyle(Theme.accentText)
                 .buttonStyle(.plain)
 
                 if showingSource {
@@ -361,8 +361,8 @@ struct RecipeImportView: View {
     private func card(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .liftFont(.sectionLabel)
-                .foregroundStyle(AppColor.accentText)
+                .font(Theme.sectionLabel)
+                .foregroundStyle(Theme.accentText)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -372,7 +372,7 @@ struct RecipeImportView: View {
 
     private func detail(_ text: String) -> some View {
         Text(text)
-            .liftFont(.detail)
+            .scaledFont(size: 14)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

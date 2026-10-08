@@ -56,7 +56,7 @@ struct RecipeCatalogView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if let selected {
                         Button("Add") { add(selected) }
-                            .liftFont(.body, weight: .semibold)
+                            .font(Theme.body.weight(.semibold))
                     }
                 }
             }
@@ -90,8 +90,8 @@ struct RecipeCatalogView: View {
             Button(showingCredits ? "Hide credits" : "Credits and licences") {
                 showingCredits.toggle()
             }
-            .liftFont(.detail)
-            .foregroundStyle(AppColor.accentText)
+            .scaledFont(size: 14)
+            .foregroundStyle(Theme.accentText)
             .buttonStyle(.plain)
             .padding(.top, 8)
 
@@ -110,34 +110,34 @@ struct RecipeCatalogView: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(recipe.name)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 Spacer(minLength: 8)
                 if let servings = recipe.servings {
                     Text(CookFormat.servingsLabel(servings))
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
 
             if let calories = recipe.caloriesPerServing {
                 Text("\(Int(calories)) kcal per serving")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             } else if recipe.needsServings {
                 // Said here rather than only in the detail, so a browsing eye
                 // never reads a whole-dish number as a portion.
                 Text("Macros for the whole dish")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             } else {
                 Text("No macros")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             }
 
             Text("\(entry.ingredientLines.count) ingredients")
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -154,14 +154,14 @@ struct RecipeCatalogView: View {
         card {
             VStack(alignment: .leading, spacing: 10) {
                 Text(recipe.name)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 if let summary = recipe.summary { detailText(summary) }
 
                 if recipe.needsServings {
                     Stepper(value: $servings, in: 1...48, step: 1) {
                         Text(CookFormat.servingsLabel(servings))
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                     }
                     detailText("This book states no yield, so the macros below are for the whole dish. Set how many it serves and they divide.")
@@ -178,18 +178,18 @@ struct RecipeCatalogView: View {
         card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Ingredients (\(entry.ingredientLines.count))")
-                    .liftFont(.sectionLabel)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.sectionLabel)
+                    .foregroundStyle(Theme.accentText)
                 ForEach(Array(entry.ingredientLines.enumerated()), id: \.offset) { index, line in
                     let parsed = IngredientParser.parse(line, sortOrder: index)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(parsed.displayText)
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                         Spacer(minLength: 0)
                         if parsed.qty == nil {
                             Text("as written")
-                                .liftFont(.detail)
+                                .scaledFont(size: 14)
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -201,15 +201,15 @@ struct RecipeCatalogView: View {
             card {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Method (\(recipe.stepLines.count))")
-                        .liftFont(.sectionLabel)
-                        .foregroundStyle(AppColor.accentText)
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accentText)
                     ForEach(Array(recipe.stepLines.enumerated()), id: \.offset) { index, step in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(index + 1).")
-                                .liftFont(.detail)
-                                .foregroundStyle(AppColor.accentText)
+                                .scaledFont(size: 14)
+                                .foregroundStyle(Theme.accentText)
                             Text(step)
-                                .liftFont(.body)
+                                .font(Theme.body)
                                 .foregroundStyle(Theme.textPrimary)
                         }
                     }
@@ -220,12 +220,12 @@ struct RecipeCatalogView: View {
         card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Macros")
-                    .liftFont(.sectionLabel)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.sectionLabel)
+                    .foregroundStyle(Theme.accentText)
 
                 if let facts = recipe.nutrition(servings: servings) {
                     Text("\(Int(facts.calories)) kcal · P \(Int(facts.proteinG)) · C \(Int(facts.carbsG)) · F \(Int(facts.fatG))")
-                        .liftFont(.body)
+                        .font(Theme.body)
                         .foregroundStyle(Theme.textPrimary)
                     detailText(recipe.needsServings
                                ? "Per serving at \(CookFormat.servingsLabel(servings))."
@@ -241,8 +241,8 @@ struct RecipeCatalogView: View {
         card {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Source")
-                    .liftFont(.sectionLabel)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.sectionLabel)
+                    .foregroundStyle(Theme.accentText)
                 detailText(recipe.attribution)
                 detailText(recipe.license)
             }
@@ -309,7 +309,7 @@ struct RecipeCatalogView: View {
 
     private func detailText(_ text: String) -> some View {
         Text(text)
-            .liftFont(.detail)
+            .scaledFont(size: 14)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

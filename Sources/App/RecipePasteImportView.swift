@@ -66,7 +66,7 @@ struct RecipePasteImportView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if parsed != nil {
                         Button("Save") { save() }
-                            .liftFont(.body, weight: .semibold)
+                            .font(Theme.body.weight(.semibold))
                             .disabled(!canSave)
                     }
                 }
@@ -84,7 +84,7 @@ struct RecipePasteImportView: View {
                     .scrollContentBackground(.hidden)
                     .padding(8)
                     .background(Theme.background, in: .rect(cornerRadius: 10))
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
 
                 HStack(spacing: 12) {
@@ -102,7 +102,7 @@ struct RecipePasteImportView: View {
                     Spacer()
 
                     Button("Read it") { read() }
-                        .liftFont(.body, weight: .semibold)
+                        .font(Theme.body.weight(.semibold))
                         .foregroundStyle(canRead ? Theme.accent : Theme.textSecondary)
                         .disabled(!canRead)
                 }
@@ -129,14 +129,14 @@ struct RecipePasteImportView: View {
         card("Recipe") {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Name", text: $name)
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
                     .padding(10)
                     .background(Theme.background, in: .rect(cornerRadius: 10))
 
                 Stepper(value: $servings, in: 1...48, step: 1) {
                     Text(CookFormat.servingsLabel(servings))
-                        .liftFont(.body)
+                        .font(Theme.body)
                         .foregroundStyle(Theme.textPrimary)
                 }
 
@@ -168,8 +168,8 @@ struct RecipePasteImportView: View {
         }
 
         Button("Start over") { reset() }
-            .liftFont(.detail)
-            .foregroundStyle(AppColor.accentText)
+            .scaledFont(size: 14)
+            .foregroundStyle(Theme.accentText)
             .buttonStyle(.plain)
     }
 
@@ -179,7 +179,7 @@ struct RecipePasteImportView: View {
             .scrollContentBackground(.hidden)
             .padding(8)
             .background(Theme.background, in: .rect(cornerRadius: 10))
-            .liftFont(.body)
+            .font(Theme.body)
             .foregroundStyle(Theme.textPrimary)
     }
 
@@ -267,8 +267,8 @@ struct RecipePasteImportView: View {
     private func card(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .liftFont(.sectionLabel)
-                .foregroundStyle(AppColor.accentText)
+                .font(Theme.sectionLabel)
+                .foregroundStyle(Theme.accentText)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -278,7 +278,7 @@ struct RecipePasteImportView: View {
 
     private func detail(_ text: String) -> some View {
         Text(text)
-            .liftFont(.detail)
+            .scaledFont(size: 14)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -73,8 +73,8 @@ struct RecipeListView: View {
                         creatingNew = true
                     } label: {
                         Label("New recipe", systemImage: "plus")
-                            .liftFont(.body, weight: .semibold)
-                            .foregroundStyle(AppColor.accentText)
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -87,8 +87,8 @@ struct RecipeListView: View {
                         browsingCatalogue = true
                     } label: {
                         Label("Browse the catalogue", systemImage: "books.vertical")
-                            .liftFont(.body, weight: .semibold)
-                            .foregroundStyle(AppColor.accentText)
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -102,8 +102,8 @@ struct RecipeListView: View {
                         importingFromLink = true
                     } label: {
                         Label("Import from a link", systemImage: "link")
-                            .liftFont(.body, weight: .semibold)
-                            .foregroundStyle(AppColor.accentText)
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -117,8 +117,8 @@ struct RecipeListView: View {
                         pasting = true
                     } label: {
                         Label("Paste a recipe", systemImage: "doc.on.clipboard")
-                            .liftFont(.body, weight: .semibold)
-                            .foregroundStyle(AppColor.accentText)
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -128,7 +128,7 @@ struct RecipeListView: View {
 
                 if recipes.isEmpty {
                     Text("No recipes yet. Add one you already cook — the plan and the shopping list build themselves from here.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.top, 4)
                 } else {
@@ -146,7 +146,7 @@ struct RecipeListView: View {
                 Button("Load sample recipes") {
                     CookSampleData.load(into: context)
                 }
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary.opacity(0.5))
                 .buttonStyle(.plain)
                 .padding(.top, 24)
@@ -177,11 +177,11 @@ struct RecipeListView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(recipe.name)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 Spacer()
                 Text(CookFormat.servingsLabel(recipe.servings))
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             }
 
@@ -195,23 +195,23 @@ struct RecipeListView: View {
                         // accentMuted is a fill colour; as text it was
                         // under 2:1 in both appearances.
                         Text("estimated")
-                            .foregroundStyle(AppColor.accentText)
+                            .foregroundStyle(Theme.accentText)
                     }
                 }
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
             } else {
                 // Deliberately not "0 kcal". An unknown that renders as zero
                 // becomes a zero-calorie dinner in someone's day total.
                 Text("Macros not set")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             }
 
             let count = recipe.ingredients?.count ?? 0
             if count > 0 {
                 Text("\(count) ingredient\(count == 1 ? "" : "s")")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             }
         }
@@ -249,7 +249,7 @@ struct MealPlanView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if recipes.isEmpty {
                     Text("Add a recipe first — the plan is built from them.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
 
@@ -299,14 +299,14 @@ struct MealPlanView: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             Text(CookFormat.dayLabel(day))
-                .liftFont(.cardTitle)
-                .foregroundStyle(AppColor.accentText)
+                .font(Theme.cardTitle)
+                .foregroundStyle(Theme.accentText)
 
             ForEach(MealType.allCases) { meal in
                 let meals = forDay.filter { $0.mealType == meal }
                 HStack(alignment: .top, spacing: 10) {
                     Text(meal.displayName)
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: 66, alignment: .leading)
 
@@ -315,8 +315,8 @@ struct MealPlanView: View {
                             picking = (day: day, meal: meal)
                         } label: {
                             Text("Add")
-                                .liftFont(.detail)
-                                .foregroundStyle(AppColor.accentText)
+                                .scaledFont(size: 14)
+                                .foregroundStyle(Theme.accentText)
                                 .frame(minWidth: 44, minHeight: 44, alignment: .topLeading)
                                 .contentShape(Rectangle())
                         }
@@ -347,15 +347,15 @@ struct MealPlanView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             Text(CookFormat.dayLabel(day))
-                .liftFont(.cardTitle)
-                .foregroundStyle(AppColor.accentText)
+                .font(Theme.cardTitle)
+                .foregroundStyle(Theme.accentText)
                 .fixedSize(horizontal: false, vertical: true)
 
             ForEach(MealType.allCases) { meal in
                 let meals = forDay.filter { $0.mealType == meal }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(meal.displayName)
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
 
                     if meals.isEmpty {
@@ -363,8 +363,8 @@ struct MealPlanView: View {
                             picking = (day: day, meal: meal)
                         } label: {
                             Text("Add")
-                                .liftFont(.detail)
-                                .foregroundStyle(AppColor.accentText)
+                                .scaledFont(size: 14)
+                                .foregroundStyle(Theme.accentText)
                                 .frame(minWidth: 44, minHeight: 44, alignment: .topLeading)
                                 .contentShape(Rectangle())
                         }
@@ -390,25 +390,25 @@ struct MealPlanView: View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(meal.recipeName)
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
 
                 // scaledNutrition, not the raw snapshot: the snapshot is per
                 // serving, and this row is a whole meal.
                 if let nutrition = meal.scaledNutrition {
                     Text("\(Int(nutrition.calories)) kcal")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
 
                 if meal.isLogged {
                     Label("Logged", systemImage: "checkmark")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 } else if meal.snapshotNutrition != nil {
                     Button("Log it") { log(meal) }
-                        .liftFont(.detail, weight: .semibold)
-                        .foregroundStyle(AppColor.accentText)
+                        .scaledFont(size: 14, weight: .semibold)
+                        .foregroundStyle(Theme.accentText)
                         .buttonStyle(.plain)
                 }
             }
@@ -539,7 +539,7 @@ struct RecipePickerView: View {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 HStack {
                     Text("Servings")
-                        .liftFont(.body)
+                        .font(Theme.body)
                     Spacer()
                     Stepper(
                         value: $servings,
@@ -547,7 +547,7 @@ struct RecipePickerView: View {
                         step: 0.5
                     ) {
                         Text(CookFormat.servingsLabel(servings))
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .fixedSize()
@@ -566,12 +566,12 @@ struct RecipePickerView: View {
                     } label: {
                         HStack {
                             Text(recipe.name)
-                                .liftFont(.body)
+                                .font(Theme.body)
                                 .foregroundStyle(Theme.textPrimary)
                             Spacer()
                             if let nutrition = recipe.nutritionPerServing {
                                 Text("\(Int(nutrition.calories * servings)) kcal")
-                                    .liftFont(.detail)
+                                    .scaledFont(size: 14)
                                     .foregroundStyle(Theme.textSecondary)
                             }
                         }
@@ -609,21 +609,21 @@ struct RecipePickerView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text(recipe.name)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Amount")
-                        .liftFont(.sectionLabel)
-                        .foregroundStyle(AppColor.accentText)
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accentText)
 
                     HStack {
                         TextField("0", text: $amountText)
                             .keyboardType(.decimalPad)
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                         Text(servingUnit.abbreviation)
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .padding(Theme.cardPadding)
@@ -667,7 +667,7 @@ struct RecipePickerView: View {
     private func previewCard(_ nutrition: NutritionFacts) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("\(Int(nutrition.calories)) kcal")
-                .liftFont(.figure)
+                .scaledFont(size: 26, weight: .bold)
                 .foregroundStyle(Theme.textPrimary)
             HStack(spacing: 10) {
                 Text("P \(Int(nutrition.proteinG))")
@@ -677,7 +677,7 @@ struct RecipePickerView: View {
                     Text("Fib \(Int(fiber))")
                 }
             }
-            .liftFont(.detail)
+            .scaledFont(size: 14)
             .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -707,7 +707,7 @@ struct ShoppingListView: View {
             VStack(alignment: .leading, spacing: 10) {
                 if lines.isEmpty {
                     Text("Nothing planned for the next week, so there is nothing to buy yet.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 } else {
                     AdaptiveGrid(columns: AdaptiveLayout.columns(
@@ -719,7 +719,7 @@ struct ShoppingListView: View {
 
                     if !checkedKeys.isEmpty {
                         Button("Clear ticks") { clearChecks() }
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                             .buttonStyle(.plain)
                             .padding(.top, 8)
@@ -748,18 +748,18 @@ struct ShoppingListView: View {
                 // seen at all (hairline was about 1.4:1).
                 Image(systemName: isChecked ? "checkmark.square.fill" : "square")
                     .scaledFont(size: 18)
-                    .foregroundStyle(isChecked ? AppColor.accentText : Theme.textSecondary)
+                    .foregroundStyle(isChecked ? Theme.accentText : Theme.textSecondary)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(line.displayName)
-                        .liftFont(.body)
+                        .font(Theme.body)
                         .foregroundStyle(isChecked ? Theme.textSecondary : Theme.textPrimary)
                         .strikethrough(isChecked, color: Theme.textSecondary)
 
                     if !line.amounts.isEmpty {
                         Text(ShoppingAmountFormat.label(line.amounts))
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                     }
 
@@ -767,7 +767,7 @@ struct ShoppingListView: View {
                     // silently drops off the list you shop from.
                     ForEach(line.unparsed, id: \.self) { raw in
                         Text(raw)
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }

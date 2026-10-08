@@ -50,13 +50,13 @@ struct FoodEntryEditorView: View {
 
                     if let problem = edit.problem {
                         Text(problem)
-                            .liftFont(.detail)
-                            .foregroundStyle(AppColor.accentText)
+                            .scaledFont(size: 14)
+                            .foregroundStyle(Theme.accentText)
                     }
 
                     if entry.healthKitUUID != nil {
                         Text("This entry was saved to Apple Health by an earlier install. Changes here stay in LIFT — edit it in the Health app too if it should match.")
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
@@ -94,18 +94,18 @@ struct FoodEntryEditorView: View {
                 TextField("Food name", text: $edit.name)
                     .textInputAutocapitalization(.sentences)
                     .focused($focus, equals: .name)
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .padding(Theme.cardPadding / 2)
                     .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
             }
         } else {
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.name)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 if let brand = entry.brand, !brand.isEmpty {
                     Text(brand)
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -118,11 +118,11 @@ struct FoodEntryEditorView: View {
                 TextField("0", text: $edit.amountText)
                     .keyboardType(.decimalPad)
                     .focused($focus, equals: .amount)
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
                     .disabled(!edit.canChangeAmount)
                 Text(edit.amountUnitLabel)
-                    .liftFont(.body)
+                    .font(Theme.body)
                     .foregroundStyle(Theme.textSecondary)
             }
             .padding(Theme.cardPadding)
@@ -130,7 +130,7 @@ struct FoodEntryEditorView: View {
 
             if !edit.canChangeAmount {
                 Text("Logged as zero, so there is nothing to scale from. The amount stays as it is.")
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             }
         }
@@ -166,7 +166,7 @@ struct FoodEntryEditorView: View {
                 // Truncated with Int(), as the log row and FoodSearchView's
                 // preview show them, so the same entry reads the same here.
                 Text("\(Int(nutrition.calories)) kcal")
-                    .liftFont(.figure)
+                    .scaledFont(size: 26, weight: .bold)
                     .foregroundStyle(Theme.textPrimary)
                 HStack(spacing: 14) {
                     macroFigure("Protein", nutrition.proteinG)
@@ -188,12 +188,12 @@ struct FoodEntryEditorView: View {
             } label: {
                 HStack {
                     Text("More nutrients")
-                        .liftFont(.sectionLabel)
-                        .foregroundStyle(AppColor.accentText)
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accentText)
                     Spacer()
                     if !showingMoreNutrients, let summary = detailsSummary {
                         Text(summary)
-                            .liftFont(.detail)
+                            .scaledFont(size: 14)
                             .foregroundStyle(Theme.textSecondary)
                             .lineLimit(1)
                     }
@@ -210,7 +210,7 @@ struct FoodEntryEditorView: View {
             if showingMoreNutrients {
                 if edit.isManual {
                     Text("Saturated fat, sugar and sodium, as totals for the amount above. No goals — blank stays unknown, not zero.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                     HStack(alignment: .top, spacing: 10) {
                         macroField(.saturatedFat)
@@ -220,7 +220,7 @@ struct FoodEntryEditorView: View {
                 } else if let nutrition = edit.nutrition,
                           NutrientDetailsDisplay.entryLine(nutrition) != nil {
                     Text("From the food's own data, scaled to the amount above. No goals.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                     HStack(spacing: 14) {
                         ForEach(NutrientDetailsDisplay.Nutrient.allCases) { nutrient in
@@ -231,7 +231,7 @@ struct FoodEntryEditorView: View {
                     }
                 } else {
                     Text("This food's source did not record saturated fat, sugar or sodium.")
-                        .liftFont(.detail)
+                        .scaledFont(size: 14)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -253,11 +253,11 @@ struct FoodEntryEditorView: View {
     private func detailFigure(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
             Text(value)
-                .liftFont(.body, weight: .semibold)
+                .font(Theme.body.weight(.semibold))
                 .foregroundStyle(Theme.textPrimary)
         }
     }
@@ -265,7 +265,7 @@ struct FoodEntryEditorView: View {
     private func macroField(_ macro: FoodEntryEdit.Macro) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(macro.label) (\(macro.unit))")
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -275,7 +275,7 @@ struct FoodEntryEditorView: View {
             ))
             .keyboardType(.decimalPad)
             .focused($focus, equals: .macro(macro))
-            .liftFont(.body)
+            .font(Theme.body)
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
@@ -286,10 +286,10 @@ struct FoodEntryEditorView: View {
     private func macroFigure(_ label: String, _ grams: Double) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .liftFont(.detail)
+                .scaledFont(size: 14)
                 .foregroundStyle(Theme.textSecondary)
             Text("\(Int(grams)) g")
-                .liftFont(.body, weight: .semibold)
+                .font(Theme.body.weight(.semibold))
                 .foregroundStyle(Theme.textPrimary)
         }
     }
@@ -301,11 +301,11 @@ struct FoodEntryEditorView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .liftFont(.sectionLabel)
-                .foregroundStyle(AppColor.accentText)
+                .font(Theme.sectionLabel)
+                .foregroundStyle(Theme.accentText)
             if let hint {
                 Text(hint)
-                    .liftFont(.detail)
+                    .scaledFont(size: 14)
                     .foregroundStyle(Theme.textSecondary)
             }
             content()

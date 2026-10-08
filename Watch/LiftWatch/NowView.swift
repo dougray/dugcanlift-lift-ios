@@ -78,6 +78,7 @@ struct NowView: View {
                     LogSetView(exerciseID: exerciseID)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(DclTheme.accent)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -120,7 +120,7 @@ struct CalculatorView: View {
                 .padding(.bottom, 40)
                 .readableContentWidth()
             }
-            .appScreen()
+            .liftScreen()
             .keyboardDoneButton()
             .navigationTitle("Macro Calculator")
             .navigationBarTitleDisplayMode(.large)
@@ -153,7 +153,7 @@ struct CalculatorView: View {
                         focus: Field) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(prompt)
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .accessibilityHidden(true)
             TextField(prompt, text: text)
@@ -232,7 +232,7 @@ struct CalculatorView: View {
             LiftCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("\(Int(result.calories)) kcal / day")
-                        .scaledFont(size: 26, weight: .bold)
+                        .font(Theme.figure)
                         .foregroundStyle(Theme.textPrimary)
                     StatRow(label: "Protein", value: "\(Int(result.proteinG)) g")
                     StatRow(label: "Fat", value: "\(Int(result.fatG)) g")

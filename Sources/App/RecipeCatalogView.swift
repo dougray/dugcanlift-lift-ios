@@ -40,7 +40,7 @@ struct RecipeCatalogView: View {
                 .padding(.vertical, 14)
                 .readableContentWidth()
             }
-            .appScreen()
+            .liftScreen()
             .background(Theme.background)
             .navigationTitle(selected == nil ? "Recipe catalogue" : "Add recipe")
             .navigationBarTitleDisplayMode(.inline)
@@ -90,7 +90,7 @@ struct RecipeCatalogView: View {
             Button(showingCredits ? "Hide credits" : "Credits and licences") {
                 showingCredits.toggle()
             }
-            .scaledFont(size: 14)
+            .font(Theme.detail)
             .foregroundStyle(Theme.accentText)
             .buttonStyle(.plain)
             .padding(.top, 8)
@@ -115,29 +115,29 @@ struct RecipeCatalogView: View {
                 Spacer(minLength: 8)
                 if let servings = recipe.servings {
                     Text(CookFormat.servingsLabel(servings))
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
 
             if let calories = recipe.caloriesPerServing {
                 Text("\(Int(calories)) kcal per serving")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             } else if recipe.needsServings {
                 // Said here rather than only in the detail, so a browsing eye
                 // never reads a whole-dish number as a portion.
                 Text("Macros for the whole dish")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             } else {
                 Text("No macros")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
 
             Text("\(entry.ingredientLines.count) ingredients")
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,7 +189,7 @@ struct RecipeCatalogView: View {
                         Spacer(minLength: 0)
                         if parsed.qty == nil {
                             Text("as written")
-                                .scaledFont(size: 14)
+                                .font(Theme.detail)
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -206,7 +206,7 @@ struct RecipeCatalogView: View {
                     ForEach(Array(recipe.stepLines.enumerated()), id: \.offset) { index, step in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(index + 1).")
-                                .scaledFont(size: 14)
+                                .font(Theme.detail)
                                 .foregroundStyle(Theme.accentText)
                             Text(step)
                                 .font(Theme.body)
@@ -309,7 +309,7 @@ struct RecipeCatalogView: View {
 
     private func detailText(_ text: String) -> some View {
         Text(text)
-            .scaledFont(size: 14)
+            .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

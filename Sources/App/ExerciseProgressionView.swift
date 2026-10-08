@@ -61,7 +61,7 @@ struct ExerciseProgressionView: View {
             .padding(.bottom, 40)
             .adaptivePageWidth()
         }
-        .appScreen()
+        .liftScreen()
         // Pushed inside Train's NavigationStack, which paints the system
         // background; the cards sit on Theme.background everywhere else.
         .background(Theme.background)
@@ -123,7 +123,7 @@ struct ExerciseProgressionView: View {
                          + (line.sessionCount >= LiftProgression.minimumSessionsPerSide
                             ? (line.recentMeanOneRepMaxKg.map { " · last 3 average \(weightText($0))" } ?? "")
                             : ""))
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -140,11 +140,11 @@ struct ExerciseProgressionView: View {
         LiftCard(title: "Left and right") {
             // Coach web's imbalanceLines, word for word (ImbalanceLines).
             Text(imbalanceLines.headline)
-                .scaledFont(size: 26, weight: .bold)
+                .font(Theme.figure)
                 .foregroundStyle(Theme.textPrimary)
 
             Text(imbalanceLines.detail)
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

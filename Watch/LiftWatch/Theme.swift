@@ -17,21 +17,26 @@ enum DclTheme {
     static let text       = Color(red: 0xED / 255, green: 0xE7 / 255, blue: 0xDD / 255)
     static let muted      = Color(red: 0xA3 / 255, green: 0x9C / 255, blue: 0x8E / 255)
     static let accent     = Color(red: 0xC1 / 255, green: 0x44 / 255, blue: 0x2C / 255)
-    /// The rust lightened for text: #E0684F is 5.13:1 on `background`, where
-    /// `accent` is 3.39:1 and fails AA at caption sizes. Use for accent-
-    /// coloured words (warnings, bpm); keep `accent` for fills and tint.
-    static let accentText = Color(red: 0xE0 / 255, green: 0x68 / 255, blue: 0x4F / 255)
+    /// The rust lightened for text: #E0674D, the phone kit's dark
+    /// `Theme.accentText` (dugcanlift-kit 1.13.0), is 5.09:1 on `background`
+    /// and 4.69:1 on `surface`, where `accent` is 3.39:1 and fails AA. Use for
+    /// accent-coloured words (warnings, bpm) and the tint; keep `accent` for
+    /// fills (progress, prominent buttons, whose light label is 5.08:1 on it
+    /// but 3.38:1 on `accentText`).
+    static let accentText = Color(red: 0xE0 / 255, green: 0x67 / 255, blue: 0x4D / 255)
     static let accent2    = Color(red: 0x7C / 255, green: 0x8B / 255, blue: 0x7A / 255)
     static let rule       = Color(red: 0x3A / 255, green: 0x37 / 255, blue: 0x33 / 255)
     static let onAccent   = Color(red: 0xF7 / 255, green: 0xF1 / 255, blue: 0xE8 / 255)
 }
 
 extension View {
-    /// The app's ground: accent tint and the palette's background, applied once
-    /// at the root so every screen inherits it rather than each remembering to.
+    /// The app's ground: the text-safe rust tint and the palette's background,
+    /// applied once at the root so every screen inherits it rather than each
+    /// remembering to. Filled controls (`.borderedProminent`, progress) set
+    /// `.tint(DclTheme.accent)` themselves.
     func liftWatchTheme() -> some View {
         self
-            .tint(DclTheme.accent)
+            .tint(DclTheme.accentText)
             .foregroundStyle(DclTheme.text)
             .background(DclTheme.background)
     }

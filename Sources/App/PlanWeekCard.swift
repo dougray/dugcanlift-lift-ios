@@ -184,7 +184,7 @@ private struct PlanWeekBody: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(target == nil ? Theme.textSecondary : Theme.accent)
+                .foregroundStyle(target == nil ? Theme.textSecondary : Theme.accentText)
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)

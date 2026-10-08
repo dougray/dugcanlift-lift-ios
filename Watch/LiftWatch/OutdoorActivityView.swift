@@ -42,6 +42,7 @@ struct OutdoorActivityView: View {
             Section {
                 Button("Finish") { finish() }
                     .buttonStyle(.borderedProminent)
+                    .tint(DclTheme.accent)
             }
 
             // Its own section, away from Finish, and it asks: a run can't be

@@ -72,10 +72,10 @@ struct HomeView: View {
                             VStack(alignment: .leading, spacing: 14) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(calorieHeadline)
-                                        .scaledFont(size: 26, weight: .bold)
+                                        .font(Theme.figure)
                                         .foregroundStyle(Theme.textPrimary)
                                     Text("\(Int(totals.calories)) of \(Int(goalCalories))")
-                                        .scaledFont(size: 14)
+                                        .font(Theme.detail)
                                         .foregroundStyle(Theme.textSecondary)
                                 }
 
@@ -117,7 +117,7 @@ struct HomeView: View {
                             // allow it -- never ask again from here.
                             if todaySteps == 0 && health.isAvailable && health.hasAskedForAuthorization {
                                 Text("No steps from Apple Health yet. If LIFT isn't allowed to read them, turn Steps on in Settings › Privacy & Security › Health › LIFT.")
-                                    .scaledFont(size: 14)
+                                    .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -142,7 +142,7 @@ struct HomeView: View {
                                     .scaledFont(size: 18, weight: .semibold)
                                     .foregroundStyle(Theme.textPrimary)
                                 Text("\(day.exercises.count) exercises · \(day.summary(unit: unit))")
-                                    .scaledFont(size: 14)
+                                    .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
                             }
                         } else {
@@ -170,7 +170,7 @@ struct HomeView: View {
             .padding(.bottom, 40)
             .adaptivePageWidth()
         }
-        .appScreen()
+        .liftScreen()
         .sheet(isPresented: $showingCalculator) {
             CalculatorView()
         }

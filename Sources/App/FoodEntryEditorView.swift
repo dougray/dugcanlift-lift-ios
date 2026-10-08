@@ -50,13 +50,13 @@ struct FoodEntryEditorView: View {
 
                     if let problem = edit.problem {
                         Text(problem)
-                            .scaledFont(size: 14)
+                            .font(Theme.detail)
                             .foregroundStyle(Theme.accentText)
                     }
 
                     if entry.healthKitUUID != nil {
                         Text("This entry was saved to Apple Health by an earlier install. Changes here stay in LIFT — edit it in the Health app too if it should match.")
-                            .scaledFont(size: 14)
+                            .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
@@ -65,7 +65,7 @@ struct FoodEntryEditorView: View {
                 .readableContentWidth()
             }
             .scrollDismissesKeyboard(.interactively)
-            .appScreen()
+            .liftScreen()
             .background(Theme.background)
             .navigationTitle("Edit food")
             .navigationBarTitleDisplayMode(.inline)
@@ -105,7 +105,7 @@ struct FoodEntryEditorView: View {
                     .foregroundStyle(Theme.accentText)
                 if let brand = entry.brand, !brand.isEmpty {
                     Text(brand)
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -130,7 +130,7 @@ struct FoodEntryEditorView: View {
 
             if !edit.canChangeAmount {
                 Text("Logged as zero, so there is nothing to scale from. The amount stays as it is.")
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
         }
@@ -166,7 +166,7 @@ struct FoodEntryEditorView: View {
                 // Truncated with Int(), as the log row and FoodSearchView's
                 // preview show them, so the same entry reads the same here.
                 Text("\(Int(nutrition.calories)) kcal")
-                    .scaledFont(size: 26, weight: .bold)
+                    .font(Theme.figure)
                     .foregroundStyle(Theme.textPrimary)
                 HStack(spacing: 14) {
                     macroFigure("Protein", nutrition.proteinG)
@@ -193,7 +193,7 @@ struct FoodEntryEditorView: View {
                     Spacer()
                     if !showingMoreNutrients, let summary = detailsSummary {
                         Text(summary)
-                            .scaledFont(size: 14)
+                            .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
                             .lineLimit(1)
                     }
@@ -210,7 +210,7 @@ struct FoodEntryEditorView: View {
             if showingMoreNutrients {
                 if edit.isManual {
                     Text("Saturated fat, sugar and sodium, as totals for the amount above. No goals — blank stays unknown, not zero.")
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                     HStack(alignment: .top, spacing: 10) {
                         macroField(.saturatedFat)
@@ -220,7 +220,7 @@ struct FoodEntryEditorView: View {
                 } else if let nutrition = edit.nutrition,
                           NutrientDetailsDisplay.entryLine(nutrition) != nil {
                     Text("From the food's own data, scaled to the amount above. No goals.")
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                     HStack(spacing: 14) {
                         ForEach(NutrientDetailsDisplay.Nutrient.allCases) { nutrient in
@@ -231,7 +231,7 @@ struct FoodEntryEditorView: View {
                     }
                 } else {
                     Text("This food's source did not record saturated fat, sugar or sodium.")
-                        .scaledFont(size: 14)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -253,7 +253,7 @@ struct FoodEntryEditorView: View {
     private func detailFigure(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
             Text(value)
@@ -265,7 +265,7 @@ struct FoodEntryEditorView: View {
     private func macroField(_ macro: FoodEntryEdit.Macro) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(macro.label) (\(macro.unit))")
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -286,7 +286,7 @@ struct FoodEntryEditorView: View {
     private func macroFigure(_ label: String, _ grams: Double) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .scaledFont(size: 14)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
             Text("\(Int(grams)) g")
                 .font(Theme.body.weight(.semibold))
@@ -305,7 +305,7 @@ struct FoodEntryEditorView: View {
                 .foregroundStyle(Theme.accentText)
             if let hint {
                 Text(hint)
-                    .scaledFont(size: 14)
+                    .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
             content()

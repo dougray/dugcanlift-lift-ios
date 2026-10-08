@@ -1,6 +1,7 @@
 import XCTest
 import SwiftData
 import LiftCore
+import LiftSync
 @testable import Lift
 
 /// What the phone decides to send the watch: which plan today has, what a

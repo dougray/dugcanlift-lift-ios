@@ -64,3 +64,34 @@ extension RecentFoodsSnapshot {
         self = try SyncEnvelope.decoder.decode(RecentFoodsSnapshot.self, from: data)
     }
 }
+
+/// The phone's display units, sent beside `RecentFoodsSnapshot` in the same
+/// `updateApplicationContext` dictionary (see `recent-foods-snapshot.schema.json`).
+/// Extra keys, not snapshot fields, so an older watch decodes the snapshot
+/// exactly as before and an older phone simply leaves them out.
+///
+/// Values are the raw values of `WeightUnit` and `DistanceUnit`, which the
+/// phone's kit and the watch's LiftKit spell identically.
+public enum DisplayUnitsContext {
+    public static let weightUnitKey = "weightUnit"
+    public static let distanceUnitKey = "distanceUnit"
+
+    /// Adds the two units to an application-context dictionary.
+    public static func adding(weightUnit: String, distanceUnit: String,
+                              to context: [String: Any]) -> [String: Any] {
+        var context = context
+        context[weightUnitKey] = weightUnit
+        context[distanceUnitKey] = distanceUnit
+        return context
+    }
+
+    /// The raw weight unit in a received context, if the phone sent one.
+    public static func weightUnit(in context: [String: Any]) -> String? {
+        context[weightUnitKey] as? String
+    }
+
+    /// The raw distance unit in a received context, if the phone sent one.
+    public static func distanceUnit(in context: [String: Any]) -> String? {
+        context[distanceUnitKey] as? String
+    }
+}

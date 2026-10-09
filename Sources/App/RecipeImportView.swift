@@ -53,7 +53,7 @@ struct RecipeImportView: View {
                 .padding(.vertical, 14)
                 .readableContentWidth()
             }
-            .liftScreen()
+            .appScreen()
             .background(Theme.background)
             .navigationTitle("Import a recipe")
             .navigationBarTitleDisplayMode(.inline)
@@ -64,7 +64,7 @@ struct RecipeImportView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if case let .review(imported, url) = stage {
                         Button("Save") { save(imported, from: url) }
-                            .font(Theme.body.weight(.semibold))
+                            .liftFont(.body, weight: .semibold)
                     }
                 }
             }
@@ -77,20 +77,20 @@ struct RecipeImportView: View {
         card("Link") {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Paste a recipe's web address. Most recipe sites publish their ingredients and method in a form this can read directly.")
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
 
                 TextField("https://", text: $address)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                    .font(Theme.body)
+                    .liftFont(.body)
                     .foregroundStyle(Theme.textPrimary)
                     .onSubmit(fetch)
 
                 Button(action: fetch) {
                     Text("Fetch recipe")
-                        .font(Theme.body.weight(.semibold))
+                        .liftFont(.body, weight: .semibold)
                         .foregroundStyle(Theme.onAccent)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -108,7 +108,7 @@ struct RecipeImportView: View {
             HStack(spacing: 10) {
                 ProgressView().tint(Theme.accent)
                 Text(address)
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -120,11 +120,11 @@ struct RecipeImportView: View {
         card("Could not import") {
             VStack(alignment: .leading, spacing: 12) {
                 Text(message)
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
                 Button("Try another link") { stage = .entry }
-                    .font(Theme.body.weight(.semibold))
-                    .foregroundStyle(Theme.accent)
+                    .liftFont(.body, weight: .semibold)
+                    .foregroundStyle(AppColor.accentText)
                     .buttonStyle(.plain)
             }
         }
@@ -145,7 +145,7 @@ struct RecipeImportView: View {
 
                 Stepper(value: $servings, in: 1...48, step: 1) {
                     Text(CookFormat.servingsLabel(servings))
-                        .font(Theme.body)
+                        .liftFont(.body)
                         .foregroundStyle(Theme.textPrimary)
                 }
 
@@ -174,14 +174,14 @@ struct RecipeImportView: View {
                 ForEach(Array(parsedIngredients(imported).enumerated()), id: \.offset) { _, parsed in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(parsed.displayText)
-                            .font(Theme.body)
+                            .liftFont(.body)
                             .foregroundStyle(Theme.textPrimary)
                         Spacer(minLength: 0)
                         if parsed.qty == nil {
                             // Kept, shown, and flagged. The shopping list falls
                             // back to the raw line for these.
                             Text("as written")
-                                .font(Theme.detail)
+                                .liftFont(.detail)
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -195,10 +195,10 @@ struct RecipeImportView: View {
                     ForEach(Array(imported.steps.enumerated()), id: \.offset) { index, step in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(index + 1).")
-                                .font(Theme.detail)
-                                .foregroundStyle(Theme.accent)
+                                .liftFont(.detail)
+                                .foregroundStyle(AppColor.accentText)
                             Text(step)
-                                .font(Theme.body)
+                                .liftFont(.body)
                                 .foregroundStyle(Theme.textPrimary)
                         }
                     }
@@ -215,7 +215,7 @@ struct RecipeImportView: View {
                         Text("C \(Int(nutrition.carbsG))")
                         Text("F \(Int(nutrition.fatG))")
                     }
-                    .font(Theme.body)
+                    .liftFont(.body)
                     .foregroundStyle(Theme.textPrimary)
 
                     if let details = NutrientDetailsDisplay.entryLine(nutrition) {
@@ -230,7 +230,7 @@ struct RecipeImportView: View {
         card("Source") {
             VStack(alignment: .leading, spacing: 10) {
                 Text(url.absoluteString)
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(2)
                     .truncationMode(.middle)
@@ -238,15 +238,15 @@ struct RecipeImportView: View {
                 Button(showingSource ? "Hide what the page published" : "Show what the page published") {
                     showingSource.toggle()
                 }
-                .font(Theme.detail)
-                .foregroundStyle(Theme.accent)
+                .liftFont(.detail)
+                .foregroundStyle(AppColor.accentText)
                 .buttonStyle(.plain)
 
                 if showingSource {
                     // The whole point of keeping the transcript: a misread
                     // quantity is visible against its source before it is saved.
                     Text(imported.sourceTranscript)
-                        .font(.system(size: 11, design: .monospaced))
+                        .scaledFont(size: 11, design: .monospaced)
                         .foregroundStyle(Theme.textSecondary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -361,8 +361,8 @@ struct RecipeImportView: View {
     private func card(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .liftFont(.sectionLabel)
+                .foregroundStyle(AppColor.accentText)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -372,7 +372,7 @@ struct RecipeImportView: View {
 
     private func detail(_ text: String) -> some View {
         Text(text)
-            .font(Theme.detail)
+            .liftFont(.detail)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

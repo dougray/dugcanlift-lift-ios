@@ -278,9 +278,283 @@ blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
 missing one of the four core macros is not logged at all, because
 `NutritionFacts` would store it as zero. No location, ever.
 
+**The copy is pinned to the kit's bytes.** `Resources/road-food.sha256` is the
+kit's checksum of `road-food.json`, copied across with it, and
+`RoadFoodDataTests` hashes **what the app bundle actually holds** and asserts it
+matches. Everything else here checks the data's shape -- it decodes, the dates
+are usable, no fake name got in -- and a copy several chains behind passes all
+of it. Hashing the bundle rather than the file on disk also means a build that
+quietly dropped the resource from the target fails instead of passing.
+
+When that test fails, copy `road-food.json` *and* `road-food.sha256` from
+`dugcanlift-kit/data/` over together. Never edit either file here, and never
+re-write the checksum by hand to make the test pass: the kit writes it with
+`node data/validate-road-food.mjs --write-checksum`, and the other four app
+repos pin the same one, so a hand-written hash only moves the failure somewhere
+further away. `Tests/Fixtures/road-food-sample.json` is pinned the same way
+against `road-food-sample.sha256`, and is shared with LIFT web and
+`dugcanlift-lift` -- and `RoadFoodSample.swift`'s inline copy is pinned against
+the fixture, so those four move together or not at all.
+
+**Two dates, and the warning keys off the chain's.** `checkedOn` is the day a
+person read a chain's chart; `publishedOn` is the date the chart **states about
+itself**, optional and only as precise as the document is -- `"2021-03-29"`
+where Whataburger's says "as of March 29, 2021", `"2022-11"` where Burger
+King's says only "NOVEMBER 2022", and absent where the document states none.
+`RoadFoodRanking.ageDate` picks the first over the second and `isStale`
+measures six calendar months from it, so a 2021 chart read this morning says
+so: "These numbers are from the chain's chart dated Mar 29, 2021." A chain with
+no document date keeps the older sentence word for word. Both dates are on
+screen ("Published Nov 2022 · checked Sep 23, 2026"), because what a chain
+published and when someone read it are different facts. `publishedText` never
+prints a date more precisely than the document wrote it: "Nov 2022", never
+"Nov 1, 2022".
+
+**A coach's road picks arrive in the plan link and only reorder.** `rf`
+(PLAN-FORMAT.md "Road picks") is a flat list of Road Food item ids. It is read
+**app-side**, by `RoadPickLink`, off the same fragment `PlanLinkCodec` just
+accepted -- not by a field on LiftKit's `PlanPayload`, because the kit is
+pinned to an exact tag Coach iOS shares and a list of strings is not worth a
+tag plus a bump in two shipped apps. `PlanLinkIntake.IncomingPlan` carries the
+payload and the picks together from every door, so no screen can accept a plan
+and drop its picks, and `rf` is **in `PlanImporter.hash`** or a coach resending
+the same week with a different answer would have the link refused as already
+imported. An empty list writes no key into the hashed mirror, so every plan
+without picks hashes exactly as it did before (`PlanRoadPicksTests`).
+
+They are stored in `RoadPicks`, a `UserDefaults` side-car like `PlanSides`, and
+are **not in the backup** -- the coach still holds them. A plan carrying picks
+replaces them whole; a plan with no `rf` changes nothing, because that is also
+what every older Coach and every recipe-only send looks like, so **clearing is
+this phone's own action** on the Road Food screen. What they do is
+`RoadFoodRanking.withPicks`: a **stable partition**, picks first inside each
+group. The same items fit, in the same order among themselves; a pick that is a
+little over stays in that group and one more than 10% over stays hidden. An id
+this build's `road-food.json` does not have is **skipped silently and not
+counted**, and is kept in storage rather than filtered on arrival. Rows say
+"Doug's pick" in weight, never colour: shown, never targeted, like the nutrient
+lines. `RoadPicksDegradationTests` pins what a build without any of this makes
+of the same link, against Coach web's own fixture
+`Tests/Fixtures/web-plan-road-picks.txt`; never regenerate it from Swift.
+
+**The shell is a paged `TabView`, so `.onDelete` never opens.** `RootView`
+wraps the five tabs in `.tabViewStyle(.page(...))`, which takes every
+horizontal drag for itself -- a swipe on Home turns to Food, and on Routines,
+the last page, it does nothing at all. Swipe-to-delete inside any tab is
+therefore unreachable, however correct the code reads. A row that can be
+deleted needs a button (`RoutinesView`, `OutdoorActivityListView`) rather than
+`.onDelete`, and a new `.onDelete` anywhere in this app is dead code. That
+holds for a screen pushed inside a tab too, and it was measured there as well:
+swiping a row of the Outdoor list, which is pushed inside Train, pages the
+whole shell to Routines.
+
+**A navigation bar does not follow a change of interface style on its own.**
+`Theme`'s colours are dynamic `UIColor`s, so the whole screen re-draws when the
+phone goes light or dark without SwiftUI invalidating anything -- and a body
+that never re-runs never re-applies its navigation bar, which keeps the colours
+it resolved when it was built. Measured on Routines: switching to light left the
+title white on parchment and the "+" a dark-mode glass circle over an otherwise
+light screen. `RoutinesView` reads `\.colorScheme` and hands it to
+`.toolbarColorScheme(_:for: .navigationBar)`; reading it is what makes the
+change invalidate the body, naming it is what the bar picks up. Routines is the
+only tab root with a visible system bar -- Train hides its bar, Home, Food and
+Cook sit in no stack, and every other bar is on a sheet, which is built fresh
+each presentation and was measured to re-resolve on its own. Any new screen that
+shows a system bar outside a sheet needs the same two lines.
+
+**Deleting a routine is `RoutineRemoval`**, not view code -- the rule
+`PlanSides` follows and Coach's `ClientRemoval` follows, because a rule in a
+view's `@State` cannot be tested and this one decides what somebody loses.
+**What goes:** the `Routine`, by cascade its `RoutineExercise`s and their
+`RoutinePrescribedSet`s, plus the three things that name a routine as a plain
+value and no cascade reaches -- every `ScheduledSession` a coach booked it on
+(left behind, one draws "Coach scheduled: X" forever and does nothing when
+tapped), the `WatchPlanPin` when it is this routine, and this routine's
+`PlanSides.eachSide` / `.sides` entries. **What stays:** every workout already
+logged from it, which is the whole point of snapshotting a name and its numbers
+at log time, and `PlanSides.logged`, which is deliberately a copy rather than a
+link back. It is one `save()`, so a failure rolls back whole. The confirmation
+always says what stays and leaves a count of zero out entirely, the distinction
+Coach's own confirmation makes.
+
+**Deleting a recorded run is `OutdoorRemoval`**, the same kind of rule as
+`RoutineRemoval` and for the same reason. **What goes:** the
+`OutdoorActivity` row, and with it the route -- `RoutePoint`s are encoded into
+`routePointsData` on the row itself, not a model of their own, so there is
+nothing to sweep and, unlike a routine, no orphan is possible: nothing else in
+the store names an activity. **What is worked out again rather than deleted:**
+the personal bests, the Last route card and a coach's `o` / `ob` / `lr`, all of
+which are read live from the query rather than stored, so the farthest run
+simply becomes whatever is now farthest and the coach's copy catches up at the
+next send. **What stays: the workout in Apple Health.** When `healthKitUUID` is
+set, LIFT wrote an `HKWorkout` with its route into the person's Health store,
+and deleting here does not touch it -- that data is shared with the rings and
+every other app that has read it, the delete would be silent and has no undo,
+`HealthKitManager` has never deleted anything, and a delete there can fail on a
+revoked authorization nobody can see. The confirmation says so in words
+whenever there is a workout to say it about, and says nothing about Health when
+there is not. One confirmation, two ways in
+(`DeleteOutdoorActivityAlert`): the list row and the review screen's own
+button, which used to be an unconfirmed "Discard" that deleted a year-old run
+as readily as a recording from ten seconds ago.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.
+
+## The coach's week, beside your own log
+
+`PlanAndLog` puts the week a coach booked beside the week this phone logged, on
+**Train**, under the coach's own card for the day (`ScheduledSessionBanner`) and
+above the day's own log. **LIFT web's `lift/plan-log.js` is the reference
+implementation**, as `sides.js` is; `PlanAndLogTests` ports
+`plan-log.test.mjs` case for case. Coach iPhone's `PlanAndLog` /
+`BookedCardView` is the same idea for the other reader.
+
+**It is a week and not a marker on a day, and the argument is load-bearing.**
+Train shows one day at a time and Next is disabled past today, so a booked
+Wednesday is invisible on Thursday and a booked Friday can be looked at nowhere
+else on the phone. A marker on the day screen would only restate what the day
+screen already shows. One day is open at a time, by default the day Train is
+showing; tapping a row opens it and moves Train to it where Train can show it.
+The `‹ ›` step between weeks a coach **actually booked**, disabled when there is
+none -- a card that vanished on the way to an empty week would take its own
+arrows with it. The week runs **Monday to Sunday** (`weekStartsOn`, a fixed
+constant), never a rolling seven days, or a booked Tuesday would move out of
+"this week" overnight.
+
+**Nothing new travels.** No wire change, no new key, no new permission: the
+accepted plan and the log are read exactly as they already sit in the store.
+One thing *is* stored that was not -- see "Who sent it" below.
+
+**Who sent it.** One muted line above the head, `PlanAndLog.sentBy`, a port of
+web's function of the same name: the distinct coach names on the bookings
+**inside this week**, first-appearance order, joined with " · ", and "From your
+coach" when no plan that week carried one. A week holding one named plan and
+one nameless one reads as the named one -- a plan that named nobody says
+nothing about who sent the week rather than adding a second voice. The name is
+the plan's `n`, which `PlanImporter` read for the accept screen and **dropped**;
+it is now kept on the booking as `ScheduledSession.coachName`, which is
+**schema V9** (`LiftPreCoachNameShapes` freezes what V3-V8 shipped, and
+`Tests/Fixtures/v8-simulator.store` is a store the V8 binary wrote). On the
+booking rather than in a `PlanSides`-style side-car because a week can hold two
+coaches' plans, so it has to be readable per booking; because `ScheduledSession`
+is LIFT's own model, so the column costs nothing in LiftKit or Coach iOS; and
+because it is the same kind of copy `routineName` already is. Nothing is
+backfilled and there is nothing to backfill from -- a booking written before
+this reads nil, and nil is "From your coach", the sentence that week already
+read. It is **not** on `Result` and **not** in `lines`, as web keeps it out of
+`compare` and `lines`: who sent a week is a fact about the plans, not a figure
+about the week. `n` is free text from somebody else's app, so it is trimmed and
+its inner whitespace collapsed (HTML folds a newline in a `<p>`; a SwiftUI
+`Text` does not), handed to `Text` as a `String` and never as a literal with a
+name interpolated into it -- a literal is a `LocalizedStringKey` and is read as
+Markdown -- and given two lines at most. A name appears **nowhere else on the
+card**.
+
+**The ask is the stored plan, never the logged sets.** `ScheduledSession` names
+the date and the `Routine`; that routine's `RoutineExercise` /
+`RoutinePrescribedSet` rows are what was asked, and `PlanSides` carries each
+side and the named sides. It is not read off the log because starting a session
+copies two-sided prescribed sets in as ordinary editable sets, and
+`PlanSides.logged` keeps a prescription beside a logged exercise **only when it
+says something about sides** -- so for an ordinary plan the original ask is gone
+from the log the moment a set is edited, which is the whole gap this card
+closes. The cost, stated: a routine the lifter then edits changes what the card
+says was asked, because the routine *is* the record. Deleting one is safe --
+`RoutineRemoval` takes its bookings with it.
+
+**Days join on date and nothing else.** LIFT web uses `startedSessionId` to pick
+the right session out of a day holding two; this app has no session below the
+day (`WorkoutDay` is one per `dayKey`), so there is nothing to pick -- everything
+logged that day is that day's log, and a lift nobody asked for falls to `Also
+logged`. A session lifted the day after the one it was booked for is a booked
+day with nothing logged **and** a session of its own, adjacent on screen, with
+nothing claimed about the two.
+
+**Four verdicts.** `logged`, `not logged` and `not booked` are Coach web's words
+unchanged, so a lifter and their coach describe the same week the same way.
+`to do` is this side's own, because only the person living the week has a day
+that has not happened yet -- a day still ahead prints what it asks for (nowhere
+else can) and a past day does not recite what was not done. Coach's fourth
+state, `outside the log they sent`, **cannot arise here** (the log is on the
+device) and Coach's footer is a sentence about somebody else, so this card has
+its own: "Your coach's plan beside your own log. What else the week held, only
+you know."
+
+**Sides are the session header's own function.** `Prescription.targetsLabel` is
+what `ExerciseBlock` already shows (`L 3/3 · R 2/3`, `L 4/3` when over, never
+capped, an each-side exercise's ask twice its tuples), called with the same
+argument, so the card and the exercise it describes cannot disagree. A day still
+ahead shows `Each side · L 4 · R 3` instead, because `L 0/3` on a Friday is a
+nought nobody has had the chance to earn. The plain count is
+`SetSide.countsLabel(of:)`, which `ExerciseEntry.perSideCountLabel` now
+delegates to: one sentence, one place.
+
+**A set is spelled the way `SetEntry.display` spells it**, field for field --
+the one deliberate divergence from the browser, whose `setText` orders distance
+before duration. A card comparing two rows printed by two different formatters
+would be comparing two different sentences. Both rows come from kilograms,
+converted once at display. **Blank stays blank**: `[null, 5]` is "5 reps", never
+"0 x 5". LIFT writes `x`, never `×`.
+
+**Meals are stated, never answered.** A coach can book meals as well as sessions
+(`m`), and accepting a plan files them as `PlannedMeal`s beside the ones placed in
+Cook. The card lists the ones a coach booked -- `Dinner · Beef Chilli ·
+2 servings`, under `Meals`, with `2 meals booked` on the day row and
+`3 meals booked` in the head -- and says **nothing whatever about what was
+eaten**. Coach's card does the other half too: the foods a client stamped with
+that slot, a count above them so `Nothing logged at lunch` cannot read as `they
+ate nothing`, and a note disclaiming a join Coach cannot make. None of that half
+is here: the food log is on Food, dated, and reading it back to the lifter in the
+third person tells them nothing they did not already know. So no per-slot verdict,
+no food count, no macros beside a booked dish, no figure for meals eaten, and no
+meal footer. **`PlannedMeal.loggedFoodEntryID` means this device really does know
+a planned meal was logged, and it is still not printed**: a tick on some rows and
+a blank on the rest is a score with the numbers filed off, and Cook's own plan
+already shows it where `Log it` can act on it. `PlanAndLogTests` reads the card
+with no dish logged, one logged and both, and pins the three as identical lines --
+and reads `PlanAndLog.swift`'s own source for the tokens too.
+
+What that leaves is the thing no other screen gives: **the food booked for a day
+you cannot reach.** Cook's plan shows seven days from today and Train shows one.
+`to do` carries a booked meal as it carries a session, a past day booked only for
+food carries **no verdict word at all** (`DayState.meals`, the one state with no
+word -- there is no `not logged` for a meal), and **a plan of meals with no
+training is now a card** where before there was none. A day booked for food that
+was trained anyway is **one row** (`… · not booked · 2 meals booked`), because
+tapping a row moves Train by date. Once meals are in the head the training figure
+says what it counts (`3 training days, 1 logged`), so `logged 1` cannot be read
+against the total.
+
+**Only a coach's meals, and `PlanMeals` is what tells them apart.** A dinner the
+lifter placed is theirs to move, and holding it up on a card headed "your coach's
+plan" would make an expectation out of their own note-taking. Not a property on
+`PlannedMeal`: that is **LiftKit's shared `@Model`**, so a column there is a
+schema change for this app *and* Coach iOS and would mean freezing the recipe
+models in every version since V2. It is a preference-sized side-car in
+`UserDefaults` keyed by the row's own id, exactly as `PlanSides` is and at the same
+cost -- nothing sweeps it when a planned meal is deleted, which is bounded and
+read by nothing, because the card asks the question of the meals it already holds.
+`PlanAndLogStore.meals` hands `compare` **both kinds** and `bookedMeals` drops the
+lifter's own, so the rule is tested rather than hidden in a fetch. In the
+**backup** it is LIFT web's spelling and shape: `fromCoach` on a `plan[]` row, the
+coach's name or `true`, omitted entirely for the lifter's own and read leniently,
+so one file moves between the three builds and a restore does not empty the meals
+half of the card. LIFT for Android has two fields on its own `PlannedMeal`
+(`fromCoach`, `coachName`) and writes the same key. **A week a coach booked no
+meals in reads exactly as it did**, which `PlanAndLogTests` pins line for line,
+all 35 of them, against the card as it shipped; LIFT web and LIFT for Android pin
+the same 35.
+
+**Nobody is graded.** No score, no percentage, no streak, no colour on a day
+nothing was logged against, nothing carried between weeks and nothing comparing
+anything. `PlanAndLog.lines` flattens every sentence the card can produce so
+`testNothingInThisCardTellsALifterWhatToDo` and
+`testNothingHereAggregatesAWeekIntoAScore` hold the whole screen to that list
+rather than an eye holding one render of it. **A week that books nothing is no
+card at all** -- never an empty frame explaining itself, and never a week of
+your own training held up against a plan nobody wrote.
 
 ## The Apple Watch app
 

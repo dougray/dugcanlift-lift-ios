@@ -1,6 +1,7 @@
 import LiftKit
 import SwiftUI
 import LiftSync
+import WatchKit
 
 /// Digital Crown entry rather than a keyboard — the user is holding a bar.
 struct LogSetView: View {
@@ -10,6 +11,9 @@ struct LogSetView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var weight: Double = 135
+
+    /// One plate step in the unit on screen: 5 lb, or 2.5 kg.
+    private var step: Double { session.unit == .kilograms ? 2.5 : 5 }
     @State private var reps: Int = 5
     @State private var rpe: Double = 8
     /// The limb this set is being done on. Seeded from the plan and then the
@@ -40,7 +44,7 @@ struct LogSetView: View {
             }
 
             Section {
-                Stepper(value: $weight, in: 0...1500, step: 5) {
+                Stepper(value: $weight, in: 0...1500, step: step) {
                     // Formatted rather than `Int(weight)`: a prescription of
                     // 82.5 kg seeds this field exactly, and truncating it to
                     // "82" would show a number nobody prescribed and nobody
@@ -48,7 +52,7 @@ struct LogSetView: View {
                     LabeledValue("Weight", "\(Self.weightText(weight)) \(session.unit.abbreviation)")
                 }
                 .focusable()
-                .digitalCrownRotation($weight, from: 0, through: 1500, by: 5)
+                .digitalCrownRotation($weight, from: 0, through: 1500, by: step)
 
                 Stepper(value: $reps, in: 1...50) {
                     LabeledValue("Reps", "\(reps)")
@@ -67,6 +71,7 @@ struct LogSetView: View {
                 Button("Log Set") {
                     session.logSet(to: exerciseID, weight: weight, reps: reps, rpe: rpe,
                                    side: side)
+                    WKInterfaceDevice.current().play(.success)
                     dismiss()
                 }
             }
@@ -119,6 +124,12 @@ struct LogSetView: View {
     /// With no plan this is the flow that has always been here — repeat the
     /// last set of this exercise, or the 135/5/8 defaults for the first one.
     private func seed() {
+        // Training out of order: the exercise opened becomes the guided one
+        // before anything reads its prescription. A no-op with no plan, and
+        // when this already is the guided exercise (from the Now page).
+        session.focusGuidedSession(on: exerciseID)
+        // 135 lb is the bar and two plates; in kilograms that is 60.
+        if session.unit == .kilograms { weight = 60 }
         seedFromPreviousSet()
         // The side the plan asks for next, which is the side the session is
         // counting against — not the side of the set before, which is the
@@ -132,7 +143,7 @@ struct LogSetView: View {
         if let prescribed = prescription.weightKg {
             weight = session.unit.fromKilograms(prescribed)
         } else if isFirstSetOfTheExercise, let lastWeight = last?.weightKg {
-            weight = (session.unit.fromKilograms(lastWeight) / 5).rounded() * 5
+            weight = (session.unit.fromKilograms(lastWeight) / step).rounded() * step
         }
 
         if let prescribedReps = prescription.reps {
@@ -151,7 +162,7 @@ struct LogSetView: View {
     /// Most sets repeat the last one, so start there instead of at a default.
     private func seedFromPreviousSet() {
         guard let previous = exercise?.sets.last else { return }
-        weight = (session.unit.fromKilograms(previous.weightKg) / 5).rounded() * 5
+        weight = (session.unit.fromKilograms(previous.weightKg) / step).rounded() * step
         reps = previous.reps
         if let previousRPE = previous.rpe { rpe = previousRPE }
     }

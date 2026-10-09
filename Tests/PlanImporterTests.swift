@@ -12,6 +12,29 @@ final class PlanImporterTests: XCTestCase {
         ModelContext(LiftStore.makeContainer(inMemory: true))
     }
 
+    /// `accept` writes side-cars -- `PlanSides`, `PerSideLogging`, `RoadPicks`
+    /// and `PlanMeals` -- and **`CoachTests` is hosted by the app**, so
+    /// `.standard` in a test is the installed app's own preference domain on the
+    /// simulator rather than a sandbox. Every accept below takes this suite
+    /// instead, so a `make test` run cannot leave a routine's sides or a coach's
+    /// meals in the app a lifter actually uses.
+    private var isolated: UserDefaults!
+    private var suiteName: String!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "plan-importer-\(UUID().uuidString)"
+        isolated = UserDefaults(suiteName: suiteName)
+        isolated.removePersistentDomain(forName: suiteName)
+    }
+
+    override func tearDown() {
+        isolated.removePersistentDomain(forName: suiteName)
+        isolated = nil
+        suiteName = nil
+        super.tearDown()
+    }
+
     private let examplePayload = PlanPayload(
         v: 1, t: "plan", l: "a1b2c3d4", n: "Coach Dana",
         r: [PlanRecipe(n: "Beef Chilli", s: 4, u: [438, 36, 31, 19, 9],
@@ -25,7 +48,7 @@ final class PlanImporterTests: XCTestCase {
     )
 
     func testSummaryCountsEverything() {
-        let summary = PlanImporter.summary(for: examplePayload)
+        let summary = PlanImporter.summary(for: PlanLinkIntake.IncomingPlan(payload: examplePayload, roadPickIDs: []))
         XCTAssertEqual(summary.coachName, "Coach Dana")
         XCTAssertEqual(summary.recipeCount, 1)
         XCTAssertEqual(summary.mealCount, 1)
@@ -35,7 +58,7 @@ final class PlanImporterTests: XCTestCase {
 
     func testAcceptCreatesARecipeMatchingWireUnits() throws {
         let context = try makeContext()
-        try PlanImporter.accept(examplePayload, hash: "h1", in: context)
+        try PlanImporter.accept(examplePayload, hash: "h1", in: context, defaults: isolated)
 
         let recipes = try context.fetch(FetchDescriptor<Recipe>())
         XCTAssertEqual(recipes.count, 1)
@@ -49,7 +72,7 @@ final class PlanImporterTests: XCTestCase {
 
     func testAcceptCreatesAPlannedMealReferencingTheImportedRecipe() throws {
         let context = try makeContext()
-        try PlanImporter.accept(examplePayload, hash: "h2", in: context)
+        try PlanImporter.accept(examplePayload, hash: "h2", in: context, defaults: isolated)
 
         let recipe = try XCTUnwrap(try context.fetch(FetchDescriptor<Recipe>()).first)
         let meals = try context.fetch(FetchDescriptor<PlannedMeal>())
@@ -66,7 +89,7 @@ final class PlanImporterTests: XCTestCase {
 
     func testAcceptCreatesARoutineWithWeightConvertedToKilograms() throws {
         let context = try makeContext()
-        try PlanImporter.accept(examplePayload, hash: "h3", in: context)
+        try PlanImporter.accept(examplePayload, hash: "h3", in: context, defaults: isolated)
 
         let routines = try context.fetch(FetchDescriptor<Routine>())
         XCTAssertEqual(routines.count, 1)
@@ -100,7 +123,7 @@ final class PlanImporterTests: XCTestCase {
             w: examplePayload.w, k: examplePayload.k
         )
 
-        try PlanImporter.accept(payloadWithNegativeIndex, hash: "negative-index", in: context)
+        try PlanImporter.accept(payloadWithNegativeIndex, hash: "negative-index", in: context, defaults: isolated)
 
         XCTAssertEqual(try context.fetch(FetchDescriptor<Recipe>()).count, 1)
         XCTAssertEqual(try context.fetch(FetchDescriptor<PlannedMeal>()).count, 0)
@@ -111,13 +134,13 @@ final class PlanImporterTests: XCTestCase {
         // not throw and the routine it points to exists — the Train-tab
         // "Coach scheduled: X" surfacing is a view-layer concern (Task 6).
         let context = try makeContext()
-        try PlanImporter.accept(examplePayload, hash: "h4", in: context)
+        try PlanImporter.accept(examplePayload, hash: "h4", in: context, defaults: isolated)
         XCTAssertEqual(try context.fetch(FetchDescriptor<Routine>()).count, 1)
     }
 
     func testAcceptPersistsScheduledSessionsForTheirDay() throws {
         let context = try makeContext()
-        try PlanImporter.accept(examplePayload, hash: "h5", in: context)
+        try PlanImporter.accept(examplePayload, hash: "h5", in: context, defaults: isolated)
 
         let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
         XCTAssertEqual(sessions.count, 1)
@@ -125,6 +148,83 @@ final class PlanImporterTests: XCTestCase {
         // Literal expected day-key — see the same note in
         // testAcceptCreatesAPlannedMealReferencingTheImportedRecipe above.
         XCTAssertEqual(sessions.first?.dayKey, "2026-09-08")
+    }
+
+    // MARK: - The coach's name
+
+    /// `n` used to be read for the accept screen and dropped, so the week card
+    /// could only ever say "From your coach". It is kept on the booking now --
+    /// see `ScheduledSession.coachName`.
+    func testABookingKeepsTheNameThePlanArrivedWith() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(examplePayload, hash: "name-1", in: context, defaults: isolated)
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.first?.coachName, "Coach Dana")
+    }
+
+    /// A coach who named nobody is nil, never "": the card reads nil as "From
+    /// your coach", and an empty string would be a name of no characters.
+    func testAPlanThatNamesNobodyBooksNoName() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(payload(named: ""), hash: "name-2", in: context, defaults: isolated)
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertNil(sessions.first?.coachName)
+    }
+
+    /// Whitespace is not a name either, and a name that arrives padded is
+    /// stored trimmed -- so two bookings from one coach are one name on the
+    /// card rather than two.
+    func testANameIsTrimmedOnceOnTheWayInAndWhitespaceAloneIsNoName() throws {
+        let context = try makeContext()
+        try PlanImporter.accept(payload(named: "   "), hash: "name-3", in: context, defaults: isolated)
+        XCTAssertNil(try context.fetch(FetchDescriptor<ScheduledSession>()).first?.coachName)
+
+        let second = try makeContext()
+        try PlanImporter.accept(payload(named: "  Coach Dana  "), hash: "name-4", in: second, defaults: isolated)
+        XCTAssertEqual(try second.fetch(FetchDescriptor<ScheduledSession>()).first?.coachName,
+                       "Coach Dana")
+    }
+
+    /// Every booking of one plan carries the same spelling, so a week booked
+    /// twice by one coach is one name.
+    func testEveryBookingOfOnePlanCarriesTheSameName() throws {
+        let context = try makeContext()
+        let twoDays = PlanPayload(
+            v: 1, t: "plan", l: "a1b2c3d4", n: "Coach Dana", r: nil, m: nil,
+            w: [PlanWorkout(n: "Lower A", e: [
+                PlanWorkoutExercise(n: "Back Squat", q: "Barbell", c: nil, s: [[225, 5]])
+            ])],
+            k: [PlanSession(d: "2026-09-08", x: 0), PlanSession(d: "2026-09-10", x: 0)])
+        try PlanImporter.accept(twoDays, hash: "name-5", in: context, defaults: isolated)
+
+        let sessions = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertEqual(Set(sessions.compactMap(\.coachName)), ["Coach Dana"])
+    }
+
+    /// A name long enough to be a paragraph is stored as sent. Nothing is cut
+    /// here -- what a card does with it is the card's rule
+    /// (`PlanAndLog.sentBy` and the two-line limit on the view), and a store
+    /// that truncated would lose the name for every other reader too.
+    func testALongNameIsStoredWhole() throws {
+        let context = try makeContext()
+        let long = String(repeating: "Dana Whitfield-Fotheringay ", count: 12)
+            .trimmingCharacters(in: .whitespaces)
+        try PlanImporter.accept(payload(named: long), hash: "name-6", in: context, defaults: isolated)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledSession>()).first?.coachName,
+                       long)
+    }
+
+    private func payload(named name: String) -> PlanPayload {
+        PlanPayload(
+            v: 1, t: "plan", l: "a1b2c3d4", n: name, r: nil, m: nil,
+            w: [PlanWorkout(n: "Lower A", e: [
+                PlanWorkoutExercise(n: "Back Squat", q: "Barbell", c: nil, s: [[225, 5]])
+            ])],
+            k: [PlanSession(d: "2026-09-08", x: 0)])
     }
 
     func testAcceptSkipsAScheduledSessionWithANegativeRoutineIndexInsteadOfCrashing() throws {
@@ -140,7 +240,7 @@ final class PlanImporterTests: XCTestCase {
             w: examplePayload.w, k: [PlanSession(d: "2026-09-08", x: -1)]
         )
 
-        try PlanImporter.accept(payloadWithNegativeIndex, hash: "negative-schedule-index", in: context)
+        try PlanImporter.accept(payloadWithNegativeIndex, hash: "negative-schedule-index", in: context, defaults: isolated)
 
         XCTAssertEqual(try context.fetch(FetchDescriptor<Routine>()).count, 1)
         XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledSession>()).count, 0)
@@ -148,8 +248,8 @@ final class PlanImporterTests: XCTestCase {
 
     func testAcceptingTheSameHashTwiceIsANoOp() throws {
         let context = try makeContext()
-        try PlanImporter.accept(examplePayload, hash: "same-hash", in: context)
-        try PlanImporter.accept(examplePayload, hash: "same-hash", in: context)
+        try PlanImporter.accept(examplePayload, hash: "same-hash", in: context, defaults: isolated)
+        try PlanImporter.accept(examplePayload, hash: "same-hash", in: context, defaults: isolated)
 
         XCTAssertEqual(try context.fetch(FetchDescriptor<Recipe>()).count, 1)
         XCTAssertEqual(try context.fetch(FetchDescriptor<Routine>()).count, 1)
@@ -158,7 +258,7 @@ final class PlanImporterTests: XCTestCase {
     func testIsAlreadyImportedReflectsAcceptedHashes() throws {
         let context = try makeContext()
         XCTAssertFalse(PlanImporter.isAlreadyImported("fresh", in: context))
-        try PlanImporter.accept(examplePayload, hash: "fresh", in: context)
+        try PlanImporter.accept(examplePayload, hash: "fresh", in: context, defaults: isolated)
         XCTAssertTrue(PlanImporter.isAlreadyImported("fresh", in: context))
     }
 
@@ -197,7 +297,7 @@ final class PlanImporterTests: XCTestCase {
         let payload = try PlanLinkCodec.decode(fragment: fragment, expectedLifterID: "a1b2c3d4")
 
         let context = try makeContext()
-        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context)
+        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context, defaults: isolated)
 
         let meals = try context.fetch(FetchDescriptor<PlannedMeal>())
         XCTAssertEqual(meals.count, 1)
@@ -225,7 +325,7 @@ final class PlanImporterTests: XCTestCase {
         let payload = try PlanLinkCodec.decode(fragment: PlanLinkFixtures.fragment(json: json),
                                                expectedLifterID: "a1b2c3d4")
         let context = try makeContext()
-        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context)
+        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context, defaults: isolated)
 
         let facts = try XCTUnwrap(try context.fetch(FetchDescriptor<Recipe>()).first?.nutritionPerServing)
         XCTAssertEqual(facts.calories, 438)
@@ -248,13 +348,13 @@ final class PlanImporterTests: XCTestCase {
         let payload = try PlanLinkCodec.decode(fragment: PlanLinkFixtures.fragment(json: json),
                                                expectedLifterID: "a1b2c3d4")
         let context = try makeContext()
-        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context)
+        try PlanImporter.accept(payload, hash: try PlanImporter.hash(of: payload), in: context, defaults: isolated)
         XCTAssertNil(try context.fetch(FetchDescriptor<Recipe>()).first?.nutritionPerServing)
     }
 
     func testNoUxLeavesTheThreeUnknown() throws {
         let context = try makeContext()
-        try PlanImporter.accept(examplePayload, hash: "ux-none", in: context)
+        try PlanImporter.accept(examplePayload, hash: "ux-none", in: context, defaults: isolated)
         let facts = try XCTUnwrap(try context.fetch(FetchDescriptor<Recipe>()).first?.nutritionPerServing)
         XCTAssertNil(facts.saturatedFatG)
         XCTAssertNil(facts.sugarG)

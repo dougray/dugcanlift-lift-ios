@@ -17,7 +17,9 @@ import LiftCore
 /// sheet is still open is never mistaken for the same item.
 struct IdentifiablePlan: Identifiable {
     let id = UUID()
-    let payload: PlanPayload
+    /// The payload and the road picks that arrived with it, kept together --
+    /// see `PlanLinkIntake.IncomingPlan`.
+    let plan: PlanLinkIntake.IncomingPlan
 }
 
 @main
@@ -59,7 +61,7 @@ struct LiftApp: App {
                     drainSharedPlans()
                 }
                 .sheet(item: $incomingPlan) { identifiablePlan in
-                    PlanPreviewView(payload: identifiablePlan.payload)
+                    PlanPreviewView(plan: identifiablePlan.plan)
                 }
                 .alert("Couldn't open this plan", isPresented: .constant(refusal != nil), presenting: refusal) { _ in
                     Button("OK") { refusal = nil }
@@ -88,8 +90,8 @@ struct LiftApp: App {
         switch outcome {
         case .ignored:
             return
-        case .plan(let payload):
-            incomingPlan = IdentifiablePlan(payload: payload)
+        case .plan(let incoming):
+            incomingPlan = IdentifiablePlan(plan: incoming)
             refusal = nil
         case .refused(let reason):
             incomingPlan = nil

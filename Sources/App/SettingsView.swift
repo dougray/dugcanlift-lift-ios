@@ -66,6 +66,11 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                // The watch shows weights and distances in these units too;
+                // it hears about a change on the next context push.
+                .onChange(of: unitRaw) { WatchSyncReceiver.shared?.pushRecentFoodsSnapshot() }
+                .onChange(of: distanceUnitRaw) { WatchSyncReceiver.shared?.pushRecentFoodsSnapshot() }
+
                 Section {
                     Stepper(value: $watchRestSeconds,
                             in: WatchPlanSettings.restSecondsRange,

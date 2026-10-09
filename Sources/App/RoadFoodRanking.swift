@@ -27,6 +27,10 @@ import LiftCore
 /// known. Unknown sodium loses a tie to any known sodium rather than winning
 /// it as a zero. An item with no calorie figure cannot be said to fit, so it
 /// is left out when there is a goal and ranked last when there is not.
+///
+/// A coach's road picks (`withPicks`) sort to the top of a group and change
+/// nothing else: not the order underneath them, not which items fit, not what
+/// is hidden. See `coach/PLAN-FORMAT.md` "Road picks".
 enum RoadFoodRanking {
 
     enum Mode: Equatable { case goal, noGoal }
@@ -37,6 +41,19 @@ enum RoadFoodRanking {
         let fits: [RoadFoodItem]
         /// More than what is left, but no more than 10% over. Empty with no goal.
         let over: [RoadFoodItem]
+        /// The coach's picks that are actually on this screen, by id. Empty
+        /// until `withPicks` floats them, and an id this copy of the file does
+        /// not have is never in it -- nothing counts a row nobody can see.
+        let picked: Set<String>
+
+        init(mode: Mode, fits: [RoadFoodItem], over: [RoadFoodItem], picked: Set<String> = []) {
+            self.mode = mode
+            self.fits = fits
+            self.over = over
+            self.picked = picked
+        }
+
+        func isPicked(_ item: RoadFoodItem) -> Bool { picked.contains(item.id) }
     }
 
     /// Grams of protein per 100 kcal, or nil when it cannot honestly be said.
@@ -84,19 +101,79 @@ enum RoadFoodRanking {
         return Ranked(mode: .goal, fits: fits.sorted(by: areInOrder), over: over.sorted(by: areInOrder))
     }
 
+    // MARK: - A coach's picks
+
+    /// A ranked result with the coach's picks floated to the top of each
+    /// group, and nothing else changed: not the order underneath them, not
+    /// which items fit, not what is hidden. A pick is an opinion sitting
+    /// beside the numbers, never in front of them, so a pick that is "a little
+    /// over" stays in the little-over group where the arithmetic put it, and
+    /// one more than 10% over stays hidden -- picked or not.
+    ///
+    /// An id this copy of `road-food.json` does not have is **skipped,
+    /// silently**: the coach's file and this one are two builds updated at
+    /// different times, and an item withdrawn since the plan was sent must
+    /// leave no row, no gap and no error. It is not counted either, so no card
+    /// promises a row that is not there.
+    static func withPicks(_ ranked: Ranked, ids: [String]) -> Ranked {
+        guard !ids.isEmpty else { return ranked }
+        let wanted = Set(ids)
+        let onScreen = Set((ranked.fits + ranked.over).map(\.id)).intersection(wanted)
+        guard !onScreen.isEmpty else { return ranked }
+        return Ranked(mode: ranked.mode,
+                      fits: pickedFirst(ranked.fits, onScreen),
+                      over: pickedFirst(ranked.over, onScreen),
+                      picked: onScreen)
+    }
+
+    /// A stable partition: the picked ones first, each part in exactly the
+    /// order it already had. Sorting on a "picked" key would do the same thing
+    /// today and is not written that way on purpose -- the promise is that the
+    /// nutrition order is untouched, and a partition cannot quietly stop
+    /// keeping it.
+    private static func pickedFirst(_ list: [RoadFoodItem], _ picked: Set<String>) -> [RoadFoodItem] {
+        list.filter { picked.contains($0.id) } + list.filter { !picked.contains($0.id) }
+    }
+
+    /// How many of `items` are picked -- for a tile, which draws no list.
+    static func pickCount(_ items: [RoadFoodItem], ids: [String]) -> Int {
+        guard !ids.isEmpty else { return 0 }
+        let wanted = Set(ids)
+        return Set(items.map(\.id)).intersection(wanted).count
+    }
+
     // MARK: - How old the numbers are
 
-    /// Whether `checkedOn` is more than six calendar months before `today`
-    /// (both "YYYY-MM-DD"). Calendar months, not 182 days: "six months old"
-    /// is what the screen says, so it is what gets measured. 31 March plus six
-    /// months is 30 September, clamped to the month's end rather than rolled
-    /// into October. Nil when either date is missing or not a real date,
-    /// which the screen also says.
+    /// A document's own date as a calendar day, or nil. `publishedOn` is only
+    /// as precise as the document is, so it may be "2022-11" where the chart
+    /// says only "NOVEMBER 2022"; a month-only date is read as the first of
+    /// that month, which can only make a document look older, never fresher.
+    static func docDay(_ text: String?) -> CalendarDay? {
+        guard let text else { return nil }
+        return CalendarDay(text.count == 7 ? text + "-01" : text)
+    }
+
+    /// The date the "these numbers are old" warning keys off: the document's
+    /// own date when the chain states one, and the day a person read it when
+    /// it does not. Different facts -- `publishedOn` is when the chain wrote
+    /// the chart, `checkedOn` is when someone read it -- and only the first
+    /// can say a chart is from 2021.
+    static func ageDate(_ chain: RoadFoodChain?) -> String? {
+        chain?.publishedOn ?? chain?.checkedOn
+    }
+
+    /// Whether `day` is more than six calendar months before `today`. Calendar
+    /// months, not 182 days: "six months old" is what the screen says, so it
+    /// is what gets measured. `day` is "YYYY-MM-DD", or "YYYY-MM" for a
+    /// document that names only a month. 31 March plus six months is 30
+    /// September, clamped to the month's end rather than rolled into October.
+    /// Nil when either date is missing or not a real date, which the screen
+    /// also says.
     ///
     /// Plain year/month/day arithmetic, with no `Date` and so no time zone:
     /// both are calendar dates already.
     static func isStale(checkedOn: String?, today: String) -> Bool? {
-        guard let checked = CalendarDay(checkedOn), let now = CalendarDay(today) else { return nil }
+        guard let checked = docDay(checkedOn), let now = CalendarDay(today) else { return nil }
         let monthIndex = checked.month - 1 + 6
         let year = checked.year + monthIndex / 12
         let month = monthIndex % 12 + 1
@@ -248,6 +325,21 @@ enum RoadFoodRanking {
         let words = category.replacingOccurrences(of: "-", with: " ")
             .replacingOccurrences(of: "_", with: " ")
         return words.prefix(1).uppercased() + words.dropFirst()
+    }
+
+    /// A document's own date, printed no more precisely than the document
+    /// wrote it: "Mar 29, 2021" for a chart that gives a day, "Nov 2022" for
+    /// one that names only a month. Nil when it is not a date.
+    static func publishedText(_ key: String?, locale: Locale = .current) -> String? {
+        guard let key, let day = docDay(key) else { return nil }
+        guard key.count == 7 else { return dateText(key, locale: locale) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        guard let date = calendar.date(from: DateComponents(year: day.year, month: day.month, day: 1, hour: 12))
+        else { return nil }
+        var style = Date.FormatStyle().year().month(.abbreviated).locale(locale)
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
     }
 
     /// "Sep 20, 2026" for a "YYYY-MM-DD", or nil when it is not a date.

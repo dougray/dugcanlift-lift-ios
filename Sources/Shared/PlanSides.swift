@@ -176,6 +176,29 @@ struct Prescription: Codable, Equatable {
     /// A side the plan does not ask for appears only once something is logged
     /// on it, and two-sided sets are counted when there are any. Empty when
     /// the plan says nothing about sides, so the caller keeps its plain count.
+    /// [targetsLabel], said: "left 3 of 3, right 2 of 3".
+    ///
+    /// Read out, `L 3/3 · R 2/3` is a letter, a slash and the name of a
+    /// character -- and it is the line that says what one side of a person's
+    /// body did. Built from the same counts as the label rather than by
+    /// picking the label apart: two functions that count separately eventually
+    /// count differently, and `PlanSidesTests` pins that these do not.
+    func targetsSpoken(logged: [SetSide?]) -> String {
+        let t = targets
+        guard t.left > 0 || t.right > 0 else { return "" }
+        let left = logged.filter { $0 == .left }.count
+        let right = logged.filter { $0 == .right }.count
+        let both = logged.filter { $0 == nil }.count
+        var parts: [String] = []
+        for (side, asked, have) in [(SetSide.left, t.left, left), (.right, t.right, right)] {
+            if asked > 0 { parts.append("\(side.spokenLabel) \(have) of \(asked)") }
+            else if have > 0 { parts.append("\(side.spokenLabel) \(have)") }
+        }
+        if t.both > 0 { parts.append("\(both) of \(t.both) both") }
+        else if both > 0 { parts.append("\(both) both") }
+        return parts.joined(separator: ", ")
+    }
+
     func targetsLabel(logged: [SetSide?]) -> String {
         let t = targets
         guard t.left > 0 || t.right > 0 else { return "" }

@@ -17,6 +17,15 @@ struct TrainView: View {
     @State private var showingPicker = false
     @Environment(\.pageWidth) private var pageWidth
 
+    /// The week the "what you were asked to do" card is showing, and the day of
+    /// it it has open. Both nil means "follow Train": the week containing the
+    /// day on screen, with that day open. The card's own arrows set the first,
+    /// a row sets the second, and Previous / Next clears both -- moving a day
+    /// should not leave the card describing a week the rest of the screen has
+    /// left.
+    @State private var planWeekAnchor: String?
+    @State private var planWeekOpen: String?
+
     private var unit: WeightUnit { WeightUnit(rawValue: unitRaw) ?? .pounds }
 
     var body: some View {
@@ -32,12 +41,24 @@ struct TrainView: View {
                         for: AdaptiveLayout.contentWidth(forPage: pageWidth), minWidth: 394)) {
                         VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                             Text("Focus")
-                                .font(Theme.sectionLabel)
+                                .liftFont(.sectionLabel)
                                 .foregroundStyle(Theme.textPrimary)
 
                             FocusPicker(date: selectedDate)
 
                             ScheduledSessionBanner(date: selectedDate)
+
+                            // The coach's week, under the coach's own card for
+                            // the day and above the day's own log -- the day's
+                            // action first, the week as the context under it,
+                            // where LIFT web puts it. Absent entirely when the
+                            // week on screen books no training.
+                            PlanWeekCard(date: selectedDate,
+                                         anchor: $planWeekAnchor,
+                                         open: $planWeekOpen) { key in
+                                guard let date = DayKey.date(from: key) else { return }
+                                selectedDate = date
+                            }
 
                             DayEditor(date: selectedDate, unit: unit, showingPicker: $showingPicker)
                         }
@@ -53,7 +74,10 @@ struct TrainView: View {
                 .padding(.bottom, 40)
                 .adaptivePageWidth()
             }
-            .liftScreen()
+            .appScreen()
+            // Number pads have no return key: Done above the keyboard, and a
+            // drag on the page puts it away.
+            .keyboardDoneButton()
             // The NavigationStack paints the system background (white/black)
             // over RootView's Theme.background, which Home, Food and Cook
             // show because they sit in no stack. Paint it back, edge to edge.
@@ -72,17 +96,17 @@ struct TrainView: View {
     private var dayNavigator: some View {
         HStack {
             Button("Previous") { shift(-1) }
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(AppColor.accentText)
             Spacer()
             Text(relativeLabel)
-                .font(.system(size: 22, weight: .heavy))
+                .scaledFont(size: 22, weight: .heavy)
                 .foregroundStyle(Theme.textPrimary)
             Spacer()
             Button("Next") { shift(1) }
-                .foregroundStyle(isToday ? Theme.textSecondary : Theme.accent)
+                .foregroundStyle(isToday ? Theme.textSecondary : AppColor.accentText)
                 .disabled(isToday)
         }
-        .font(.system(size: 16, weight: .semibold))
+        .scaledFont(size: 16, weight: .semibold)
         .padding(.top, 8)
     }
 
@@ -101,6 +125,10 @@ struct TrainView: View {
         guard let moved = Calendar.current.date(byAdding: .day, value: days, to: selectedDate)
         else { return }
         selectedDate = moved
+        // Moving a day should not leave the week card describing a week the
+        // rest of the screen has left.
+        planWeekAnchor = nil
+        planWeekOpen = nil
     }
 
     private func addExercise(_ record: ExerciseRecord) {
@@ -151,6 +179,7 @@ private struct FocusPicker: View {
                     LiftChip(label: focus.displayName, isSelected: currentFocus == focus) {
                         setFocus(focus)
                     }
+                    .accessibilitySelected(currentFocus == focus)
                 }
             }
         }
@@ -225,17 +254,17 @@ private struct DayEditor: View {
         LiftCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Workout name")
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
 
                 TextField("Push, Pull, Legs…", text: nameBinding)
-                    .font(.system(size: 18))
+                    .scaledFont(size: 18)
                     .foregroundStyle(Theme.textPrimary)
                     .textFieldStyle(.plain)
 
                 if let day, day.totalSetCount > 0 {
                     Text(day.summary(unit: unit))
-                        .font(Theme.detail)
+                        .liftFont(.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
 
@@ -251,8 +280,8 @@ private struct DayEditor: View {
                     showingPicker = true
                 } label: {
                     Label("Add exercise", systemImage: "plus")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundStyle(AppColor.accentText)
                 }
 
                 liveSessionControl
@@ -277,16 +306,16 @@ private struct DayEditor: View {
         if let day, day.isLive {
             HStack {
                 Label("Live session", systemImage: "record.circle")
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(AppColor.accentText)
                 Spacer()
                 Button("End") {
                     day.liveEndedAt = .now
                     try? context.save()
                     Task { await HealthKitManager.shared.syncPending(context: context) }
                 }
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(AppColor.accentText)
             }
-            .font(.system(size: 15, weight: .semibold))
+            .scaledFont(size: 15, weight: .semibold)
         } else if Calendar.current.isDateInToday(date), day?.liveEndedAt == nil {
             Button {
                 let target = day ?? WorkoutQueries.fetchOrCreate(date, in: context)
@@ -294,7 +323,7 @@ private struct DayEditor: View {
                 try? context.save()
             } label: {
                 Label("Start live session", systemImage: "play.circle")
-                    .font(.system(size: 15, weight: .semibold))
+                    .scaledFont(size: 15, weight: .semibold)
                     .foregroundStyle(Theme.textSecondary)
             }
         }
@@ -308,6 +337,8 @@ private struct ExerciseBlock: View {
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
     let focus: TrainingFocus
+
+    @State private var confirmingRemove = false
 
     /// Whether this lift is being logged a limb at a time: the lifter's own
     /// answer if they have given one, otherwise what the name suggests. The
@@ -356,7 +387,7 @@ private struct ExerciseBlock: View {
                             .followsWindowAppearance()
                     } label: {
                         Text(exercise.displayName)
-                            .font(.system(size: 17, weight: .bold))
+                            .scaledFont(size: 17, weight: .bold)
                             .foregroundStyle(Theme.textPrimary)
                             .multilineTextAlignment(.leading)
                     }
@@ -367,14 +398,32 @@ private struct ExerciseBlock: View {
                     // the header rather than waiting to be counted by eye.
                     if let countLabel {
                         Text(countLabel)
-                            .font(Theme.detail)
+                            .liftFont(.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
                 Spacer()
-                Button("Remove") { remove() }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
+                // Removes the exercise and every set under it, so it asks
+                // first. Single sets stay one tap, with Undo instead.
+                Button("Remove") { confirmingRemove = true }
+                    .scaledFont(size: 15, weight: .semibold)
+                    .foregroundStyle(AppColor.accentText)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel("Remove \(exercise.displayName)")
+                    .confirmationDialog(
+                        "Remove \(exercise.displayName)?",
+                        isPresented: $confirmingRemove,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Remove Exercise", role: .destructive) { remove() }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        let count = exercise.sets.count
+                        Text(count == 0
+                             ? "This can't be undone."
+                             : "Its \(count) set\(count == 1 ? "" : "s") will be deleted too. This can't be undone.")
+                    }
             }
 
             Button {
@@ -385,20 +434,27 @@ private struct ExerciseBlock: View {
             } label: {
                 Label("Log left and right separately",
                       systemImage: perSide ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(perSide ? Theme.accent : Theme.textSecondary)
+                    .scaledFont(size: 13, weight: .semibold)
+                    .foregroundStyle(perSide ? AppColor.accentText : Theme.textSecondary)
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // A checkbox, so VoiceOver says "switch button, on/off" rather
+            // than reading the symbol name.
+            .accessibilityLabel("Log left and right separately")
+            .accessibilityValue(perSide ? "On" : "Off")
+            .accessibilityAddTraits(.isToggle)
 
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
                        showsSide: showsSide) {
-                    delete(set)
+                    delete(set, number: index + 1)
                 }
             }
 
             Button("Add set") { addSet() }
-                .font(.system(size: 15, weight: .semibold))
+                .scaledFont(size: 15, weight: .semibold)
                 .foregroundStyle(Theme.textSecondary)
         }
     }
@@ -446,10 +502,20 @@ private struct ExerciseBlock: View {
         save()
     }
 
-    private func delete(_ set: SetEntry) {
+    /// One tap, then a few seconds to Undo. Undo rebuilds the set with its
+    /// original `id`, `orderIndex` and side, so it lands back in the same place.
+    private func delete(_ set: SetEntry, number: Int) {
+        let snapshot = SetEntrySnapshot(set)
         exercise.sets.removeAll { $0.id == set.id }
         context.delete(set)
         save()
+        UndoToastCenter.shared.show("Deleted set \(number)") { [exercise, context] in
+            // The whole exercise may have been removed in the meantime.
+            guard exercise.modelContext != nil, !exercise.isDeleted else { return }
+            exercise.sets.append(snapshot.restore())
+            try? context.save()
+            WidgetCenter.shared.reloadAllTimelines()
+        }
     }
 
     private func remove() {
@@ -461,6 +527,43 @@ private struct ExerciseBlock: View {
     private func save() {
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
+    }
+}
+
+/// Every stored field of a deleted `SetEntry`, so Undo can put it back.
+private struct SetEntrySnapshot {
+    let id: UUID
+    let orderIndex: Int
+    let weightKg: Double
+    let reps: Int
+    let rpe: Double?
+    let isWarmup: Bool
+    let completedAt: Date?
+    let durationSec: Int?
+    let distanceMeters: Double?
+    let side: SetSide?
+
+    init(_ set: SetEntry) {
+        id = set.id
+        orderIndex = set.orderIndex
+        weightKg = set.weightKg
+        reps = set.reps
+        rpe = set.rpe
+        isWarmup = set.isWarmup
+        completedAt = set.completedAt
+        durationSec = set.durationSec
+        distanceMeters = set.distanceMeters
+        side = set.side
+    }
+
+    func restore() -> SetEntry {
+        let set = SetEntry(orderIndex: orderIndex, weightKg: weightKg, reps: reps,
+                           rpe: rpe, isWarmup: isWarmup,
+                           durationSec: durationSec, distanceMeters: distanceMeters,
+                           side: side)
+        set.id = id
+        set.completedAt = completedAt
+        return set
     }
 }
 
@@ -478,13 +581,22 @@ private struct SetRow: View {
     @Environment(\.modelContext) private var context
     @State private var isEditing = false
 
+    // Field widths grow with the text inside them, so a larger reading size
+    // doesn't clip "135.5" to "13…".
+    @ScaledMetric(relativeTo: .subheadline) private var narrowField: CGFloat = 62
+    @ScaledMetric(relativeTo: .subheadline) private var mediumField: CGFloat = 78
+    @ScaledMetric(relativeTo: .subheadline) private var wideField: CGFloat = 86
+    @ScaledMetric(relativeTo: .body) private var numberColumn: CGFloat = 22
+    @ScaledMetric(relativeTo: .footnote) private var sideBox: CGFloat = 26
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Text("\(index).")
-                    .font(Theme.body)
+                    .liftFont(.body)
                     .foregroundStyle(Theme.textSecondary)
-                    .frame(width: 22, alignment: .leading)
+                    .frame(width: numberColumn, alignment: .leading)
+                    .accessibilityHidden(true)
 
                 // In the row, not behind a tap on the editor: picking the
                 // limb has to cost one tap, and a set already lands on the
@@ -496,27 +608,26 @@ private struct SetRow: View {
                 } label: {
                     // The control beside it already says L or R.
                     Text(set.display(unit: unit, includingSide: !showsSide))
-                        .font(.system(size: 16, weight: set.isWarmup ? .regular : .semibold))
+                        .scaledFont(size: 16, weight: set.isWarmup ? .regular : .semibold)
                         .foregroundStyle(set.isWarmup ? Theme.textSecondary : Theme.textPrimary)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Set \(index), \(set.display(unit: unit))\(set.isWarmup ? ", warmup" : "")")
+                .accessibilityHint(isEditing ? "Closes the editor" : "Edits this set")
 
                 if set.isWarmup {
                     Text("warmup")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundStyle(Theme.textSecondary)
+                        .accessibilityHidden(true)
                 }
 
                 Spacer()
 
-                Button {
-                    onDelete()
-                } label: {
-                    Text("x")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(Theme.accent)
-                }
-                .buttonStyle(.plain)
+                DeleteGlyphButton(accessibilityName: "set \(index)", action: onDelete)
+                    .padding(.trailing, -12)
             }
 
             if isEditing {
@@ -537,20 +648,25 @@ private struct SetRow: View {
                     save()
                 } label: {
                     Text(side.shortLabel)
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 26, height: 26)
-                        .foregroundStyle(set.side == side ? Theme.background : Theme.textSecondary)
+                        .scaledFont(size: 13, weight: .bold)
+                        .frame(width: sideBox, height: sideBox)
+                        .foregroundStyle(set.side == side ? Theme.onAccent : Theme.textSecondary)
                         .background {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(set.side == side ? Theme.accent : Color.clear)
                         }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Theme.textSecondary.opacity(set.side == side ? 0 : 0.6), lineWidth: 1)
+                        }
+                        // 26pt to look at, 44pt to hit.
+                        .frame(minWidth: 40, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(side.displayName)
+                .accessibilitySelected(set.side == side)
             }
-        }
-        .background {
-            RoundedRectangle(cornerRadius: 6).stroke(Theme.hairline, lineWidth: 1)
         }
     }
 
@@ -560,63 +676,110 @@ private struct SetRow: View {
     /// shows it.
     private var editor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                if focus.showsWeight {
-                    field(unit.abbreviation, value: weightBinding, width: 78, decimal: true)
+            // Side by side when it fits; at large text sizes the Warmup
+            // toggle drops under the fields instead of pushing them off-card.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    loadFields
+                    Spacer(minLength: 0)
+                    warmupToggle
                 }
-                if focus.showsWeight && focus.showsReps {
-                    Text("x").foregroundStyle(Theme.textSecondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .bottom, spacing: 8) { loadFields }
+                    warmupToggle
                 }
-                if focus.showsReps {
-                    field("reps", value: Binding(
-                        get: { Double(set.reps) },
-                        set: { set.reps = Int($0); save() }
-                    ), width: 62, decimal: false)
-                }
-                if focus.showsRPE {
-                    Text("@").foregroundStyle(Theme.textSecondary)
-                    field("RPE", value: Binding(
-                        get: { set.rpe ?? 0 },
-                        set: { set.rpe = $0 == 0 ? nil : $0; save() }
-                    ), width: 62, decimal: true)
-                }
-
-                Spacer()
-
-                Button(set.isWarmup ? "Working" : "Warmup") {
-                    set.isWarmup.toggle()
-                    save()
-                }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
             }
 
             if focus.showsTime || focus.showsDistance {
-                HStack(spacing: 8) {
+                HStack(alignment: .bottom, spacing: 8) {
                     if focus.showsTime {
-                        TextField("mm:ss", text: durationBinding)
-                            .keyboardType(.numbersAndPunctuation)
-                            .multilineTextAlignment(.center)
-                            .font(.system(size: 15))
-                            .foregroundStyle(Theme.textPrimary)
-                            .frame(width: 78)
-                            .padding(.vertical, 7)
-                            .background {
-                                RoundedRectangle(cornerRadius: 7).stroke(Theme.hairline, lineWidth: 1)
-                            }
+                        labeled("time") {
+                            TextField("mm:ss", text: durationBinding)
+                                .keyboardType(.numbersAndPunctuation)
+                                .multilineTextAlignment(.center)
+                                .scaledFont(size: 15)
+                                .foregroundStyle(Theme.textPrimary)
+                                .frame(width: mediumField)
+                                .padding(.vertical, 7)
+                                .background {
+                                    RoundedRectangle(cornerRadius: 7).stroke(Self.fieldStroke, lineWidth: 1)
+                                }
+                                .accessibilityLabel("Time, minutes and seconds")
+                        }
                     }
                     if focus.showsDistance {
                         field("metres", value: Binding(
                             get: { set.distanceMeters ?? 0 },
                             set: { set.distanceMeters = $0 == 0 ? nil : $0; save() }
-                        ), width: 86, decimal: true)
+                        ), width: wideField, decimal: true)
                     }
-                    Spacer()
+                    Spacer(minLength: 0)
                 }
             }
         }
         .padding(.leading, 32)
     }
+
+    @ViewBuilder
+    private var loadFields: some View {
+        if focus.showsWeight {
+            field(unit.abbreviation, value: weightBinding, width: mediumField, decimal: true)
+        }
+        if focus.showsWeight && focus.showsReps {
+            separator("x")
+        }
+        if focus.showsReps {
+            field("reps", value: Binding(
+                get: { Double(set.reps) },
+                set: { set.reps = Int($0); save() }
+            ), width: narrowField, decimal: false)
+        }
+        if focus.showsRPE {
+            separator("@")
+            field("RPE", value: Binding(
+                get: { set.rpe ?? 0 },
+                set: { set.rpe = $0 == 0 ? nil : $0; save() }
+            ), width: narrowField, decimal: true)
+        }
+    }
+
+    private var warmupToggle: some View {
+        Button(set.isWarmup ? "Working" : "Warmup") {
+            set.isWarmup.toggle()
+            save()
+        }
+        .scaledFont(size: 13, weight: .semibold)
+        .foregroundStyle(Theme.textSecondary)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+        .accessibilityLabel(set.isWarmup ? "Mark as working set" : "Mark as warmup set")
+    }
+
+    /// "x" between weight and reps, "@" before RPE. Decorative: each field
+    /// carries its own label.
+    private func separator(_ glyph: String) -> some View {
+        Text(glyph)
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.bottom, 8)
+            .accessibilityHidden(true)
+    }
+
+    /// A small visible caption over a field. The field's value is never
+    /// empty (it shows 0), so a placeholder alone was never seen at all.
+    private func labeled<Content: View>(_ label: String,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .center, spacing: 3) {
+            Text(label)
+                .scaledFont(size: 12)
+                .foregroundStyle(Theme.textSecondary)
+                .accessibilityHidden(true)
+            content()
+        }
+    }
+
+    /// Field outlines at 3:1 or better against the card (WCAG 1.4.11);
+    /// `Theme.hairline` was about 1.4:1, so the boxes all but disappeared.
+    private static let fieldStroke = Theme.textSecondary.opacity(0.75)
 
     /// Text rather than a number, because "1:30" is how a ninety-second
     /// interval is written. An unparseable string clears the field instead of
@@ -637,16 +800,30 @@ private struct SetRow: View {
 
     private func field(_ prompt: String, value: Binding<Double>,
                        width: CGFloat, decimal: Bool) -> some View {
-        TextField(prompt, value: value, format: .number)
-            .keyboardType(decimal ? .decimalPad : .numberPad)
-            .multilineTextAlignment(.center)
-            .font(.system(size: 15))
-            .foregroundStyle(Theme.textPrimary)
-            .frame(width: width)
-            .padding(.vertical, 7)
-            .background {
-                RoundedRectangle(cornerRadius: 7).stroke(Theme.hairline, lineWidth: 1)
-            }
+        labeled(prompt) {
+            TextField(prompt, value: value, format: .number)
+                .keyboardType(decimal ? .decimalPad : .numberPad)
+                .multilineTextAlignment(.center)
+                .scaledFont(size: 15)
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: width)
+                .padding(.vertical, 7)
+                .background {
+                    RoundedRectangle(cornerRadius: 7).stroke(Self.fieldStroke, lineWidth: 1)
+                }
+                .accessibilityLabel(Self.spokenName(prompt))
+        }
+    }
+
+    private static func spokenName(_ prompt: String) -> String {
+        switch prompt {
+        case "lb": "Weight, pounds"
+        case "kg": "Weight, kilograms"
+        case "reps": "Reps"
+        case "RPE": "RPE"
+        case "metres": "Distance, metres"
+        default: prompt
+        }
     }
 
     private func save() {
@@ -679,7 +856,7 @@ private struct OutdoorDaySection: View {
     }
 
     var body: some View {
-        LiftCard(title: "Outdoor") {
+        AppCard(title: "Outdoor") {
             HStack(spacing: 16) {
                 Button { startingActivityType = .run } label: {
                     Label("Run", systemImage: "figure.run")
@@ -697,8 +874,8 @@ private struct OutdoorDaySection: View {
                 }
                 .foregroundStyle(Theme.textSecondary)
             }
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(Theme.accent)
+            .scaledFont(size: 15, weight: .semibold)
+            .foregroundStyle(AppColor.accentText)
 
             ForEach(activities) { activity in
                 NavigationLink {
@@ -712,7 +889,7 @@ private struct OutdoorDaySection: View {
                         Text(String(format: "%.2f %@", unit.fromMeters(activity.distanceMeters), unit.abbreviation))
                             .foregroundStyle(Theme.textSecondary)
                     }
-                    .font(.system(size: 15))
+                    .scaledFont(size: 15)
                 }
             }
         }
@@ -746,7 +923,7 @@ private struct OutdoorHighlights: View {
         let bests = OutdoorRecords.bests(in: activities)
 
         if let last {
-            LiftCard(title: "Last route") {
+            AppCard(title: "Last route") {
                 NavigationLink {
                     OutdoorActivityReviewView(activity: last)
                         .followsWindowAppearance()
@@ -763,7 +940,7 @@ private struct OutdoorHighlights: View {
                                 .foregroundStyle(Theme.textSecondary)
                             Spacer()
                         }
-                        .font(.system(size: 15, weight: .semibold))
+                        .scaledFont(size: 15, weight: .semibold)
 
                         HStack(spacing: 0) {
                             stat("Distance", OutdoorRecords.distanceText(last.distanceMeters, unit: unit))
@@ -779,19 +956,19 @@ private struct OutdoorHighlights: View {
         }
 
         if bests.isEmpty {
-            LiftCard(title: "Personal bests") {
+            AppCard(title: "Personal bests") {
                 Text("Your last route and your best distance, time and pace show up here after your first run, walk or hike.")
-                    .font(.system(size: 15))
+                    .scaledFont(size: 15)
                     .foregroundStyle(Theme.textSecondary)
             }
         } else {
-            LiftCard(title: "Personal bests") {
+            AppCard(title: "Personal bests") {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(bests, id: \.type) { best in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(best.count == 1 ? "\(best.type.displayName) · 1 activity"
                                                  : "\(best.type.displayName) · \(best.count) activities")
-                                .font(.system(size: 15, weight: .semibold))
+                                .scaledFont(size: 15, weight: .semibold)
                                 .foregroundStyle(Theme.textPrimary)
                             HStack(spacing: 0) {
                                 stat("Farthest", best.longestDistanceMeters.map { OutdoorRecords.distanceText($0, unit: unit) } ?? "—")
@@ -808,15 +985,15 @@ private struct OutdoorHighlights: View {
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundStyle(Theme.textSecondary)
             Text(value)
-                .font(.system(size: 16, weight: .semibold).monospacedDigit())
+                .scaledFont(size: 16, weight: .semibold).monospacedDigit()
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)    .accessibilityElement(children: .combine)
     }
 }
 

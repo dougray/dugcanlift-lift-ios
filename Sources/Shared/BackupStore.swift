@@ -29,7 +29,11 @@ enum BackupStore {
 
     // MARK: - Building
 
-    static func build(context: ModelContext, keepingForeignExt foreign: [String: Any] = [:]) throws -> Data {
+    /// - Parameter defaults: where the preferences and the side-cars this file
+    ///   carries are read from (the goal, the step goal, the weight unit, and
+    ///   `PlanMeals`). `.standard` is the app; a test passes its own suite.
+    static func build(context: ModelContext, keepingForeignExt foreign: [String: Any] = [:],
+                      defaults: UserDefaults = .standard) throws -> Data {
         // An `outdoor` section an earlier build held as foreign data becomes
         // this app's own before anything is read, so this save writes it from
         // the store rather than dropping it. See `absorbPreservedOutdoor`.
@@ -186,7 +190,6 @@ enum BackupStore {
             "itemised": CoachShare.Settings.itemisedFood
         ]
 
-        let defaults = UserDefaults.standard
         if defaults.bool(forKey: "goalIsSet") {
             data["goal"] = [
                 "calories": Int(defaults.double(forKey: "goalCalories").rounded()),
@@ -259,6 +262,12 @@ enum BackupStore {
         data["recipes"] = recipeRecords
 
         var iosPlan: [String: Any] = [:]
+        // Which meals a coach booked travels too, or a restore would empty the
+        // meals half of the week card while leaving the meals themselves behind.
+        // `fromCoach` is LIFT web's own spelling and LIFT web's own shape -- the
+        // coach's name, or `true` for a plan that named nobody -- so one file
+        // moves between the three builds. See `PlanMeals`.
+        let planMeals = PlanMeals.load(from: defaults)
         data["plan"] = try context.fetch(FetchDescriptor<PlannedMeal>()).map { meal -> [String: Any] in
             let key = meal.id.uuidString
             var record: [String: Any] = [
@@ -270,6 +279,9 @@ enum BackupStore {
                 "servings": meal.servings,
                 "loggedFoodEntryId": meal.loggedFoodEntryID.map { $0.uuidString as Any } ?? NSNull()
             ]
+            if planMeals.isFromCoach(meal) {
+                record["fromCoach"] = planMeals.coachName(of: meal) ?? true
+            }
             meal.amountGrams.map { record["amountGrams"] = $0 }
             meal.snapshotNutrition.map { record["snapshotNutrition"] = nutritionRecord($0) }
             meal.snapshotNutritionPerGram.map { record["snapshotNutritionPerGram"] = nutritionRecord($0) }
@@ -345,7 +357,10 @@ enum BackupStore {
 
     // MARK: - Restoring
 
-    static func restore(context: ModelContext, from data: Data) -> RestoreResult {
+    /// - Parameter defaults: as `build`'s -- where the preferences and the
+    ///   side-cars this file carries are written.
+    static func restore(context: ModelContext, from data: Data,
+                        defaults: UserDefaults = .standard) -> RestoreResult {
         guard
             let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             root["app"] as? String == app,
@@ -528,6 +543,8 @@ enum BackupStore {
         }
 
         let existingMeals = Set((try? context.fetch(FetchDescriptor<PlannedMeal>()))?.map(\.id) ?? [])
+        var restoredPlanMeals = PlanMeals.load(from: defaults)
+        var restoredPlanMealsChanged = false
         for raw in payload["plan"] as? [[String: Any]] ?? [] {
             guard let id = recordID(raw["id"]), !existingMeals.contains(id) else { continue }
             // A meal whose recipe is in neither the file nor this phone would be
@@ -553,8 +570,21 @@ enum BackupStore {
             meal.snapshotNutritionPerGram = facts(raw["snapshotNutritionPerGram"] as? [String: Any])
             meal.loggedFoodEntryID = recordID(raw["loggedFoodEntryId"])
             context.insert(meal)
+            // Read leniently, as every optional field in this file is: a string
+            // is the coach's name, anything else truthy is a coach who named
+            // nobody, and an absent or false `fromCoach` is a meal the lifter
+            // placed themselves -- which is what every file written before this
+            // says about every meal in it.
+            if let mark = raw["fromCoach"], !(mark is NSNull), (mark as? Bool) != false {
+                let named = (mark as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                restoredPlanMeals.book(meal.id, coach: (named?.isEmpty ?? true) ? nil : named)
+                restoredPlanMealsChanged = true
+            }
             added += 1
         }
+        // Written once the meals are in, and only when the file said something:
+        // a file with no coach meals in it must not touch what this phone knows.
+        if restoredPlanMealsChanged { restoredPlanMeals.save(to: defaults) }
 
         added += restoreOutdoor(payload["outdoor"], iosExtras: ios["outdoor"] as? [String: Any] ?? [:], context: context)
         // Before the foreign sections are gathered below, so a copy an earlier
@@ -577,7 +607,6 @@ enum BackupStore {
 
         // Single values only fill a gap, same rule as the records: restoring an
         // old file must not overwrite something already set up on this phone.
-        let defaults = UserDefaults.standard
         if let coach = payload["coach"] as? [String: Any] {
             if CoachShare.Settings.email.isEmpty,
                let email = coach["email"] as? String { CoachShare.Settings.email = email }

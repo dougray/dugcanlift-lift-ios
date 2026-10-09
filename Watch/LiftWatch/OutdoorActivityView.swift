@@ -11,30 +11,21 @@ struct OutdoorActivityView: View {
     @EnvironmentObject private var recorder: OutdoorActivityRecorder
     @EnvironmentObject private var library: OutdoorActivityLibrary
     @EnvironmentObject private var session: WorkoutSessionModel
+    @State private var confirmingDiscard = false
 
-    /// There is no separate distance-unit preference anywhere in this app
-    /// yet, so this derives from the same `WeightUnit` the user already has
-    /// set: pounds implies an imperial (miles) user, kilograms implies
-    /// metric (kilometers).
-    private var distanceUnit: DistanceUnit {
-        session.unit == .kilograms ? .kilometers : .miles
-    }
+    /// The phone's own mi/km setting, which now travels in its application
+    /// context (`DisplayUnitsContext`); miles until a phone has said.
+    private var distanceUnit: DistanceUnit { session.distanceUnit }
 
     var body: some View {
         List {
             if recorder.authorizationStatus == .denied || recorder.authorizationStatus == .restricted {
                 Section {
                     Text("Location access is off — grant it in Settings to record a route.")
-                        .foregroundStyle(DclTheme.accent)
+                        .foregroundStyle(DclTheme.accentText)
                 }
             }
 
-            if library.lastExportError != nil {
-                Section {
-                    Text("Couldn't save to Health — will keep local data but won't retry automatically.")
-                        .foregroundStyle(DclTheme.accent)
-                }
-            }
 
             Section {
                 LabeledValue("Time", Self.formatElapsed(recorder.elapsedSeconds))
@@ -44,17 +35,29 @@ struct OutdoorActivityView: View {
 
             if recorder.elevationGainMeters > 0 {
                 Section {
-                    LabeledValue("Elevation Gain", Self.formatElevation(recorder.elevationGainMeters))
+                    LabeledValue("Elevation Gain", formatElevation(recorder.elevationGainMeters))
                 }
             }
 
             Section {
                 Button("Finish") { finish() }
                     .buttonStyle(.borderedProminent)
-                Button("Discard", role: .destructive) { recorder.discard() }
+            }
+
+            // Its own section, away from Finish, and it asks: a run can't be
+            // run again.
+            Section {
+                Button("Discard", role: .destructive) { confirmingDiscard = true }
             }
         }
         .navigationTitle(recorder.activity?.activityType.displayName ?? "Activity")
+        .confirmationDialog("Discard this \(recorder.activity?.activityType.displayName.lowercased() ?? "activity")?",
+                            isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { recorder.discard() }
+            Button("Keep Recording", role: .cancel) {}
+        } message: {
+            Text("The route won't be saved.")
+        }
     }
 
     /// Finishing hands the recorder's own returned snapshot straight to
@@ -119,8 +122,11 @@ struct OutdoorActivityView: View {
         return String(format: "%d:%02d /%@", total / 60, total % 60, distanceUnit.abbreviation)
     }
 
-    private static func formatElevation(_ meters: Double) -> String {
-        String(format: "%.0f m", meters)
+    /// Feet beside miles, metres beside kilometres.
+    private func formatElevation(_ meters: Double) -> String {
+        distanceUnit == .miles
+            ? String(format: "%.0f ft", meters * 3.28084)
+            : String(format: "%.0f m", meters)
     }
 }
 
@@ -142,6 +148,11 @@ final class OutdoorActivityLibrary: ObservableObject {
     /// `OutdoorActivityView` (see I3 in the final-review fix wave) so a
     /// failed, non-retried export is never silently swallowed.
     @Published private(set) var lastExportError: Error?
+
+    /// The activity whose export failed, so the start screen can offer to
+    /// try again. The recording screen is gone by the time an export
+    /// settles, so a failure shown only there was never seen.
+    @Published private(set) var failedExport: OutdoorActivity?
 
     private let exporter = HealthKitExporter(healthStore: HKHealthStore())
 
@@ -207,6 +218,7 @@ final class OutdoorActivityLibrary: ObservableObject {
                 updatedAt: updated.updatedAt
             )
             lastExportError = nil
+            if failedExport?.id == activity.id { failedExport = nil }
         } catch {
             // Non-fatal: the activity is already recorded locally in
             // `store`, and `healthKitUUID` stays `nil`. There is currently
@@ -214,6 +226,22 @@ final class OutdoorActivityLibrary: ObservableObject {
             // `lastExportError` (surfaced to the user in
             // `OutdoorActivityView`) so it isn't silently swallowed.
             lastExportError = error
+            failedExport = activity
         }
+    }
+
+    /// Tries the failed export again, from the start screen. The exporter
+    /// refuses an activity that already carries a Health UUID, so a retry
+    /// can never write the same workout twice.
+    func retryFailedExport() async {
+        guard let activity = failedExport else { return }
+        await exportAndMark(activity)
+    }
+
+    /// "Not now": the activity stays recorded on the watch and in the phone's
+    /// outbox; only the prompt goes.
+    func dismissFailedExport() {
+        failedExport = nil
+        lastExportError = nil
     }
 }

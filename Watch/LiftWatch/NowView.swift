@@ -12,6 +12,9 @@ import LiftSync
 struct NowView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
 
+    /// 34pt at the default size, growing with the wearer's text size.
+    @ScaledMetric(relativeTo: .title) private var prescriptionSize: CGFloat = 34
+
     var body: some View {
         ScrollView {
             if let guided = session.guided, let exercise = guided.currentExercise {
@@ -48,7 +51,7 @@ struct NowView: View {
             // prescribed rows are six sets to perform.
             Text(guided.currentPrescription?
                     .headline(unit: session.unit, side: guided.currentSide) ?? "—")
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .font(.system(size: prescriptionSize, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
@@ -115,7 +118,7 @@ struct HeartRateLabel: View {
         if let bpm = heartRate.currentBpm {
             Label("\(Int(bpm.rounded())) bpm", systemImage: "heart.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(DclTheme.accent)
+                .foregroundStyle(DclTheme.accentText)
                 .monospacedDigit()
         }
     }

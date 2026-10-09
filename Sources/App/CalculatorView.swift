@@ -62,15 +62,24 @@ struct MacroResult {
 struct CalculatorView: View {
     @Environment(\.dismiss) private var dismiss
 
+    /// Settings' units, so a metric lifter isn't converting by hand. Weight
+    /// follows the weight setting; height follows distance (kilometres means
+    /// centimetres, miles means feet and inches).
+    @AppStorage("weightUnit") private var weightUnitRaw = WeightUnit.pounds.rawValue
+    @AppStorage("distanceUnit") private var distanceUnitRaw = DistanceUnit.miles.rawValue
+    private var weightUnit: WeightUnit { WeightUnit(rawValue: weightUnitRaw) ?? .pounds }
+    private var metricHeight: Bool { DistanceUnit(rawValue: distanceUnitRaw) == .kilometers }
+
     @State private var sex: BiologicalSex = .male
     @State private var age = ""
-    @State private var weightLb = ""
+    @State private var weightText = ""
     @State private var heightFt = ""
     @State private var heightIn = ""
+    @State private var heightCmText = ""
     @State private var activity: ActivityLevel = .sedentary
     @State private var goal: CalorieGoal = .maintain
 
-    private enum Field: Hashable { case age, weight, heightFt, heightIn }
+    private enum Field: Hashable { case age, weight, heightFt, heightIn, heightCm }
     @FocusState private var focusedField: Field?
 
     var body: some View {
@@ -80,17 +89,21 @@ struct CalculatorView: View {
                     sexToggle
 
                     field("Age", text: $age, keyboard: .numberPad, focus: .age)
-                    field("Weight (lb)", text: $weightLb, keyboard: .decimalPad, focus: .weight)
-                    field("Height (ft)", text: $heightFt, keyboard: .numberPad, focus: .heightFt)
-                    field("Height (in)", text: $heightIn, keyboard: .numberPad, focus: .heightIn)
+                    field("Weight (\(weightUnit.abbreviation))", text: $weightText, keyboard: .decimalPad, focus: .weight)
+                    if metricHeight {
+                        field("Height (cm)", text: $heightCmText, keyboard: .decimalPad, focus: .heightCm)
+                    } else {
+                        field("Height (ft)", text: $heightFt, keyboard: .numberPad, focus: .heightFt)
+                        field("Height (in)", text: $heightIn, keyboard: .numberPad, focus: .heightIn)
+                    }
 
                     Text("Activity")
-                        .font(Theme.sectionLabel)
+                        .liftFont(.sectionLabel)
                         .foregroundStyle(Theme.textPrimary)
                     chipRow(ActivityLevel.allCases, selection: activity) { activity = $0 }
 
                     Text("Goal")
-                        .font(Theme.sectionLabel)
+                        .liftFont(.sectionLabel)
                         .foregroundStyle(Theme.textPrimary)
                     chipRow(CalorieGoal.allCases, selection: goal) { goal = $0 }
 
@@ -98,7 +111,7 @@ struct CalculatorView: View {
                         resultCard(result)
                     } else {
                         Text("Enter age, weight, and height to see your numbers.")
-                            .font(Theme.body)
+                            .liftFont(.body)
                             .foregroundStyle(Theme.textSecondary)
                             .padding(.top, 4)
                     }
@@ -107,7 +120,8 @@ struct CalculatorView: View {
                 .padding(.bottom, 40)
                 .readableContentWidth()
             }
-            .liftScreen()
+            .appScreen()
+            .keyboardDoneButton()
             .navigationTitle("Macro Calculator")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -126,6 +140,7 @@ struct CalculatorView: View {
                 LiftChip(label: option.rawValue, isSelected: sex == option) {
                     sex = option
                 }
+                .accessibilitySelected(sex == option)
             }
         }
         .padding(.top, 8)
@@ -133,19 +148,30 @@ struct CalculatorView: View {
 
     // MARK: Fields
 
+    /// The label stays visible above the field once something is typed in
+    /// it; a placeholder alone vanished, leaving "70" with no unit.
     private func field(_ prompt: String, text: Binding<String>, keyboard: UIKeyboardType,
                         focus: Field) -> some View {
-        TextField(prompt, text: text)
-            .keyboardType(keyboard)
-            .focused($focusedField, equals: focus)
-            .font(Theme.body)
-            .foregroundStyle(Theme.textPrimary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
-            .background {
-                RoundedRectangle(cornerRadius: Theme.chipRadius)
-                    .stroke(focusedField == focus ? Theme.accent : Theme.hairline, lineWidth: 1)
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            Text(prompt)
+                .liftFont(.detail)
+                .foregroundStyle(Theme.textSecondary)
+                .accessibilityHidden(true)
+            TextField(prompt, text: text)
+                .keyboardType(keyboard)
+                .focused($focusedField, equals: focus)
+                .liftFont(.body)
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background {
+                    // textSecondary, not hairline: a field's edge needs 3:1.
+                    RoundedRectangle(cornerRadius: Theme.chipRadius)
+                        .stroke(focusedField == focus ? Theme.accent : Theme.textSecondary.opacity(0.75),
+                                lineWidth: focusedField == focus ? 2 : 1)
+                }
+                .accessibilityLabel(prompt)
+        }
     }
 
     // MARK: Chip rows
@@ -159,6 +185,7 @@ struct CalculatorView: View {
                     LiftChip(label: item.rawValue, isSelected: item == selection) {
                         onSelect(item)
                     }
+                    .accessibilitySelected(item == selection)
                 }
             }
         }
@@ -168,13 +195,14 @@ struct CalculatorView: View {
 
     private var result: MacroResult? {
         guard let age = Double(age), age > 0,
-              let weightLb = Double(weightLb), weightLb > 0,
-              let heightFt = Double(heightFt), heightFt > 0
+              let enteredWeight = Double(weightText), enteredWeight > 0,
+              let heightCm = enteredHeightCm, heightCm > 0
         else { return nil }
-        let heightIn = Double(heightIn) ?? 0
 
-        let weightKg = weightLb * 0.453592
-        let heightCm = ((heightFt * 12) + heightIn) * 2.54
+        let weightKg = weightUnit.toKilograms(enteredWeight)
+        // The protein rule below is per pound of bodyweight, whatever unit
+        // the weight was typed in.
+        let weightLb = WeightUnit.pounds.fromKilograms(weightKg)
 
         let bmr: Double = switch sex {
         case .male: (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5
@@ -193,17 +221,25 @@ struct CalculatorView: View {
                             carbsG: carbsG, fiberG: fiberG)
     }
 
+    private var enteredHeightCm: Double? {
+        if metricHeight {
+            return Double(heightCmText)
+        }
+        guard let feet = Double(heightFt), feet > 0 else { return nil }
+        return ((feet * 12) + (Double(heightIn) ?? 0)) * 2.54
+    }
+
     private func resultCard(_ result: MacroResult) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             LiftCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("\(Int(result.calories)) kcal / day")
-                        .font(Theme.figure)
+                        .liftFont(.figure)
                         .foregroundStyle(Theme.textPrimary)
-                    StatRow(label: "Protein", value: "\(Int(result.proteinG)) g")
-                    StatRow(label: "Fat", value: "\(Int(result.fatG)) g")
-                    StatRow(label: "Carbs", value: "\(Int(result.carbsG)) g")
-                    StatRow(label: "Fiber", value: "\(Int(result.fiberG)) g")
+                    AppStatRow(label: "Protein", value: "\(Int(result.proteinG)) g")
+                    AppStatRow(label: "Fat", value: "\(Int(result.fatG)) g")
+                    AppStatRow(label: "Carbs", value: "\(Int(result.carbsG)) g")
+                    AppStatRow(label: "Fiber", value: "\(Int(result.fiberG)) g")
                 }
             }
 
@@ -211,8 +247,8 @@ struct CalculatorView: View {
                 save(result)
             } label: {
                 Text("Save as my goal")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .scaledFont(size: 16, weight: .bold)
+                    .foregroundStyle(Theme.onAccent)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Theme.accent, in: RoundedRectangle(cornerRadius: Theme.chipRadius))

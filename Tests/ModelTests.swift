@@ -402,6 +402,88 @@ final class SchemaMigrationTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<SetEntry>()).first(where: { $0.sideRaw != nil })?.side, .left)
     }
 
+    /// V8 -> V9: one new optional column, `coachName`, on `ScheduledSession`.
+    ///
+    /// Written through `LiftPreCoachNameShapes`, which is what V3-V8 declared
+    /// — so this is the shape a V8 build wrote, without the column.
+    func testV8StoreOpensAsV9WithBookingsIntact() throws {
+        let scheduledFor = Date(timeIntervalSince1970: 1_758_412_800)
+        let routineID = UUID()
+
+        do {
+            let v8 = try ModelContainer(
+                for: Schema(versionedSchema: LiftSchemaV8.self),
+                configurations: [ModelConfiguration(url: storeURL)]
+            )
+            let context = ModelContext(v8)
+            context.insert(LiftPreCoachNameShapes.ScheduledSession(
+                routineID: routineID, routineName: "Lower A", scheduledFor: scheduledFor))
+            try context.save()
+        }
+
+        let container = try ModelContainer(
+            for: LiftStore.schema,
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(container)
+
+        let booking = try XCTUnwrap(context.fetch(FetchDescriptor<ScheduledSession>()).first)
+        XCTAssertEqual(booking.routineID, routineID)
+        XCTAssertEqual(booking.routineName, "Lower A")
+        XCTAssertEqual(booking.dayKey, DayKey.make(from: scheduledFor))
+        XCTAssertNil(booking.coachName,
+                     "a plan accepted before the name was kept says nothing about who sent it")
+
+        // And the new column takes a value in the migrated store.
+        booking.coachName = "Dana Whitfield"
+        try context.save()
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ScheduledSession>()).first?.coachName,
+                       "Dana Whitfield")
+    }
+
+    /// The test above writes its V8 store with this file's own frozen shape, so
+    /// it cannot tell whether that shape is right. This one can.
+    ///
+    /// `Fixtures/v8-simulator.store` was captured from a simulator running the
+    /// V8 binary — four plans accepted through the real UI (four bookings
+    /// across three weeks, four routines and 34 prescribed sets), a workout
+    /// logged against one of them, two foods and a recorded run. If
+    /// `LiftPreCoachNameShapes` drifts from what that build declared, staged
+    /// migration cannot identify the store and this throws 134504 — exactly as
+    /// an existing install would fail to launch.
+    func testRealV8StoreOpensAsV9WithEverythingIntact() throws {
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "v8-simulator", withExtension: "store"))
+        try FileManager.default.copyItem(at: fixture, to: storeURL)
+
+        let container = try ModelContainer(
+            for: LiftStore.schema,
+            migrationPlan: LiftMigrationPlan.self,
+            configurations: [ModelConfiguration(url: storeURL)]
+        )
+        let context = ModelContext(container)
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<WorkoutDay>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ExerciseEntry>()), 4)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SetEntry>()), 8)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<FoodEntry>()), 2)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Routine>()), 4)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<RoutineExercise>()), 13)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<RoutinePrescribedSet>()), 34)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ImportedPlan>()), 2)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<OutdoorActivity>()), 1)
+
+        let bookings = try context.fetch(FetchDescriptor<ScheduledSession>())
+        XCTAssertEqual(bookings.count, 4)
+        XCTAssertEqual(bookings.map(\.dayKey).sorted(),
+                       ["2026-09-21", "2026-09-23", "2026-09-28", "2026-10-01"])
+        XCTAssertEqual(Set(bookings.map(\.routineName)), ["Lower A", "Lower B", "Upper B"])
+        for booking in bookings {
+            XCTAssertNil(booking.coachName,
+                         "nothing is backfilled: the plan those rows came from is not kept")
+        }
+    }
+
     func testRealV6StoreOpensAsV7() throws {
         let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "v6-simulator", withExtension: "store"))
         try FileManager.default.copyItem(at: fixture, to: storeURL)

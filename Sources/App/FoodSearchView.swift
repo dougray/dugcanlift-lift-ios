@@ -85,11 +85,11 @@ struct FoodSearchView: View {
     private func row(_ record: FoodRecord) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(record.name)
-                .font(Theme.body)
+                .liftFont(.body)
                 .foregroundStyle(Theme.textPrimary)
             if let brand = record.brand, !brand.isEmpty {
                 Text(brand)
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
         }
@@ -130,27 +130,27 @@ struct FoodSearchView: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(record.name)
-                        .font(Theme.cardTitle)
-                        .foregroundStyle(Theme.accent)
+                        .liftFont(.cardTitle)
+                        .foregroundStyle(AppColor.accentText)
                     if let brand = record.brand, !brand.isEmpty {
                         Text(brand)
-                            .font(Theme.detail)
+                            .liftFont(.detail)
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Amount")
-                        .font(Theme.sectionLabel)
-                        .foregroundStyle(Theme.accent)
+                        .liftFont(.sectionLabel)
+                        .foregroundStyle(AppColor.accentText)
 
                     HStack {
                         TextField("0", text: $amountText)
                             .keyboardType(.decimalPad)
-                            .font(Theme.body)
+                            .liftFont(.body)
                             .foregroundStyle(Theme.textPrimary)
                         Text(servingUnit.abbreviation)
-                            .font(Theme.body)
+                            .liftFont(.body)
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .padding(Theme.cardPadding)
@@ -168,7 +168,8 @@ struct FoodSearchView: View {
             .padding(.vertical, 14)
             .readableContentWidth()
         }
-        .liftScreen()
+        .appScreen()
+        .keyboardDoneButton()
         .background(Theme.background)
         .navigationTitle("Log Food")
         .navigationBarTitleDisplayMode(.inline)
@@ -189,7 +190,7 @@ struct FoodSearchView: View {
     private func previewCard(_ nutrition: NutritionFacts) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("\(Int(nutrition.calories)) kcal")
-                .font(Theme.figure)
+                .liftFont(.figure)
                 .foregroundStyle(Theme.textPrimary)
             HStack(spacing: 10) {
                 Text("P \(Int(nutrition.proteinG))")
@@ -199,14 +200,14 @@ struct FoodSearchView: View {
                     Text("Fib \(Int(fiber))")
                 }
             }
-            .font(Theme.detail)
+            .liftFont(.detail)
             .foregroundStyle(Theme.textSecondary)
             // Saturated fat, sugar and sodium when the database has them —
             // `FoodRecord.nutrition(grams:)` fills all three, and the entry
             // logged below snapshots them with the rest.
             if let details = NutrientDetailsDisplay.entryLine(nutrition) {
                 Text(details)
-                    .font(Theme.detail)
+                    .liftFont(.detail)
                     .foregroundStyle(Theme.textSecondary)
             }
         }

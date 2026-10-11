@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import WidgetKit
+import VisionKit
 import LiftCore
 import LiftReference
 
@@ -24,6 +25,16 @@ import LiftReference
 /// The amount step serves a `LoggableFood`: a library record, or a food the
 /// person remembered against a barcode. A remembered food says so under its
 /// name and offers Edit and Forget; nothing else about the step differs.
+///
+/// **A barcode** arrives two ways and is looked up one way
+/// (`BarcodeLookup`): "Scan a barcode", above "Add food by hand" on a phone
+/// that can scan, or the digits typed into the search field
+/// (`BarcodeQuery`). A remembered code opens the amount step; an unknown one
+/// says so and offers to enter it once, which opens the by-hand form with the
+/// code attached; a code that fails its check digit didn't scan cleanly. One
+/// presentation at a time: the scanner's cover is gone before its alert, the
+/// amount step or the form appears, because SwiftUI drops a presentation
+/// started while another is still animating away.
 struct FoodSearchView: View {
     let mealType: MealType
     var onLogged: () -> Void = {}
@@ -44,22 +55,72 @@ struct FoodSearchView: View {
     /// The one sheet food search presents at a time.
     @State private var sheet: Sheet?
     @State private var confirmingForget = false
-    /// Set when the hand-added food was logged, so this sheet closes after the
-    /// editor's own sheet has gone.
-    @State private var loggedByHand = false
+    /// Set when a food added by hand (with or without a barcode) was logged,
+    /// so this sheet closes after the editor's own sheet has gone.
+    @State private var loggedNewFood = false
+    /// Set when the remembered-food editor saved or forgot, so the amount step
+    /// catches up once the editor has gone rather than while it is still on
+    /// screen — a forgotten food would otherwise empty the sheet mid-dismissal.
+    @State private var editedRememberedCode: String?
+
+    /// The scanner's full-screen cover.
+    @State private var scanning = false
+    /// What a scan found, held until the cover has gone.
+    @State private var scanOutcome: BarcodeLookup.Outcome?
+    @State private var scanMessage: ScanMessage?
+    /// What the typed query is, when it is a barcode; nil for a name search.
+    @State private var typedCode: TypedCode?
 
     private enum Sheet: Identifiable {
         /// A food typed in by hand; the name is the query, or blank.
         case byHand(name: String)
         /// The editor for a remembered food, by its code.
         case remembered(code: String)
+        /// A food typed in by hand against a barcode nothing knows yet
+        /// (normalised); saving logs it and remembers it.
+        case byBarcode(code: String)
 
         var id: String {
             switch self {
             case .byHand(let name): return "hand:" + name
             case .remembered(let code): return "remembered:" + code
+            case .byBarcode(let code): return "barcode:" + code
             }
         }
+    }
+
+    /// The scanner's three answers that need saying.
+    private enum ScanMessage: Identifiable {
+        case didNotScanCleanly
+        case unknown(Barcode)
+        case cameraUnavailable
+
+        var id: String {
+            switch self {
+            case .didNotScanCleanly: return "unclean"
+            case .unknown(let code): return "unknown:" + code.normalised
+            case .cameraUnavailable: return "camera"
+            }
+        }
+
+        var text: String {
+            switch self {
+            case .didNotScanCleanly: return Barcode.didNotScanCleanlyMessage
+            case .unknown: return BarcodeLookup.notFoundMessage
+            case .cameraUnavailable: return ScanAvailability.unavailableMessage
+            }
+        }
+    }
+
+    /// A typed query that reads as a barcode: remembered, or not known yet.
+    private enum TypedCode: Equatable {
+        case remembered(LoggableFood)
+        case unknown(Barcode)
+    }
+
+    private var scanAvailability: ScanAvailability {
+        ScanAvailability.current(isSupported: DataScannerViewController.isSupported,
+                                 isAvailable: DataScannerViewController.isAvailable)
     }
 
     private var servingUnit: ServingUnit { ServingUnit(rawValue: servingUnitRaw) ?? .grams }
@@ -72,25 +133,108 @@ struct FoodSearchView: View {
                 searchList
             }
         }
-        .sheet(item: $sheet, onDismiss: {
-            guard loggedByHand else { return }
-            onLogged()
-            dismiss()
-        }) { sheet in
+        .sheet(item: $sheet, onDismiss: sheetDismissed) { sheet in
             switch sheet {
             case .byHand(let name):
                 FoodEntryEditorView(newNamed: name, mealType: mealType,
-                                    preferredUnit: servingUnit) { loggedByHand = true }
+                                    preferredUnit: servingUnit) { loggedNewFood = true }
                     .liftAppearance()
             case .remembered(let code):
                 if let food = RememberedFoods.find(code: code, in: context) {
                     FoodEntryEditorView(remembering: food, preferredUnit: servingUnit) {
-                        refreshSelected(code: code)
+                        editedRememberedCode = code
                     }
                     .liftAppearance()
                 }
+            case .byBarcode(let code):
+                FoodEntryEditorView(newNamed: "", mealType: mealType, preferredUnit: servingUnit,
+                                    barcode: code) { loggedNewFood = true }
+                    .liftAppearance()
             }
         }
+        .fullScreenCover(isPresented: $scanning, onDismiss: scannerDismissed) {
+            scannerScreen
+        }
+        .alert(scanMessage?.text ?? "", isPresented: Binding(
+            get: { scanMessage != nil },
+            set: { if !$0 { scanMessage = nil } }
+        ), presenting: scanMessage) { message in
+            switch message {
+            case .didNotScanCleanly:
+                Button("Try again") { scanning = true }
+                Button("Cancel", role: .cancel) {}
+            case .unknown(let code):
+                Button("Enter it") { enter(code) }
+                Button("Cancel", role: .cancel) {}
+            case .cameraUnavailable:
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+        }
+    }
+
+    private func sheetDismissed() {
+        if let code = editedRememberedCode {
+            editedRememberedCode = nil
+            refreshSelected(code: code)
+        }
+        guard loggedNewFood else { return }
+        onLogged()
+        dismiss()
+    }
+
+    // MARK: Scan
+
+    private var scannerScreen: some View {
+        NavigationStack {
+            BarcodeScannerView { raw, symbology in
+                scanOutcome = BarcodeLookup.look(up: raw, symbology: symbology, in: context)
+                scanning = false
+            }
+            .ignoresSafeArea()
+            .navigationTitle("Scan a barcode")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { scanning = false }
+                }
+            }
+        }
+        .liftAppearance()
+    }
+
+    private func startScan() {
+        switch scanAvailability {
+        case .ready: scanning = true
+        case .unavailable: scanMessage = .cameraUnavailable
+        case .unsupported: break
+        }
+    }
+
+    /// Runs once the cover has gone, so whatever comes next is the only
+    /// presentation in flight.
+    private func scannerDismissed() {
+        guard let outcome = scanOutcome else { return }
+        scanOutcome = nil
+        switch outcome {
+        case .remembered(let food):
+            amountText = ""
+            selected = food
+        case .unknown(let code):
+            scanMessage = .unknown(code)
+        case .didNotScanCleanly:
+            scanMessage = .didNotScanCleanly
+        }
+    }
+
+    /// The by-hand form, with the code attached and no name yet.
+    private func enter(_ code: Barcode) {
+        loggedNewFood = false
+        sheet = .byBarcode(code: code.normalised)
     }
 
     // MARK: Search
@@ -128,11 +272,17 @@ struct FoodSearchView: View {
     }
 
     /// Ways to log a food other than picking a search result, one row each,
-    /// pinned under the search field whatever the results are doing. A new
-    /// way in (scanning a barcode) is another row here, above "Add food by
-    /// hand".
+    /// pinned under the search field whatever the results are doing. "Scan a
+    /// barcode" shows only on a phone that can scan; when the camera is not
+    /// allowed it stays, and says how to allow it.
     private var actionRows: some View {
         VStack(spacing: 0) {
+            if scanAvailability != .unsupported {
+                actionRow("Scan a barcode", systemImage: "barcode.viewfinder",
+                          hint: "Opens the camera to read a food's barcode.") {
+                    startScan()
+                }
+            }
             actionRow("Add food by hand", systemImage: "square.and.pencil",
                       hint: "For a food that is not in the database. Macros per 100 g.") {
                 addByHand()
@@ -172,6 +322,8 @@ struct FoodSearchView: View {
                     LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
                 }
             }
+        } else if let typedCode {
+            typedCodeResults(typedCode)
         } else if !searching && results.isEmpty && trimmedQuery.count >= 2 {
             ContentUnavailableView {
                 Label("No Results for \u{201C}\(trimmedQuery)\u{201D}", systemImage: "magnifyingglass")
@@ -194,10 +346,48 @@ struct FoodSearchView: View {
         }
     }
 
+    /// A typed barcode: the remembered food as the only row, or that nothing
+    /// knows it yet. Never the "Add … by hand" offer, which would name the
+    /// food after its digits.
+    @ViewBuilder
+    private func typedCodeResults(_ typed: TypedCode) -> some View {
+        switch typed {
+        case .remembered(let food):
+            List {
+                Button {
+                    amountText = ""
+                    selected = food
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(food.name)
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.textPrimary)
+                        Text(LoggableFood.rememberedLine)
+                            .font(Theme.detail)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .readableListMargins()
+        case .unknown(let code):
+            ContentUnavailableView {
+                Label(trimmedQuery, systemImage: "barcode")
+            } description: {
+                Text(BarcodeLookup.notFoundMessage)
+            } actions: {
+                LiftButton("Enter it") { enter(code) }
+            }
+        }
+    }
+
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private func addByHand(named name: String = "") {
-        loggedByHand = false
+        loggedNewFood = false
         sheet = .byHand(name: name)
     }
 
@@ -218,6 +408,15 @@ struct FoodSearchView: View {
 
     private func search() async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A barcode is looked up, not searched for by name; a number that
+        // fails its check digit falls through to an ordinary search.
+        lookUpTypedCode()
+        if typedCode != nil {
+            results = []
+            loadFailed = false
+            searching = false
+            return
+        }
         guard trimmed.count >= 2 else {
             results = []
             loadFailed = false
@@ -336,6 +535,7 @@ struct FoodSearchView: View {
     private func refreshSelected(code: String) {
         if let food = RememberedFoods.find(code: code, in: context) {
             selected = LoggableFood(remembered: food)
+            lookUpTypedCode()
         } else {
             backToSearch()
         }
@@ -344,6 +544,20 @@ struct FoodSearchView: View {
     private func backToSearch() {
         selected = nil
         amountText = ""
+        // An Edit or a Forget may have changed what the typed code finds.
+        lookUpTypedCode()
+    }
+
+    private func lookUpTypedCode() {
+        guard let digits = BarcodeQuery.barcodeDigits(in: query) else {
+            typedCode = nil
+            return
+        }
+        switch BarcodeLookup.look(up: digits, symbology: nil, in: context) {
+        case .remembered(let food): typedCode = .remembered(food)
+        case .unknown(let code): typedCode = .unknown(code)
+        case .didNotScanCleanly: typedCode = nil
+        }
     }
 
     private func previewCard(_ nutrition: NutritionFacts) -> some View {

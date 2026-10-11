@@ -48,6 +48,10 @@ enum BarcodeLookup {
         case didNotScanCleanly
     }
 
+    /// A code that read cleanly and that nothing knows: said the same way
+    /// after a scan and under a typed code.
+    nonisolated static let notFoundMessage = "LIFT doesn't know this barcode yet. Enter it once and LIFT will remember it."
+
     /// Remembered foods first; the barcode bundle (project 2) becomes a second
     /// source behind this same call, after them.
     static func look(up raw: String, symbology: BarcodeSymbology?, in context: ModelContext) -> Outcome {

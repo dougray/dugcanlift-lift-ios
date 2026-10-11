@@ -212,7 +212,7 @@ struct SharePlanView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Add") { model.addRecipe(item) }
                             .fontWeight(.semibold)
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                     }
                 }
             }

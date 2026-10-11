@@ -298,8 +298,9 @@ targets:
         CFBundleDisplayName: LIFT
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        # Standard HTTPS only, like the app: the watch makes no network
-        # request of its own at all.
+        # Like the app, the watch makes no network request at all
+        # (NoNetworkTests scans Watch/ too), so it uses no encryption beyond
+        # what watchOS itself provides.
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes:
           - location

@@ -832,6 +832,19 @@ enum LiftSchemaV9: VersionedSchema {
     }
 }
 
+// MARK: - V10 — a food remembered against a barcode
+
+/// V10 adds `RememberedFood` (the barcode scanner's remembered foods). No
+/// existing model changes shape, so nothing is frozen and the stage is
+/// lightweight.
+enum LiftSchemaV10: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(10, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        LiftSchemaV9.models + [RememberedFood.self]
+    }
+}
+
 // MARK: - Plan
 
 enum LiftMigrationPlan: SchemaMigrationPlan {
@@ -839,11 +852,11 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self,
          LiftSchemaV5.self, LiftSchemaV6.self, LiftSchemaV7.self,
-         LiftSchemaV8.self, LiftSchemaV9.self]
+         LiftSchemaV8.self, LiftSchemaV9.self, LiftSchemaV10.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -935,5 +948,12 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v8ToV9 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV8.self,
         toVersion: LiftSchemaV9.self
+    )
+
+    /// One new model type (RememberedFood) and no change to any existing one —
+    /// lightweight per this file's own rule above.
+    static let v9ToV10 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV9.self,
+        toVersion: LiftSchemaV10.self
     )
 }

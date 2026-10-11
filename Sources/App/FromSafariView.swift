@@ -37,13 +37,13 @@ struct FromSafariView: View {
                 }
             }
         }
-        .liftAppearance()
     }
 
     private func step(_ number: Int, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(number).")
                 .font(Theme.body.weight(.semibold))
+                .monospacedDigit()
                 .foregroundStyle(Theme.accentText)
             Text(text)
                 .font(Theme.body)

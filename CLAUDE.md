@@ -145,8 +145,9 @@ widget or its watch app requests anything from any server — the in-house rule
 compiles `LiftSync` from there too), and on `fetch(`, `XMLHttpRequest`,
 `WebSocket`, `sendBeacon` or `import(` in any JavaScript file there
 (`RecipePage.js`). WatchConnectivity is the phone and watch talking to each
-other, not a request to a server; a target added outside those folders must
-be added to `NoNetworkTests.shippedRoots`. A recipe on the web arrives **from Safari**:
+other, and HealthKit is the OS's own local store; neither is a request to a
+server. A target added outside those folders must be added to
+`NoNetworkTests.shippedRoots`. A recipe on the web arrives **from Safari**:
 the share extension's `RecipePage.js` hands over the page's JSON-LD, the
 extension queues the raw block (`PendingRecipeImports`), and `RecipeImportView`
 re-reads it with `LiftCore.RecipeJSONLD` for review. LIFT never fetches the
@@ -166,9 +167,9 @@ new to present. A plan or refusal
 arriving mid-review is held, and every held one is shown in order, before the
 next recipe. The same recipe queued twice is one review. The sheet closes only
 by Cancel or Save -- no swipe. `RecipeReviewQueueTests` pins the queue's rules,
-and the queue is Coach iOS's, kept in step with it. Do not simplify back to binding the
-sheet to the first waiting item: that is the version that loses a recipe
-whenever anything else is on screen.
+and the queue is Coach iOS's, kept in step with it. Do not simplify back to
+binding the sheet to the first waiting item: that is the version that loses a
+recipe whenever anything else is on screen.
 
 **The loss window is accepted, and it is this one.** The App Group queue is
 emptied when it is drained, not when a review is saved, so Cancel, or the app

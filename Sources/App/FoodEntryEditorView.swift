@@ -26,6 +26,7 @@ struct FoodEntryEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     @State private var edit: FoodEntryEdit
 
@@ -56,64 +57,71 @@ struct FoodEntryEditorView: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    nameSection
-                    amountSection
-                    mealSection
-                    macrosSection
-                    moreNutrientsSection
-                    totalsSection
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        nameSection
+                        amountSection
+                        mealSection
+                        macrosSection
+                        moreNutrientsSection
+                        totalsSection
 
-                    if let problem = edit.problem {
-                        Text(problem)
-                            .font(Theme.detail)
-                            .foregroundStyle(Theme.accentText)
+                        if let problem = edit.problem {
+                            Text(problem)
+                                .font(Theme.detail)
+                                .foregroundStyle(Theme.accentText)
+                        }
+
+                        if entry?.healthKitUUID != nil {
+                            Text("This entry was saved to Apple Health by an earlier install. Changes here stay in LIFT — edit it in the Health app too if it should match.")
+                                .font(Theme.detail)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
                     }
-
-                    if entry?.healthKitUUID != nil {
-                        Text("This entry was saved to Apple Health by an earlier install. Changes here stay in LIFT — edit it in the Health app too if it should match.")
-                            .font(Theme.detail)
-                            .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .readableContentWidth()
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .liftScreen()
+                .background(Theme.background)
+                .navigationTitle(edit.isNew ? "Add food" : "Edit food")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") { save() }
+                            .disabled(edit.result == nil)
+                    }
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { focus = nil }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .readableContentWidth()
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .liftScreen()
-            .background(Theme.background)
-            .navigationTitle(edit.isNew ? "Add food" : "Edit food")
-            // A new food starts typing where the gap is: the name when the
-            // search gave none, calories when it did. After the sheet's
-            // presentation settles — focus set during it is dropped.
-            // Calories sits low enough for the keyboard to cover it, so once
-            // the keyboard is up the field is scrolled into view.
-            .task {
-                guard edit.isNew else { return }
-                try? await Task.sleep(for: .milliseconds(450))
-                guard edit.name.trimmingCharacters(in: .whitespaces).isEmpty else {
-                    focus = .macro(.calories)
-                    try? await Task.sleep(for: .milliseconds(600))
+                // A new food starts typing where the gap is: the name when the
+                // search gave none, calories when it did. Never under
+                // VoiceOver, which places its own focus, and never over a
+                // field the person has already chosen.
+                .task {
+                    guard edit.isNew, !voiceOverEnabled else { return }
+                    // Decided before the wait, so typing into the name during
+                    // it cannot send focus to calories mid-word.
+                    let target: Field = edit.name.trimmingCharacters(in: .whitespaces).isEmpty
+                        ? .name : .macro(.calories)
+                    // A sheet still presenting drops focus, so wait it out.
+                    // Cancelled (sheet closed) or a field already chosen:
+                    // do nothing.
+                    guard (try? await Task.sleep(for: .milliseconds(450))) != nil,
+                          focus == nil else { return }
+                    focus = target
+                    // Calories sits low enough for the keyboard to cover it,
+                    // so once the keyboard is up it is scrolled into view.
+                    guard target != .name,
+                          (try? await Task.sleep(for: .milliseconds(600))) != nil,
+                          focus == target else { return }
                     withAnimation { proxy.scrollTo(FoodEntryEdit.Macro.calories, anchor: .center) }
-                    return
-                }
-                focus = .name
-            }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(edit.result == nil)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { focus = nil }
                 }
             }
         }

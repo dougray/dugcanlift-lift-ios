@@ -48,11 +48,23 @@ enum LiftTab: String, CaseIterable, Identifiable, Hashable {
 /// width keeps the top bar.
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.appIsPresenting) private var appIsPresenting
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: LiftTab = .home
     @State private var visited: Set<LiftTab> = [.home]
     @State private var showingSettings = false
     @State private var undo = UndoToastCenter.shared
+
+    /// The gear button and Command-comma. A hardware shortcut can reach this
+    /// view while something `LiftApp` presents covers it -- a recipe review,
+    /// a plan preview or a refusal alert -- and SwiftUI drops a second
+    /// presentation beside the first, which would leave `showingSettings` true
+    /// with nothing on screen, so Settings would not open again. Command-comma
+    /// waits until it closes, as Coach's Shift-Command-V does.
+    private func openSettings() {
+        guard !appIsPresenting else { return }
+        showingSettings = true
+    }
 
     var body: some View {
         // Measured, not asked of the device: an iPad window in Split View is
@@ -170,7 +182,7 @@ struct RootView: View {
             Spacer(minLength: 0)
 
             Button {
-                showingSettings = true
+                openSettings()
             } label: {
                 HStack(spacing: 12) {
                     Color.clear.frame(width: 3, height: 22)
@@ -232,7 +244,7 @@ struct RootView: View {
             // button existed nothing in the app presented SettingsView, so
             // both were unreachable however far you dug.
             Button {
-                showingSettings = true
+                openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .scaledFont(size: 15, weight: .semibold)
@@ -255,5 +267,21 @@ struct RootView: View {
         // Five labels share one row; past this size they would shrink to
         // illegibility. The Large Content Viewer (long-press) covers the rest.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+}
+
+// MARK: - Something LiftApp presents
+
+private struct AppIsPresentingKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True while `LiftApp` has a recipe review, a plan preview or a refusal
+    /// alert up, so nothing a keyboard shortcut raises tries to present
+    /// beside it.
+    var appIsPresenting: Bool {
+        get { self[AppIsPresentingKey.self] }
+        set { self[AppIsPresentingKey.self] = newValue }
     }
 }

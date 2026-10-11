@@ -1,0 +1,92 @@
+import Foundation
+
+/// A recipe Safari handed over, waiting for the lifter to review it.
+struct QueuedRecipe: Identifiable, Equatable {
+    let id = UUID()
+    let item: PendingRecipeImports.Item
+}
+
+/// When a recipe Safari handed over may open, as a value type with no view in
+/// it: the rule MacroFields follows, because a rule in a view's `@State`
+/// cannot be tested and this one decides whether a recipe is lost -- the file
+/// queue is emptied the moment it is drained.
+///
+/// SwiftUI shows one presentation at a time on a view and silently drops a
+/// second one, so a recipe must never be offered while LiftApp's plan sheet or
+/// refusal alert, or a sheet the app root cannot see, is up. Three things follow:
+///
+/// - `next(canPresent:)` offers nothing unless the caller says it is clear.
+/// - A sheet that was offered but never appeared (`markAppeared` never came)
+///   was dropped; `activated()` puts it back at the front for another try.
+/// - A report arriving while a recipe is under review would be dropped the
+///   same way, so it is held and shown when the review ends, before the next
+///   recipe.
+///
+/// `Report` is whatever the caller shows -- LIFT holds a plan intake outcome (a
+/// plan sheet or a refusal alert); it is only held.
+struct RecipeReviewQueue<Report> {
+
+    private(set) var waiting: [QueuedRecipe] = []
+    private(set) var reviewing: QueuedRecipe?
+    private(set) var reviewingAppeared = false
+    private(set) var heldReports: [Report] = []
+
+    /// Adds what the share extension queued, skipping a recipe already waiting
+    /// or under review: the same page shared twice is one review, not two.
+    mutating func enqueue(_ items: [PendingRecipeImports.Item]) {
+        for item in items where reviewing?.item != item && !waiting.contains(where: { $0.item == item }) {
+            waiting.append(QueuedRecipe(item: item))
+        }
+    }
+
+    /// Starts the next review, only when nothing is under review and the
+    /// caller has nothing else on screen.
+    mutating func next(canPresent: Bool) -> QueuedRecipe? {
+        guard canPresent, reviewing == nil, !waiting.isEmpty else { return nil }
+        let queued = waiting.removeFirst()
+        reviewing = queued
+        reviewingAppeared = false
+        return queued
+    }
+
+    /// The review sheet's content came on screen.
+    mutating func markAppeared() {
+        if reviewing != nil { reviewingAppeared = true }
+    }
+
+    /// The app became active. A review that never appeared was dropped by
+    /// SwiftUI and will never report its own dismissal: retry it first, as a
+    /// new `QueuedRecipe` so the sheet's item changes identity.
+    mutating func activated() {
+        guard let stuck = reviewing, !reviewingAppeared else { return }
+        waiting.insert(QueuedRecipe(item: stuck.item), at: 0)
+        reviewing = nil
+    }
+
+    /// The review sheet closed. Idempotent: the first call ends the review and
+    /// returns true, and any later one finds nothing under review and returns
+    /// false. The sheet's binding setter and its `onDismiss` may both call it;
+    /// the caller advances only from `onDismiss`, so a close is one advance.
+    @discardableResult
+    mutating func dismissed() -> Bool {
+        guard reviewing != nil else { return false }
+        reviewing = nil
+        reviewingAppeared = false
+        return true
+    }
+
+    /// A plan outcome is ready: returned to be shown now, or held (nil) while a
+    /// recipe is under review or earlier outcomes are still waiting to be
+    /// shown. Every outcome held during a review is kept, in arrival order: a
+    /// refusal must never be replaced by a later plan.
+    mutating func report(_ report: Report) -> Report? {
+        guard reviewing != nil || !heldReports.isEmpty else { return report }
+        heldReports.append(report)
+        return nil
+    }
+
+    /// The oldest held report, to be shown next -- before the next recipe.
+    mutating func takeHeldReport() -> Report? {
+        heldReports.isEmpty ? nil : heldReports.removeFirst()
+    }
+}

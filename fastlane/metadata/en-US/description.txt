@@ -17,7 +17,7 @@ FOOD
 
 COOK
 - Write your own recipes, with macros per serving and the dish's total weight
-- Import a recipe from a web page link, paste a recipe's text, or add one from the built-in catalogue
+- Import a recipe shared from Safari, paste a recipe's text, or add one from the built-in catalogue
 - Plan meals across the week and log a planned meal in one tap
 - A shopping list built from the week's plan
 

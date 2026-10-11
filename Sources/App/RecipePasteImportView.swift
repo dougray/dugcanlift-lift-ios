@@ -103,7 +103,7 @@ struct RecipePasteImportView: View {
 
                     Button("Read it") { read() }
                         .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(canRead ? Theme.accent : Theme.textSecondary)
+                        .foregroundStyle(canRead ? Theme.accentText : Theme.textSecondary)
                         .disabled(!canRead)
                 }
 
@@ -169,7 +169,7 @@ struct RecipePasteImportView: View {
 
         Button("Start over") { reset() }
             .font(Theme.detail)
-            .foregroundStyle(Theme.accent)
+            .foregroundStyle(Theme.accentText)
             .buttonStyle(.plain)
     }
 
@@ -268,7 +268,7 @@ struct RecipePasteImportView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

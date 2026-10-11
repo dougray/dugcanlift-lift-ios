@@ -56,13 +56,13 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 Text("LIFT")
-                    .font(.system(size: 30, weight: .heavy))
-                    .foregroundStyle(Theme.accent)
+                    .scaledFont(size: 30, weight: .heavy)
+                    .foregroundStyle(Theme.accentText)
                     .padding(.top, 8)
 
                 Text("Today")
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
 
                 // Two columns of cards once each can be a phone's width.
                 AdaptiveColumns(columns: AdaptiveLayout.columns(
@@ -93,7 +93,7 @@ struct HomeView: View {
                         LiftCard {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("No goal set yet.")
-                                    .font(.system(size: 17, weight: .bold))
+                                    .scaledFont(size: 17, weight: .bold)
                                     .foregroundStyle(Theme.textPrimary)
                                 Text("Work out your daily calories and macros to start tracking against them.")
                                     .font(Theme.body)
@@ -130,8 +130,8 @@ struct HomeView: View {
                                     Button("Open Settings") { HealthSettingsLink.open() }
                                 }
                             }
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundStyle(Theme.accentText)
                         }
                     }
 
@@ -139,7 +139,7 @@ struct HomeView: View {
                         if let day, day.totalSetCount > 0 {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(day.name.isEmpty ? day.focus.displayName : day.name)
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .scaledFont(size: 18, weight: .semibold)
                                     .foregroundStyle(Theme.textPrimary)
                                 Text("\(day.exercises.count) exercises · \(day.summary(unit: unit))")
                                     .font(Theme.detail)

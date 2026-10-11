@@ -86,6 +86,7 @@ struct ExercisePickerView: View {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.caption2)
                         .foregroundStyle(.tint)
+                        .accessibilityLabel("Recently logged")
                 }
             }
             HStack(spacing: 6) {

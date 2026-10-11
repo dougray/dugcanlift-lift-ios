@@ -51,7 +51,7 @@ struct FoodEntryEditorView: View {
                     if let problem = edit.problem {
                         Text(problem)
                             .font(Theme.detail)
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                     }
 
                     if entry.healthKitUUID != nil {
@@ -102,7 +102,7 @@ struct FoodEntryEditorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.name)
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 if let brand = entry.brand, !brand.isEmpty {
                     Text(brand)
                         .font(Theme.detail)
@@ -189,7 +189,7 @@ struct FoodEntryEditorView: View {
                 HStack {
                     Text("More nutrients")
                         .font(Theme.sectionLabel)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                     Spacer()
                     if !showingMoreNutrients, let summary = detailsSummary {
                         Text(summary)
@@ -198,7 +198,7 @@ struct FoodEntryEditorView: View {
                             .lineLimit(1)
                     }
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundStyle(Theme.textSecondary)
                         .rotationEffect(.degrees(showingMoreNutrients ? 180 : 0))
                 }
@@ -302,7 +302,7 @@ struct FoodEntryEditorView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
             if let hint {
                 Text(hint)
                     .font(Theme.detail)

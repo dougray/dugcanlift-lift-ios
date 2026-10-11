@@ -2,11 +2,13 @@ import Foundation
 import CryptoKit
 import SwiftData
 import LiftCore
+import LiftSync
 
 // Everything the phone needs to decide *which* plan to push and under what
-// revision. The wire types themselves live in `Sources/Shared/WatchPlan.swift`
-// beside `SyncEnvelope`, which references them; nothing here is needed by the
-// widget target, so nothing here is compiled into it.
+// revision. The wire types themselves (`WorkoutPlan`, `PlanExercise`,
+// `PrescribedSet`, `LastPerformed`) are `LiftSync`'s, in
+// Watch/LiftWatchKit: the same definitions the watch decodes with. Nothing
+// here is needed by the widget target, so nothing here is compiled into it.
 
 // MARK: - Building today's plan
 

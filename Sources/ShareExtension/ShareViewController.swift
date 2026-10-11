@@ -205,7 +205,7 @@ struct SharePlanView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Add") { model.add(fragment) }
                             .fontWeight(.semibold)
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                     }
                 }
                 if case .recipe(_, _, let item) = model.state {
@@ -217,7 +217,7 @@ struct SharePlanView: View {
                 }
             }
         }
-        .tint(Theme.accent)
+        .tint(Theme.accentText)
         .liftAppearance()
     }
 

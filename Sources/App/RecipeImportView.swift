@@ -92,7 +92,7 @@ struct RecipeImportView: View {
                     .foregroundStyle(Theme.textSecondary)
                 Button("Close") { dismiss() }
                     .font(Theme.body.weight(.semibold))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                     .buttonStyle(.plain)
             }
         }
@@ -164,7 +164,7 @@ struct RecipeImportView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(index + 1).")
                                 .font(Theme.detail)
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(Theme.accentText)
                             Text(step)
                                 .font(Theme.body)
                                 .foregroundStyle(Theme.textPrimary)
@@ -203,14 +203,14 @@ struct RecipeImportView: View {
                     showingSource.toggle()
                 }
                 .font(Theme.detail)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
                 .buttonStyle(.plain)
 
                 if showingSource {
                     // The whole point of keeping the transcript: a misread
                     // quantity is visible against its source before it is saved.
                     Text(imported.sourceTranscript)
-                        .font(.system(size: 11, design: .monospaced))
+                        .scaledFont(size: 11, design: .monospaced)
                         .foregroundStyle(Theme.textSecondary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -278,7 +278,7 @@ struct RecipeImportView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

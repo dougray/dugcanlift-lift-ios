@@ -86,6 +86,7 @@ struct RoutinesView: View {
             }
             .sheet(isPresented: $isCreatingRoutine) {
                 NewRoutineView()
+                    .liftAppearance()
             }
             .overlay {
                 // Only when there is genuinely nothing to look at. With
@@ -150,7 +151,7 @@ private struct RoutineRow: View {
                 }
                 .font(.caption.weight(.semibold))
                 .buttonStyle(.borderless)
-                .tint(Theme.accent)
+                .tint(Theme.accentText)
             }
         }
         .alert("Delete \u{201C}\(routine.name)\u{201D}?", isPresented: $confirmingDelete) {
@@ -176,19 +177,25 @@ private struct NewRoutineView: View {
     @State private var targetWeight = ""
     @State private var targetReps = ""
 
+    /// The kg/lb setting, so the target is typed in the unit the lifter uses.
+    /// Stored in kilograms either way.
+    @AppStorage("weightUnit") private var unitRaw = WeightUnit.pounds.rawValue
+    private var unit: WeightUnit { WeightUnit(rawValue: unitRaw) ?? .pounds }
+
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Routine name", text: $name)
                 Section("First exercise") {
                     TextField("Exercise name", text: $exerciseName)
-                    TextField("Target weight (lb)", text: $targetWeight)
+                    TextField("Target weight (\(unit.abbreviation))", text: $targetWeight)
                         .keyboardType(.decimalPad)
                     TextField("Target reps", text: $targetReps)
                         .keyboardType(.numberPad)
                 }
             }
             .readableListMargins()
+            .keyboardDoneButton()
             .navigationTitle("New Routine")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -206,12 +213,12 @@ private struct NewRoutineView: View {
         let routine = Routine(name: name)
         if !exerciseName.isEmpty {
             let exercise = RoutineExercise(name: exerciseName, orderIndex: 0)
-            let weightLb = Double(targetWeight)
+            let weight = Double(targetWeight)
             let reps = Int(targetReps)
-            if weightLb != nil || reps != nil {
+            if weight != nil || reps != nil {
                 exercise.prescribedSets = [RoutinePrescribedSet(
                     orderIndex: 0,
-                    targetWeightKg: weightLb.map { WeightUnit.pounds.toKilograms($0) },
+                    targetWeightKg: weight.map { unit.toKilograms($0) },
                     targetReps: reps
                 )]
             }

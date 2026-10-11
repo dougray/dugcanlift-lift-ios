@@ -66,8 +66,8 @@ private struct OutdoorActivityRow: View {
             // `NavigationLink` resolves a destructive button's colour
             // differently. Rust is the app's word for destructive everywhere
             // else, including the routine row this screen is modelled on.
-            .tint(Theme.accent)
-            .foregroundStyle(Theme.accent)
+            .tint(Theme.accentText)
+            .foregroundStyle(Theme.accentText)
         }
         .deletesOutdoorActivity(activity, summary: summary, isPresented: $confirmingDelete)
     }

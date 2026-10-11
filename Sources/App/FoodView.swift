@@ -59,7 +59,7 @@ struct FoodView: View {
                 } label: {
                     Label("Log food", systemImage: "plus")
                         .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.cardPadding)
                         .liftCardBackground()
@@ -75,12 +75,12 @@ struct FoodView: View {
                     } label: {
                         HStack(alignment: .center, spacing: 12) {
                             Image(systemName: "car")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(Theme.accent)
+                                .scaledFont(size: 17, weight: .semibold)
+                                .foregroundStyle(Theme.accentText)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Road Food")
                                     .font(Theme.body.weight(.semibold))
-                                    .foregroundStyle(Theme.accent)
+                                    .foregroundStyle(Theme.accentText)
                                 Text("Fast food and gas stations, ranked against what's left today")
                                     .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
@@ -138,10 +138,10 @@ struct FoodView: View {
             HStack {
                 Text(meal.displayName)
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 Spacer()
                 Text("\(Int(mealEntries.totalNutrition.calories)) kcal")
-                    .font(.system(size: 15, weight: .bold))
+                    .scaledFont(size: 15, weight: .bold)
                     .foregroundStyle(Theme.textSecondary)
             }
 
@@ -175,15 +175,12 @@ struct FoodView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityHint("Edit the amount, meal or macros")
-                        Button {
-                            context.delete(entry)
-                            try? context.save()
-                        } label: {
-                            Text("x")
-                                .font(.system(size: 17, weight: .bold))
-                                .foregroundStyle(Theme.accent)
+                        DeleteGlyphButton(accessibilityName: entry.displayName) {
+                            delete(entry)
                         }
-                        .buttonStyle(.plain)
+                        // Pull the 44pt target back to the row's right edge
+                        // so the glyph sits where the old "x" did.
+                        .padding(.trailing, -12)
                     }
                 }
             }
@@ -196,7 +193,7 @@ struct FoodView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Recent")
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
 
                 Text("Tap to log it again, into the meal that fits the time of day.")
                     .font(Theme.detail)
@@ -217,12 +214,14 @@ struct FoodView: View {
                             }
                             Spacer()
                             Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(Theme.accent)
+                                .accessibilityHidden(true)
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundStyle(Theme.accentText)
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityHint("Logs it again now")
                 }
             }
             .padding(.top, 8)
@@ -251,6 +250,27 @@ struct FoodView: View {
         )
         context.insert(copy)
         try? context.save()
+        refreshDependents()
+    }
+
+    /// One tap, no confirmation -- fast is the point in a gym -- but undoable
+    /// for a few seconds. Undo re-inserts a copy with the same `id`, time,
+    /// meal and `healthKitUUID`, so it is the same entry rather than a new log.
+    private func delete(_ entry: FoodEntry) {
+        let snapshot = FoodEntrySnapshot(entry)
+        context.delete(entry)
+        try? context.save()
+        refreshDependents()
+        UndoToastCenter.shared.show("Deleted \(snapshot.displayName)") { [context] in
+            context.insert(snapshot.restore())
+            try? context.save()
+            refreshDependents()
+        }
+    }
+
+    /// The widget and the watch read their own copies; SwiftData does not
+    /// notify either. Every food write goes through here, deletes included.
+    private func refreshDependents() {
         WidgetCenter.shared.reloadAllTimelines()
         WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
     }
@@ -265,6 +285,52 @@ struct FoodView: View {
                      "C \(Int(n.carbsG))"]
         if let fiber = n.fiberG { parts.append("Fib \(Int(fiber))") }
         return parts.joined(separator: " - ")
+    }
+}
+
+/// Every stored field of a deleted `FoodEntry`, so Undo can put it back.
+private struct FoodEntrySnapshot {
+    let id: UUID
+    let foodRefID: String
+    let name: String
+    let brand: String?
+    let quantity: Double
+    let servingUnit: String
+    let servingGrams: Double?
+    let amountGrams: Double?
+    let nutrition: NutritionFacts
+    let mealType: MealType
+    let loggedAt: Date
+    let dayKey: String
+    let healthKitUUID: UUID?
+    let displayName: String
+
+    init(_ entry: FoodEntry) {
+        id = entry.id
+        foodRefID = entry.foodRefID
+        name = entry.name
+        brand = entry.brand
+        quantity = entry.quantity
+        servingUnit = entry.servingUnit
+        servingGrams = entry.servingGrams
+        amountGrams = entry.amountGrams
+        nutrition = entry.nutrition
+        mealType = entry.mealType
+        loggedAt = entry.loggedAt
+        dayKey = entry.dayKey
+        healthKitUUID = entry.healthKitUUID
+        displayName = entry.displayName
+    }
+
+    func restore() -> FoodEntry {
+        let entry = FoodEntry(foodRefID: foodRefID, name: name, brand: brand,
+                              quantity: quantity, servingUnit: servingUnit,
+                              servingGrams: servingGrams, amountGrams: amountGrams,
+                              nutrition: nutrition, mealType: mealType, loggedAt: loggedAt)
+        entry.id = id
+        entry.dayKey = dayKey
+        entry.healthKitUUID = healthKitUUID
+        return entry
     }
 }
 
@@ -321,7 +387,7 @@ struct NutrientTotalsSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Also tracked today")
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 NutrientTotalRows(totals: totals)
             }
         }

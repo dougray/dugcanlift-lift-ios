@@ -1,12 +1,13 @@
 import XCTest
-@testable import Lift
+import LiftSync
 
-/// `dugcanlift-lift-watch/shared/contracts/workout-sync.schema.json` is the
-/// wire contract, and `PLAN_PUSHED` / `PLAN_REQUEST` / `SESSION_FINISHED`'s
-/// heart rate are the newest part of it. These tests pin the JSON exactly as
-/// `SyncEnvelopeTests` pins the rest, so the phone and the watch cannot drift
-/// apart silently — the watch's `WorkoutPlanTests` asserts the same
-/// spellings from the other end.
+/// `Watch/contracts/workout-sync.schema.json` is the wire contract, and
+/// `PLAN_PUSHED` / `PLAN_REQUEST` / `SESSION_FINISHED`'s heart rate are the
+/// newest part of it. These tests pin the JSON exactly as `SyncEnvelopeTests`
+/// pins the rest. They were written against the phone's hand-mirrored copy
+/// of these types, in lift-ios's own test target, and moved here with the
+/// one definition both apps now compile; the watch's `WorkoutPlanTests`
+/// decodes the same shape and pins what the watch renders from it.
 final class WatchPlanWireTests: XCTestCase {
 
     private func json(_ envelope: SyncEnvelope) throws -> [String: Any] {

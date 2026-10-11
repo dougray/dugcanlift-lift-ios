@@ -135,14 +135,18 @@ string key, not date-range predicates. The two must stay consistent.
 set it after. Background sync retries, and duplicated Health entries are very
 visible to users.
 
-**LIFT makes no network calls.** Nothing in the app, its share extension or
-its widget requests anything from any server — the in-house rule (LIFT
-superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
+**LIFT makes no network calls.** Nothing in the app, its share extension, its
+widget or its watch app requests anything from any server — the in-house rule
+(LIFT superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
 `NoNetworkTests`, which fails `make test` on `URLSession`, `URLRequest`,
 `NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
-`AsyncImage(` in any Swift file under `Sources/`, and on `fetch(`,
-`XMLHttpRequest`, `WebSocket`, `sendBeacon` or `import(` in any JavaScript file
-there (`RecipePage.js`). A recipe on the web arrives **from Safari**:
+`AsyncImage(` in any Swift file under `Sources/`, `Watch/LiftWatch` or
+`Watch/LiftWatchKit/Sources` (the watch is outside `Sources/`, and the phone
+compiles `LiftSync` from there too), and on `fetch(`, `XMLHttpRequest`,
+`WebSocket`, `sendBeacon` or `import(` in any JavaScript file there
+(`RecipePage.js`). WatchConnectivity is the phone and watch talking to each
+other, not a request to a server; a target added outside those folders must
+be added to `NoNetworkTests.shippedRoots`. A recipe on the web arrives **from Safari**:
 the share extension's `RecipePage.js` hands over the page's JSON-LD, the
 extension queues the raw block (`PendingRecipeImports`), and `RecipeImportView`
 re-reads it with `LiftCore.RecipeJSONLD` for review. LIFT never fetches the

@@ -259,8 +259,8 @@ struct RecipeImportView: View {
         if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
             Link(text, destination: url)
                 .font(Theme.detail)
-                .foregroundStyle(Theme.accent)
-                .tint(Theme.accent)
+                .foregroundStyle(Theme.accentText)
+                .tint(Theme.accentText)
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)

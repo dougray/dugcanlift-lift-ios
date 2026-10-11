@@ -9,6 +9,14 @@ import LiftCore
 /// an amount rescales the macros, which entries let the macros be typed, what
 /// blank means — are `FoodEntryEdit`'s, so they are tested without a view.
 ///
+/// **A barcode.** Opened with a `barcode`, "Add food" logs the entry with
+/// `foodRefID` `barcode:<code>` *and* remembers the food against that code, per
+/// 100 g as typed, so the next scan finds it. Opened with
+/// `init(remembering:...)`, it edits only what LIFT remembers — name and
+/// per-100 g values, no meal, no amount — and never touches a `FoodEntry`;
+/// "Forget this barcode" removes the remembered food, and anything already
+/// logged keeps its own name and numbers.
+///
 /// **Apple Health.** LIFT for iOS does not write food to Health: nothing in
 /// `HealthKitManager` saves a dietary sample, so an entry logged on this phone
 /// never has a `healthKitUUID`. One can still arrive with one, from a backup, and
@@ -20,8 +28,11 @@ import LiftCore
 struct FoodEntryEditorView: View {
     /// nil for a food being added by hand.
     let entry: FoodEntry?
-    /// After a new entry is saved, before this sheet goes away.
+    /// After a new entry is saved, or a remembered food saved or forgotten,
+    /// before this sheet goes away.
     private var onSaved: () -> Void = {}
+    /// The code of the remembered food being edited; nil in every other mode.
+    private var rememberedCode: String?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -38,6 +49,7 @@ struct FoodEntryEditorView: View {
     /// Collapsed on open: saturated fat, sugar and sodium are tracked, never
     /// targeted, and most edits are an amount or a meal.
     @State private var showingMoreNutrients = false
+    @State private var confirmingForget = false
 
     init(entry: FoodEntry, preferredUnit: ServingUnit) {
         self.entry = entry
@@ -46,12 +58,28 @@ struct FoodEntryEditorView: View {
 
     /// A food that is not in the database, added by hand: name (from the search
     /// query, when there was one), meal, amount, and macros per 100 g.
+    /// With a `barcode` (normalised), saving also remembers the food against it.
     init(newNamed name: String, mealType: MealType, preferredUnit: ServingUnit,
+         barcode: String? = nil, onSaved: @escaping () -> Void = {}) {
+        self.entry = nil
+        self.onSaved = onSaved
+        var edit = FoodEntryEdit(newNamed: name, mealType: mealType, preferredUnit: preferredUnit)
+        edit.barcode = barcode
+        _edit = State(initialValue: edit)
+    }
+
+    /// What LIFT remembers about a barcode: name and per-100 g values only.
+    init(remembering food: RememberedFood, preferredUnit: ServingUnit,
          onSaved: @escaping () -> Void = {}) {
         self.entry = nil
         self.onSaved = onSaved
-        _edit = State(initialValue: FoodEntryEdit(newNamed: name, mealType: mealType,
-                                                  preferredUnit: preferredUnit))
+        self.rememberedCode = food.code
+        _edit = State(initialValue: FoodEntryEdit(remembering: food, preferredUnit: preferredUnit))
+    }
+
+    private var title: String {
+        if edit.editsRememberedFoodOnly { return RememberedFoodWords.editTitle }
+        return edit.isNew ? "Add food" : "Edit food"
     }
 
     var body: some View {
@@ -60,8 +88,10 @@ struct FoodEntryEditorView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         nameSection
-                        amountSection
-                        mealSection
+                        if !edit.editsRememberedFoodOnly {
+                            amountSection
+                            mealSection
+                        }
                         macrosSection
                         moreNutrientsSection
                         totalsSection
@@ -77,6 +107,16 @@ struct FoodEntryEditorView: View {
                                 .font(Theme.detail)
                                 .foregroundStyle(Theme.textSecondary)
                         }
+
+                        if rememberedCode != nil {
+                            Button(RememberedFoodWords.forgetButton, role: .destructive) {
+                                confirmingForget = true
+                            }
+                            .font(Theme.body)
+                            .frame(minHeight: 44)
+                            .padding(.top, 4)
+                            .forgetBarcodeConfirmation(isPresented: $confirmingForget) { forget() }
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
@@ -85,7 +125,7 @@ struct FoodEntryEditorView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .liftScreen()
                 .background(Theme.background)
-                .navigationTitle(edit.isNew ? "Add food" : "Edit food")
+                .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -103,7 +143,9 @@ struct FoodEntryEditorView: View {
                 // A new food starts typing where the gap is: the name when the
                 // search gave none, calories when it did. Never under
                 // VoiceOver, which places its own focus, and never over a
-                // field the person has already chosen.
+                // field the person has already chosen. Not for a remembered
+                // food either: like editing a logged entry, there is no gap
+                // to fill, so nothing takes the keyboard uninvited.
                 .task {
                     guard edit.isNew, !voiceOverEnabled else { return }
                     // Decided before the wait, so typing into the name during
@@ -139,6 +181,14 @@ struct FoodEntryEditorView: View {
                     .font(Theme.body)
                     .padding(Theme.cardPadding / 2)
                     .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
+                if let code = barcodeShown {
+                    Text("Barcode \(code)")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                        .accessibilityLabel("Barcode")
+                        // Digit by digit, as it is printed, not as one number.
+                        .accessibilityValue(Text(code).speechSpellsOutCharacters())
+                }
             }
         } else if let entry {
             VStack(alignment: .leading, spacing: 4) {
@@ -152,6 +202,12 @@ struct FoodEntryEditorView: View {
                 }
             }
         }
+    }
+
+    /// Read-only: the code a new entry was scanned against, or the one whose
+    /// remembered food is being edited.
+    private var barcodeShown: String? {
+        rememberedCode ?? (edit.isNew ? edit.barcode : nil)
     }
 
     /// The field says "Amount, grams" itself, so the title and the unit beside
@@ -195,8 +251,10 @@ struct FoodEntryEditorView: View {
 
     @ViewBuilder
     private var macrosSection: some View {
-        if edit.isNew {
-            card("Macros per 100\u{00A0}g", hint: "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fibre can be left blank — blank stays unknown, not zero.") {
+        if edit.isNew || edit.editsRememberedFoodOnly {
+            card("Macros per 100\u{00A0}g", hint: edit.isNew
+                 ? "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fibre can be left blank — blank stays unknown, not zero."
+                 : "As the label reads them per 100\u{00A0}g. Fibre can be left blank — blank stays unknown, not zero.") {
                 // Two to a row: "Protein (g/100g)" does not fit four across.
                 macroField(.calories)
                 fieldGrid([.protein, .carbs, .fat, .fiber])
@@ -260,7 +318,7 @@ struct FoodEntryEditorView: View {
             .accessibilityValue(showingMoreNutrients ? "Expanded" : "Collapsed")
 
             if showingMoreNutrients {
-                if edit.isNew {
+                if edit.isNew || edit.editsRememberedFoodOnly {
                     Text("Saturated fat, sugar and sodium, per 100\u{00A0}g like the macros. No goals — blank stays unknown, not zero.")
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
@@ -421,16 +479,47 @@ struct FoodEntryEditorView: View {
     // MARK: Saving
 
     private func save() {
+        if let code = rememberedCode {
+            saveRemembered(code: code)
+            return
+        }
         if let entry {
             guard edit.apply(to: entry) else { return }
         } else {
             guard let new = edit.makeEntry() else { return }
             context.insert(new)
+            if let code = edit.barcode {
+                // A savable new entry always has its per-100 g values; if it
+                // somehow did not, the entry is still logged and nothing is
+                // remembered rather than a zero being invented.
+                if let per100g = edit.per100g {
+                    RememberedFoods.remember(code: code, name: new.name, per100g: per100g, in: context)
+                } else {
+                    assertionFailure("a new entry with a result has per-100 g values")
+                }
+            }
         }
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
         WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
         if entry == nil { onSaved() }
+        dismiss()
+    }
+
+    /// Only the remembered food. No `FoodEntry` is written, so there is no
+    /// widget or watch snapshot to refresh: both read logged entries, which
+    /// keep their own numbers.
+    private func saveRemembered(code: String) {
+        guard let result = edit.result, let per100g = edit.per100g else { return }
+        RememberedFoods.remember(code: code, name: result.name, per100g: per100g, in: context)
+        onSaved()
+        dismiss()
+    }
+
+    private func forget() {
+        guard let code = rememberedCode else { return }
+        RememberedFoods.forget(code: code, in: context)
+        onSaved()
         dismiss()
     }
 }

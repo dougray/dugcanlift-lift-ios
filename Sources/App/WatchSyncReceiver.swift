@@ -249,9 +249,18 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
             return true
         }
         guard let payload = envelope.foodLog,
-              let resolved = await FoodRefResolver.nutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context),
               let mealType = MealType(rawValue: payload.meal.lowercased())
         else { return false }
+        // A remembered food whose barcode was forgotten no longer resolves,
+        // but the entries already logged against it still hold its name and
+        // nutrition, and the watch's list is built from exactly those. Only
+        // a barcode ref falls back: a deleted recipe or an unknown id stays
+        // a food this phone declines (and the watch keeps).
+        var resolved = await FoodRefResolver.nutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context)
+        if resolved == nil, payload.foodRefID.hasPrefix("barcode:") {
+            resolved = FoodRefResolver.storedNutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context)
+        }
+        guard let resolved else { return false }
 
         // Asked again after the await: a second copy of this food (the
         // message and its queued fallback, arriving together) can have been

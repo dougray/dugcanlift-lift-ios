@@ -430,6 +430,68 @@ final class WatchSyncReceiverTests: XCTestCase {
         XCTAssertNil(WatchSyncReceiver.makeSnapshot(from: [entry]).items.first?.nutritionPer100g)
     }
 
+    // MARK: - Remembered foods (barcode:)
+
+    /// The snapshot offers a `barcode:` food (its ref is not empty), so the
+    /// phone has to be able to log one the watch taps.
+    @MainActor
+    func testFoodLoggedResolvesARememberedBarcodeRef() async throws {
+        let context = makeContext()
+        RememberedFoods.remember(code: "36000291452", name: "Corn flakes",
+                                 per100g: NutritionFacts(calories: 357, proteinG: 7, carbsG: 84, fatG: 0.4),
+                                 in: context)
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+
+        let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "barcode:36000291452", amountGrams: 30))
+
+        XCTAssertTrue(handled)
+        let entry = try XCTUnwrap(try context.fetch(FetchDescriptor<FoodEntry>()).first)
+        XCTAssertEqual(entry.name, "Corn flakes")
+        XCTAssertEqual(entry.foodRefID, "barcode:36000291452")
+        XCTAssertEqual(entry.nutrition.calories, 107.1, accuracy: 0.001)
+    }
+
+    /// The code was forgotten, but the food is still in Recent and so on the
+    /// watch. The entry already logged carries the name and the nutrition, so
+    /// the tap logs from those rather than silently doing nothing.
+    @MainActor
+    func testFoodLoggedForAForgottenBarcodeFallsBackToTheEntrysOwnValues() async throws {
+        let context = makeContext()
+        context.insert(FoodEntry(
+            foodRefID: "barcode:36000291452", name: "Corn flakes", quantity: 40, servingUnit: "g",
+            amountGrams: 40,
+            nutrition: NutritionFacts(calories: 142.8, proteinG: 2.8, carbsG: 33.6, fatG: 0.16),
+            mealType: .breakfast, loggedAt: Date(timeIntervalSince1970: 1_700_000_000)))
+        try context.save()
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+
+        let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "barcode:36000291452", amountGrams: 30,
+                                                          loggedAt: Date(timeIntervalSince1970: 1_700_100_000)))
+
+        XCTAssertTrue(handled)
+        let entries = try context.fetch(FetchDescriptor<FoodEntry>(sortBy: [SortDescriptor(\.loggedAt)]))
+        XCTAssertEqual(entries.count, 2)
+        let logged = try XCTUnwrap(entries.last)
+        XCTAssertEqual(logged.name, "Corn flakes")
+        XCTAssertEqual(logged.amountGrams, 30)
+        XCTAssertEqual(logged.nutrition.calories, 107.1, accuracy: 0.001)
+    }
+
+    /// With no entry to borrow from, a forgotten code still logs nothing and
+    /// the watch keeps the food (not acknowledged).
+    @MainActor
+    func testFoodLoggedForABarcodeWithNothingStoredIsNotAcknowledged() async throws {
+        let context = makeContext()
+        var sent: [SyncEnvelope] = []
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { sent.append($0) })
+
+        let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "barcode:36000291452", amountGrams: 30))
+
+        XCTAssertFalse(handled)
+        XCTAssertTrue(sent.isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<FoodEntry>()).isEmpty)
+    }
+
     // MARK: - Message-dictionary decoding path (deliver's own responsibility)
 
     /// Exercises the same `SyncEnvelope(messageBody:)` decode that

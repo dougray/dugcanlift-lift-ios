@@ -159,7 +159,7 @@ struct RecipeListView: View {
         .sheet(isPresented: $creatingNew) {
             RecipeEditorView(recipe: nil).liftAppearance()
         }
-        .sheet(isPresented: $showingFromSafari) { FromSafariView() }
+        .sheet(isPresented: $showingFromSafari) { FromSafariView().liftAppearance() }
         .sheet(isPresented: $browsingCatalogue) {
             RecipeCatalogView().liftAppearance()
         }

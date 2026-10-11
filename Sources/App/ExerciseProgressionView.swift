@@ -43,7 +43,7 @@ struct ExerciseProgressionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 Text(displayName)
-                    .font(.system(size: 22, weight: .heavy))
+                    .scaledFont(size: 22, weight: .heavy)
                     .foregroundStyle(Theme.textPrimary)
 
                 Picker("Window", selection: $weeks) {
@@ -77,7 +77,7 @@ struct ExerciseProgressionView: View {
         LiftCard(title: "Estimated 1RM") {
             if series.isEmpty {
                 Text("No working sets of this lift in the last \(weeks) weeks. A set needs a weight and reps before it can be estimated, and warmups are left out.")
-                    .font(.system(size: 15))
+                    .scaledFont(size: 15)
                     .foregroundStyle(Theme.textSecondary)
             } else {
                 Chart {

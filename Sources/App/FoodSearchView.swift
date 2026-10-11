@@ -131,7 +131,7 @@ struct FoodSearchView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(record.name)
                         .font(Theme.cardTitle)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                     if let brand = record.brand, !brand.isEmpty {
                         Text(brand)
                             .font(Theme.detail)
@@ -142,7 +142,7 @@ struct FoodSearchView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Amount")
                         .font(Theme.sectionLabel)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
 
                     HStack {
                         TextField("0", text: $amountText)
@@ -169,6 +169,7 @@ struct FoodSearchView: View {
             .readableContentWidth()
         }
         .liftScreen()
+        .keyboardDoneButton()
         .background(Theme.background)
         .navigationTitle("Log Food")
         .navigationBarTitleDisplayMode(.inline)

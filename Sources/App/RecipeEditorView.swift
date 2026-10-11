@@ -17,6 +17,7 @@ struct RecipeEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
 
+    @State private var confirmingDelete = false
     @State private var name = ""
     @State private var servings: Double = 1
     @State private var ingredientText = ""
@@ -88,9 +89,20 @@ struct RecipeEditorView: View {
                     macrosSection
 
                     if isEditing {
-                        Button("Delete recipe", role: .destructive) { delete() }
+                        Button("Delete recipe", role: .destructive) { confirmingDelete = true }
                             .font(Theme.body)
+                            .frame(minHeight: 44)
                             .padding(.top, 4)
+                            .confirmationDialog(
+                                "Delete \(name.isEmpty ? "this recipe" : name)?",
+                                isPresented: $confirmingDelete,
+                                titleVisibility: .visible
+                            ) {
+                                Button("Delete Recipe", role: .destructive) { delete() }
+                                Button("Cancel", role: .cancel) {}
+                            } message: {
+                                Text("Food already logged from it keeps its numbers. This can't be undone.")
+                            }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -98,6 +110,7 @@ struct RecipeEditorView: View {
                 .readableContentWidth()
             }
             .liftScreen()
+            .keyboardDoneButton()
             .background(Theme.background)
             .navigationTitle(isEditing ? "Edit recipe" : "New recipe")
             .navigationBarTitleDisplayMode(.inline)
@@ -118,7 +131,7 @@ struct RecipeEditorView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Macros per serving")
                 .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
 
             Text("Leave blank if you don't know them. Blank stays unknown — it will not log as zero.")
                 .font(Theme.detail)
@@ -157,7 +170,7 @@ struct RecipeEditorView: View {
                         .foregroundStyle(Theme.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundStyle(Theme.textSecondary)
                         .rotationEffect(.degrees(showingMoreNutrients ? 180 : 0))
                 }
@@ -210,7 +223,7 @@ struct RecipeEditorView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .font(Theme.sectionLabel)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
 
             if let hint {
                 Text(hint)

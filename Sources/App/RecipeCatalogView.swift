@@ -92,7 +92,7 @@ struct RecipeCatalogView: View {
                 showingCredits.toggle()
             }
             .font(Theme.detail)
-            .foregroundStyle(Theme.accent)
+            .foregroundStyle(Theme.accentText)
             .buttonStyle(.plain)
             .padding(.top, 8)
 
@@ -112,7 +112,7 @@ struct RecipeCatalogView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(recipe.name)
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 Spacer(minLength: 8)
                 if let servings = recipe.servings {
                     Text(CookFormat.servingsLabel(servings))
@@ -156,7 +156,7 @@ struct RecipeCatalogView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(recipe.name)
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 if let summary = recipe.summary { detailText(summary) }
 
                 if recipe.needsServings {
@@ -180,7 +180,7 @@ struct RecipeCatalogView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Ingredients (\(entry.ingredientLines.count))")
                     .font(Theme.sectionLabel)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 ForEach(Array(entry.ingredientLines.enumerated()), id: \.offset) { index, line in
                     let parsed = IngredientParser.parse(line, sortOrder: index)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -203,12 +203,12 @@ struct RecipeCatalogView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Method (\(recipe.stepLines.count))")
                         .font(Theme.sectionLabel)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                     ForEach(Array(recipe.stepLines.enumerated()), id: \.offset) { index, step in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(index + 1).")
                                 .font(Theme.detail)
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(Theme.accentText)
                             Text(step)
                                 .font(Theme.body)
                                 .foregroundStyle(Theme.textPrimary)
@@ -222,7 +222,7 @@ struct RecipeCatalogView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Macros")
                     .font(Theme.sectionLabel)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
 
                 if let facts = recipe.nutrition(servings: servings) {
                     Text("\(Int(facts.calories)) kcal · P \(Int(facts.proteinG)) · C \(Int(facts.carbsG)) · F \(Int(facts.fatG))")
@@ -243,7 +243,7 @@ struct RecipeCatalogView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Source")
                     .font(Theme.sectionLabel)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 detailText(recipe.attribution)
                 detailText(recipe.license)
             }

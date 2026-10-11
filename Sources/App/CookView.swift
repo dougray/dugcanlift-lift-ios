@@ -25,7 +25,7 @@ struct CookView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $section) {
+            Picker("Cook section", selection: $section) {
                 ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -74,7 +74,7 @@ struct RecipeListView: View {
                     } label: {
                         Label("New recipe", systemImage: "plus")
                             .font(Theme.body.weight(.semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -88,7 +88,7 @@ struct RecipeListView: View {
                     } label: {
                         Label("Browse the catalogue", systemImage: "books.vertical")
                             .font(Theme.body.weight(.semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -103,7 +103,7 @@ struct RecipeListView: View {
                     } label: {
                         Label("Import from Safari", systemImage: "safari")
                             .font(Theme.body.weight(.semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -118,7 +118,7 @@ struct RecipeListView: View {
                     } label: {
                         Label("Paste a recipe", systemImage: "doc.on.clipboard")
                             .font(Theme.body.weight(.semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Theme.cardPadding)
                             .liftCardBackground()
@@ -176,7 +176,7 @@ struct RecipeListView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(recipe.name)
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                 Spacer()
                 Text(CookFormat.servingsLabel(recipe.servings))
                     .font(Theme.detail)
@@ -190,8 +190,10 @@ struct RecipeListView: View {
                     Text("C \(Int(nutrition.carbsG))")
                     Text("F \(Int(nutrition.fatG))")
                     if recipe.nutritionIsEstimated {
+                        // accentMuted is a fill colour; as text it was
+                        // under 2:1 in both appearances.
                         Text("estimated")
-                            .foregroundStyle(Theme.accentMuted)
+                            .foregroundStyle(Theme.accentText)
                     }
                 }
                 .font(Theme.detail)
@@ -296,7 +298,7 @@ struct MealPlanView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text(CookFormat.dayLabel(day))
                 .font(Theme.cardTitle)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
 
             ForEach(MealType.allCases) { meal in
                 let meals = forDay.filter { $0.mealType == meal }
@@ -312,9 +314,12 @@ struct MealPlanView: View {
                         } label: {
                             Text("Add")
                                 .font(Theme.detail)
-                                .foregroundStyle(Theme.accent.opacity(0.8))
+                                .foregroundStyle(Theme.accentText)
+                                .frame(minWidth: 44, minHeight: 44, alignment: .topLeading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(meal.displayName.lowercased()) for \(CookFormat.dayLabel(day))")
                         Spacer()
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
@@ -341,7 +346,7 @@ struct MealPlanView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(CookFormat.dayLabel(day))
                 .font(Theme.cardTitle)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
                 .fixedSize(horizontal: false, vertical: true)
 
             ForEach(MealType.allCases) { meal in
@@ -357,9 +362,12 @@ struct MealPlanView: View {
                         } label: {
                             Text("Add")
                                 .font(Theme.detail)
-                                .foregroundStyle(Theme.accent.opacity(0.8))
+                                .foregroundStyle(Theme.accentText)
+                                .frame(minWidth: 44, minHeight: 44, alignment: .topLeading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(meal.displayName.lowercased()) for \(CookFormat.dayLabel(day))")
                     } else {
                         ForEach(meals) { plannedMeal in
                             plannedRow(plannedMeal)
@@ -371,10 +379,11 @@ struct MealPlanView: View {
         .padding(12)
     }
 
-    /// Remove is a trailing "x", matching how FoodView already deletes a
+    /// Remove is a trailing "x" glyph, matching how FoodView already deletes a
     /// logged entry. Spelling it out cost more width than the column has: an
     /// earlier version wrapped it mid-word, and the fixes for that either blew
-    /// the card past the page margin or truncated "Logged" to "Log...".
+    /// the card past the page margin or truncated "Logged" to "Log...". The
+    /// glyph has a 44pt target and a spoken name, and the remove can be undone.
     private func plannedRow(_ meal: PlannedMeal) -> some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
@@ -397,21 +406,18 @@ struct MealPlanView: View {
                 } else if meal.snapshotNutrition != nil {
                     Button("Log it") { log(meal) }
                         .font(Theme.detail.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                         .buttonStyle(.plain)
                 }
             }
 
             Spacer(minLength: 4)
 
-            Button {
+            DeleteGlyphButton(accessibilityName: meal.recipeName) {
                 remove(meal)
-            } label: {
-                Text("x")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Theme.accent)
             }
-            .buttonStyle(.plain)
+            .padding(.trailing, -12)
+            .padding(.top, -12)
         }
     }
 
@@ -423,9 +429,17 @@ struct MealPlanView: View {
         try? context.save()
     }
 
+    /// One tap, then a few seconds to Undo, like a food entry. The log entry
+    /// a planned meal may already have written is a separate FoodEntry and
+    /// is not touched either way.
     private func remove(_ meal: PlannedMeal) {
+        let snapshot = PlannedMealSnapshot(meal)
         context.delete(meal)
         try? context.save()
+        UndoToastCenter.shared.show("Removed \(snapshot.recipeName)") { [context] in
+            context.insert(snapshot.restore())
+            try? context.save()
+        }
     }
 
     /// Writes the log entry, then records that it happened.
@@ -440,6 +454,52 @@ struct MealPlanView: View {
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
         WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
+    }
+}
+
+/// Every stored field of a removed `PlannedMeal`, so Undo can put it back.
+/// Not rebuilt from the recipe: the recipe may have changed or gone, and a
+/// planned meal keeps its own snapshot exactly so it never depends on it.
+private struct PlannedMealSnapshot {
+    let id: UUID
+    let dayKey: String
+    let plannedFor: Date
+    let mealType: MealType
+    let recipeID: UUID
+    let servings: Double
+    let recipeName: String
+    let snapshotNutrition: NutritionFacts?
+    let amountGrams: Double?
+    let snapshotNutritionPerGram: NutritionFacts?
+    let loggedFoodEntryID: UUID?
+
+    init(_ meal: PlannedMeal) {
+        id = meal.id
+        dayKey = meal.dayKey
+        plannedFor = meal.plannedFor
+        mealType = meal.mealType
+        recipeID = meal.recipeID
+        servings = meal.servings
+        recipeName = meal.recipeName
+        snapshotNutrition = meal.snapshotNutrition
+        amountGrams = meal.amountGrams
+        snapshotNutritionPerGram = meal.snapshotNutritionPerGram
+        loggedFoodEntryID = meal.loggedFoodEntryID
+    }
+
+    func restore() -> PlannedMeal {
+        // PlannedMeal's only initialiser takes a Recipe; a stand-in that is
+        // never inserted supplies it, and every field is then overwritten.
+        let meal = PlannedMeal(recipe: Recipe(name: recipeName), mealType: mealType,
+                               plannedFor: plannedFor, servings: servings)
+        meal.id = id
+        meal.dayKey = dayKey
+        meal.recipeID = recipeID
+        meal.snapshotNutrition = snapshotNutrition
+        meal.amountGrams = amountGrams
+        meal.snapshotNutritionPerGram = snapshotNutritionPerGram
+        meal.loggedFoodEntryID = loggedFoodEntryID
+        return meal
     }
 }
 
@@ -548,12 +608,12 @@ struct RecipePickerView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text(recipe.name)
                     .font(Theme.cardTitle)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Amount")
                         .font(Theme.sectionLabel)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
 
                     HStack {
                         TextField("0", text: $amountText)
@@ -580,6 +640,7 @@ struct RecipePickerView: View {
             .readableContentWidth()
         }
         .liftScreen()
+        .keyboardDoneButton()
         .background(Theme.background)
         .navigationTitle(recipe.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -681,9 +742,12 @@ struct ShoppingListView: View {
             toggle(line.key, isChecked: isChecked)
         } label: {
             HStack(alignment: .top, spacing: 12) {
+                // textSecondary, not hairline: an empty box needs 3:1 to be
+                // seen at all (hairline was about 1.4:1).
                 Image(systemName: isChecked ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 18))
-                    .foregroundStyle(isChecked ? Theme.accent : Theme.hairline)
+                    .scaledFont(size: 18)
+                    .foregroundStyle(isChecked ? Theme.accentText : Theme.textSecondary)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(line.displayName)
@@ -711,6 +775,9 @@ struct ShoppingListView: View {
             .liftCardBackground()
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(isChecked ? "Checked" : "Not checked")
+        .accessibilityAddTraits(.isToggle)
     }
 
     private func toggle(_ key: String, isChecked: Bool) {

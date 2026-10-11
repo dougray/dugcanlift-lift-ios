@@ -125,7 +125,7 @@ struct RoadFoodView: View {
                     // them, so nothing a coach sends can take them back.
                     Button("Clear these picks") { picksData = Data() }
                         .font(Theme.body.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                         .buttonStyle(.plain)
                 }
             }
@@ -141,7 +141,7 @@ struct RoadFoodView: View {
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
             .font(Theme.cardTitle)
-            .foregroundStyle(Theme.accent)
+            .foregroundStyle(Theme.accentText)
             .padding(.top, 6)
     }
 
@@ -165,7 +165,7 @@ struct RoadFoodView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 17, weight: .semibold))
+                        .scaledFont(size: 17, weight: .semibold)
                         .foregroundStyle(Theme.textPrimary)
                         .multilineTextAlignment(.leading)
                     if !detail.isEmpty {
@@ -177,7 +177,7 @@ struct RoadFoodView: View {
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundStyle(Theme.textSecondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -330,7 +330,7 @@ struct RoadFoodPlaceView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("A little over")
                                     .font(Theme.cardTitle)
-                                    .foregroundStyle(Theme.accent)
+                                    .foregroundStyle(Theme.accentText)
                                 Text("Within 10% of what is left.")
                                     .font(Theme.detail)
                                     .foregroundStyle(Theme.textSecondary)
@@ -393,7 +393,7 @@ struct RoadFoodPlaceView: View {
                 if let link = chain?.source, link.hasPrefix("https://"), let url = URL(string: link) {
                     Text("·")
                     Link("source", destination: url)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                 }
             }
             .font(Theme.detail)
@@ -442,7 +442,7 @@ struct RoadFoodPlaceView: View {
                     // Verbatim, so "1502" reads as Home and the logged note
                     // write it, not as a localized "1,502" beside them.
                     Text(verbatim: "Fits your remaining \(kcal) kcal\(protein)")
-                        .font(.system(size: 18, weight: .bold))
+                        .scaledFont(size: 18, weight: .bold)
                         .foregroundStyle(Theme.textPrimary)
                     Text("Most protein per 100 kcal first; lower sodium breaks a tie. Anything more "
                          + "than 10% over what is left is not shown.")
@@ -457,7 +457,7 @@ struct RoadFoodPlaceView: View {
                     }
                 } else {
                     Text("No goal set")
-                        .font(.system(size: 18, weight: .bold))
+                        .scaledFont(size: 18, weight: .bold)
                         .foregroundStyle(Theme.textPrimary)
                     Text("So this is ranked by protein per 100 kcal alone, with nothing left out. "
                          + "Set a goal on Home and it will rank against what is left of your day.")
@@ -485,7 +485,7 @@ struct RoadFoodPlaceView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(rules, id: \.self) { rule in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("•").foregroundStyle(Theme.accent)
+                        Text("•").foregroundStyle(Theme.accentText)
                         Text(rule)
                             .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
@@ -545,7 +545,7 @@ struct RoadFoodPlaceView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Text(item.displayName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(macroLine(item))
@@ -575,7 +575,7 @@ struct RoadFoodPlaceView: View {
             if RoadFoodRanking.cannotLogReason(item) == nil {
                 Button { log(item) } label: {
                     Text("Log it")
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledFont(size: 14, weight: .semibold)
                         .foregroundStyle(Theme.onAccent)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)

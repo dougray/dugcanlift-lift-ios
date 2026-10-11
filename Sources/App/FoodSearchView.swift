@@ -13,6 +13,13 @@ import LiftReference
 /// stepper here, only a plain amount in the person's preferred unit
 /// (`ServingUnit`, Settings > Serving size), converted to the canonical gram
 /// amount `FoodEntry.amountGrams` stores.
+///
+/// A food the database does not have is added by hand: "Add food by hand" sits
+/// above the results, always, and a search that finds nothing offers to add
+/// what was typed. Both open `FoodEntryEditorView` in its new-entry mode —
+/// macros per 100 g, as LIFT web's form takes them — whose rules are
+/// `FoodEntryEdit`'s, and logging it closes this sheet as logging a database
+/// food does.
 struct FoodSearchView: View {
     let mealType: MealType
     var onLogged: () -> Void = {}
@@ -26,6 +33,16 @@ struct FoodSearchView: View {
     @State private var loadFailed = false
     @State private var selected: FoodRecord?
     @State private var amountText = ""
+    /// The name a hand-added food starts with: the query, or blank.
+    @State private var manualName: ManualFood?
+    /// Set when the hand-added food was logged, so this sheet closes after the
+    /// editor's own sheet has gone.
+    @State private var loggedByHand = false
+
+    private struct ManualFood: Identifiable {
+        let name: String
+        var id: String { name }
+    }
 
     private var servingUnit: ServingUnit { ServingUnit(rawValue: servingUnitRaw) ?? .grams }
 
@@ -44,25 +61,54 @@ struct FoodSearchView: View {
     private var searchList: some View {
         Group {
             if loadFailed {
-                ContentUnavailableView(
-                    "Food data unavailable",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text("food.db is missing from the app bundle.")
-                )
-            } else if results.isEmpty && query.trimmingCharacters(in: .whitespaces).count >= 2 {
-                ContentUnavailableView.search(text: query)
+                ContentUnavailableView {
+                    Label("Food data unavailable", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("food.db is missing from the app bundle.")
+                } actions: {
+                    LiftButton("Add food by hand") { addByHand() }
+                }
+            } else if results.isEmpty && trimmedQuery.count >= 2 {
+                ContentUnavailableView {
+                    Label("No Results for \u{201C}\(trimmedQuery)\u{201D}", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Check the spelling or try a new search.")
+                } actions: {
+                    LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
+                }
             } else {
-                List(results) { record in
-                    Button {
-                        selected = record
-                    } label: {
-                        row(record)
+                List {
+                    Button { addByHand() } label: {
+                        Label("Add food by hand", systemImage: "square.and.pencil")
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.accentText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityHint("For a food that is not in the database. Macros per 100 g.")
+
+                    ForEach(results) { record in
+                        Button {
+                            selected = record
+                        } label: {
+                            row(record)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .listStyle(.plain)
                 .readableListMargins()
             }
+        }
+        .sheet(item: $manualName, onDismiss: {
+            guard loggedByHand else { return }
+            onLogged()
+            dismiss()
+        }) { manual in
+            FoodEntryEditorView(newNamed: manual.name, mealType: mealType,
+                                preferredUnit: servingUnit) { loggedByHand = true }
+                .liftAppearance()
         }
         .navigationTitle("Log Food")
         .navigationBarTitleDisplayMode(.inline)
@@ -80,6 +126,13 @@ struct FoodSearchView: View {
         .task(id: query) {
             await search()
         }
+    }
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func addByHand(named name: String = "") {
+        loggedByHand = false
+        manualName = ManualFood(name: name)
     }
 
     private func row(_ record: FoodRecord) -> some View {

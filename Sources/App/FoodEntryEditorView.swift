@@ -5,9 +5,9 @@ import LiftCore
 
 /// Edits a food entry already in the log, in place: same id, same day, same
 /// `loggedAt` — or, opened with `init(newNamed:...)` from food search's "Add
-/// food by hand", adds one with its macros typed per 100 g. The rules — how an amount rescales the macros, which entries let
-/// the macros be typed, what blank means — are `FoodEntryEdit`'s, so they are
-/// tested without a view.
+/// food by hand", adds one with its macros typed per 100 g. The rules — how
+/// an amount rescales the macros, which entries let the macros be typed, what
+/// blank means — are `FoodEntryEdit`'s, so they are tested without a view.
 ///
 /// **Apple Health.** LIFT for iOS does not write food to Health: nothing in
 /// `HealthKitManager` saves a dietary sample, so an entry logged on this phone
@@ -55,6 +55,7 @@ struct FoodEntryEditorView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     nameSection
@@ -84,6 +85,23 @@ struct FoodEntryEditorView: View {
             .liftScreen()
             .background(Theme.background)
             .navigationTitle(edit.isNew ? "Add food" : "Edit food")
+            // A new food starts typing where the gap is: the name when the
+            // search gave none, calories when it did. After the sheet's
+            // presentation settles — focus set during it is dropped.
+            // Calories sits low enough for the keyboard to cover it, so once
+            // the keyboard is up the field is scrolled into view.
+            .task {
+                guard edit.isNew else { return }
+                try? await Task.sleep(for: .milliseconds(450))
+                guard edit.name.trimmingCharacters(in: .whitespaces).isEmpty else {
+                    focus = .macro(.calories)
+                    try? await Task.sleep(for: .milliseconds(600))
+                    withAnimation { proxy.scrollTo(FoodEntryEdit.Macro.calories, anchor: .center) }
+                    return
+                }
+                focus = .name
+            }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -128,19 +146,22 @@ struct FoodEntryEditorView: View {
         }
     }
 
+    /// The field says "Amount, grams" itself, so the title and the unit beside
+    /// it are hidden from VoiceOver rather than read a second and third time.
     private var amountSection: some View {
-        card("Amount") {
+        card("Amount", titleIsFieldLabel: true) {
             HStack {
                 TextField("0", text: $edit.amountText)
                     .keyboardType(.decimalPad)
                     .focused($focus, equals: .amount)
-                    .accessibilityLabel("Amount, \(edit.amountUnitLabel)")
+                    .accessibilityLabel(edit.spokenAmountLabel)
                     .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
                     .disabled(!edit.canChangeAmount)
                 Text(edit.amountUnitLabel)
                     .font(Theme.body)
                     .foregroundStyle(Theme.textSecondary)
+                    .accessibilityHidden(true)
             }
             .padding(Theme.cardPadding)
             .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
@@ -318,10 +339,11 @@ struct FoodEntryEditorView: View {
         }
     }
 
-    /// Two fields to a row, or one at an accessibility text size, where
-    /// "Protein (g/100g)" no longer fits half the width.
+    /// Two fields to a row, or one from xLarge text up, where "Saturated fat
+    /// (g/100g)" no longer fits half the width of a 375 pt phone and the
+    /// "per 100 g" — the whole point of the label — would be cut off.
     private func fieldGrid(_ macros: [FoodEntryEdit.Macro]) -> some View {
-        let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        let columns = dynamicTypeSize >= .xLarge ? 1 : 2
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top),
                                         count: columns),
                          alignment: .leading, spacing: 10) {
@@ -336,12 +358,14 @@ struct FoodEntryEditorView: View {
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                // The field carries it, in words; read once, not twice.
+                .accessibilityHidden(true)
             TextField("—", text: Binding(
                 get: { edit.text(for: macro) },
                 set: { edit.setText($0, for: macro) }
             ))
             .keyboardType(.decimalPad)
-            .accessibilityLabel(edit.fieldLabel(for: macro))
+            .accessibilityLabel(edit.spokenFieldLabel(for: macro))
             .focused($focus, equals: .macro(macro))
             .font(Theme.body)
             .padding(8)
@@ -349,6 +373,7 @@ struct FoodEntryEditorView: View {
             .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
             .disabled(!edit.canEditMacros)
         }
+        .id(macro)
     }
 
     private func macroFigure(_ label: String, _ grams: Double) -> some View {
@@ -364,6 +389,7 @@ struct FoodEntryEditorView: View {
 
     private func card<Content: View>(
         _ title: String,
+        titleIsFieldLabel: Bool = false,
         hint: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -371,6 +397,7 @@ struct FoodEntryEditorView: View {
             Text(title)
                 .font(Theme.sectionLabel)
                 .foregroundStyle(Theme.accentText)
+                .accessibilityHidden(titleIsFieldLabel)
             if let hint {
                 Text(hint)
                     .font(Theme.detail)

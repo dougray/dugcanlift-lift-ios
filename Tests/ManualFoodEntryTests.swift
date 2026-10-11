@@ -172,7 +172,8 @@ final class ManualFoodEntryTests: XCTestCase {
     func testTheFourMacrosAreRequiredAndNeverDefaultToZero() {
         var edit = newEntry()
         XCTAssertNil(edit.result)
-        XCTAssertEqual(edit.problem, "Enter calories, protein, carbs, and fat. Everything else can be left blank.")
+        let all = ListFormatter.localizedString(byJoining: ["calories", "protein", "carbs", "fat"])
+        XCTAssertEqual(edit.problem, "Enter \(all). Everything else can be left blank.")
         edit.setText("250", for: .calories)
         edit.setText("10", for: .protein)
         edit.setText("40", for: .carbs)
@@ -182,7 +183,36 @@ final class ManualFoodEntryTests: XCTestCase {
         XCTAssertNil(edit.problem)
     }
 
+    /// A protein that is not a number anyone means is a blank, not a zero, and
+    /// says so in the same words.
+    func testANegativeOrNonNumericProteinIsBlank() {
+        for text in ["-5", "abc"] {
+            var edit = newEntry()
+            filled(&edit)
+            edit.setText(text, for: .protein)
+            XCTAssertNil(edit.result, "protein \(text)")
+            XCTAssertEqual(edit.problem, "Enter protein. Everything else can be left blank.", "protein \(text)")
+        }
+    }
+
     // MARK: - Numbers
+
+    /// Nothing is rounded before saving: a pinch and a large pot scale exactly.
+    func testTinyAndLargeAmountsScaleWithoutRounding() throws {
+        var edit = newEntry()
+        filled(&edit)
+        edit.setText("12.34", for: .protein)
+        edit.amountText = "0.1"
+        var n = try XCTUnwrap(edit.result).nutrition
+        XCTAssertEqual(n.calories, 0.25, accuracy: 1e-12)
+        XCTAssertEqual(n.proteinG, 0.01234, accuracy: 1e-12)
+        XCTAssertEqual(try XCTUnwrap(edit.result).amountGrams ?? 0, 0.1, accuracy: 1e-12)
+
+        edit.amountText = "2000"
+        n = try XCTUnwrap(edit.result).nutrition
+        XCTAssertEqual(n.calories, 5000, accuracy: 1e-9)
+        XCTAssertEqual(n.proteinG, 246.8, accuracy: 1e-9)
+    }
 
     /// The decimal pad types a comma in de_DE; `parse` reads either, in any
     /// locale, so "12,5" is 12.5 and never 125 or nil.
@@ -215,6 +245,27 @@ final class ManualFoodEntryTests: XCTestCase {
         XCTAssertEqual(existing.fieldLabel(for: .sodium), "Sodium (mg)")
     }
 
+    /// VoiceOver hears each field once, in words: "g/100g" read aloud is
+    /// "g slash 100 g".
+    func testSpokenLabelsSayTheUnitsInWords() {
+        let new = newEntry()
+        XCTAssertEqual(new.spokenFieldLabel(for: .calories), "Calories per 100 grams")
+        XCTAssertEqual(new.spokenFieldLabel(for: .protein), "Protein, grams per 100 grams")
+        XCTAssertEqual(new.spokenFieldLabel(for: .saturatedFat), "Saturated fat, grams per 100 grams")
+        XCTAssertEqual(new.spokenFieldLabel(for: .sodium), "Sodium, milligrams per 100 grams")
+        XCTAssertEqual(new.spokenAmountLabel, "Amount, grams")
+        XCTAssertEqual(newEntry(unit: .ounces).spokenAmountLabel, "Amount, ounces")
+
+        let existing = FoodEntryEdit(name: "Bar", foodRefID: "", mealType: .snack, quantity: 2,
+                                     servingUnit: "servings", amountGrams: nil,
+                                     nutrition: NutritionFacts(calories: 1, proteinG: 1, carbsG: 1, fatG: 1),
+                                     preferredUnit: .grams)
+        XCTAssertEqual(existing.spokenFieldLabel(for: .calories), "Calories, kilocalories")
+        XCTAssertEqual(existing.spokenFieldLabel(for: .protein), "Protein, grams")
+        XCTAssertEqual(existing.spokenFieldLabel(for: .sodium), "Sodium, milligrams")
+        XCTAssertEqual(existing.spokenAmountLabel, "Amount, servings")
+    }
+
     // MARK: - The entry it makes
 
     func testTheCreatedEntryIsAManualFoodEntry() throws {
@@ -241,6 +292,48 @@ final class ManualFoodEntryTests: XCTestCase {
         XCTAssertTrue(reopened.isManual)
         XCTAssertFalse(reopened.isNew)
         XCTAssertEqual(reopened.text(for: .calories), "375")
+    }
+
+    /// Untouched in ounces, end to end: the stored quantity is 100 g in ounces,
+    /// not the rounded "3.5" on screen, and reopening it changes nothing.
+    func testAnUntouchedOunceEntryRoundTripsAt100Grams() throws {
+        var edit = newEntry(unit: .ounces)
+        filled(&edit)
+        let result = try XCTUnwrap(edit.result)
+        XCTAssertEqual(result.quantity, 100 / 28.3495, accuracy: 1e-9)
+        XCTAssertEqual(result.quantity, 3.5274, accuracy: 1e-4)
+        XCTAssertEqual(try XCTUnwrap(result.amountGrams), 100, accuracy: 1e-12)
+
+        let entry = try XCTUnwrap(edit.makeEntry())
+        let reopened = FoodEntryEdit(entry: entry, preferredUnit: .ounces)
+        XCTAssertEqual(reopened.amountText, "3.5")
+        let saved = try XCTUnwrap(reopened.result)
+        XCTAssertEqual(try XCTUnwrap(saved.amountGrams), 100, accuracy: 1e-12)
+        XCTAssertEqual(saved.nutrition.calories, 250, accuracy: 1e-9)
+    }
+
+    /// Reopened, the entry is an ordinary manual one: its numbers are totals
+    /// at its amount, and doubling the amount doubles them.
+    func testAReopenedEntryRescalesLikeAnyManualEntry() throws {
+        var edit = newEntry()
+        filled(&edit)
+        edit.amountText = "150"
+        let entry = try XCTUnwrap(edit.makeEntry())
+        XCTAssertEqual(entry.nutrition.calories, 375, accuracy: 1e-9)
+
+        var reopened = FoodEntryEdit(entry: entry, preferredUnit: .grams)
+        reopened.amountText = "300"
+        let result = try XCTUnwrap(reopened.result)
+        XCTAssertEqual(result.nutrition.calories, 750, accuracy: 1e-9)
+        XCTAssertEqual(result.amountGrams, 300)
+    }
+
+    func testAnExistingEntryNeverMakesANewOne() throws {
+        var edit = newEntry()
+        filled(&edit)
+        let reopened = FoodEntryEdit(entry: try XCTUnwrap(edit.makeEntry()), preferredUnit: .grams)
+        XCTAssertNotNil(reopened.result)
+        XCTAssertNil(reopened.makeEntry())
     }
 
     func testNoEntryIsMadeWhileSomethingIsMissing() {

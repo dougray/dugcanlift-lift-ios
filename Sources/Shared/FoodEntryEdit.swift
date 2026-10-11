@@ -267,6 +267,28 @@ struct FoodEntryEdit: Equatable {
         return "\(macro.label) (\(macro.unit)/100g)"
     }
 
+    /// What VoiceOver says for a field, once and in words: "g/100g" read
+    /// aloud is "g slash 100 g". The visible label is hidden from it.
+    func spokenFieldLabel(for macro: Macro) -> String {
+        let unit: String
+        switch macro {
+        case .calories: unit = "kilocalories"
+        case .sodium:   unit = "milligrams"
+        default:        unit = "grams"
+        }
+        guard isNew else { return "\(macro.label), \(unit)" }
+        if macro == .calories { return "Calories per 100 grams" }
+        return "\(macro.label), \(unit) per 100 grams"
+    }
+
+    /// "Amount, grams", "Amount, ounces", or the entry's own count word.
+    var spokenAmountLabel: String {
+        switch mode {
+        case .weight(let unit): return "Amount, \(unit == .grams ? "grams" : "ounces")"
+        case .servings:         return "Amount, \(amountUnitLabel)"
+        }
+    }
+
     mutating func setText(_ text: String, for macro: Macro) {
         guard canEditMacros else { return }
         if !isNew, let amount, let ratio, ratio != 1 {

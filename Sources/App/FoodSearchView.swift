@@ -31,6 +31,10 @@ struct FoodSearchView: View {
     @State private var query = ""
     @State private var results: [FoodRecord] = []
     @State private var loadFailed = false
+    /// True from a keystroke until its search has answered, so "No Results"
+    /// (and its button) appears only once a search has really found nothing,
+    /// not for the 200 ms debounce before every one.
+    @State private var searching = false
     @State private var selected: FoodRecord?
     @State private var amountText = ""
     /// The name a hand-added food starts with: the query, or blank.
@@ -66,9 +70,15 @@ struct FoodSearchView: View {
                 } description: {
                     Text("food.db is missing from the app bundle.")
                 } actions: {
-                    LiftButton("Add food by hand") { addByHand() }
+                    // Without the database, by hand is the only way to log,
+                    // so whatever was typed comes along.
+                    if trimmedQuery.isEmpty {
+                        LiftButton("Add food by hand") { addByHand() }
+                    } else {
+                        LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
+                    }
                 }
-            } else if results.isEmpty && trimmedQuery.count >= 2 {
+            } else if !searching && results.isEmpty && trimmedQuery.count >= 2 {
                 ContentUnavailableView {
                     Label("No Results for \u{201C}\(trimmedQuery)\u{201D}", systemImage: "magnifyingglass")
                 } description: {
@@ -155,9 +165,11 @@ struct FoodSearchView: View {
         guard trimmed.count >= 2 else {
             results = []
             loadFailed = false
+            searching = false
             return
         }
 
+        searching = true
         try? await Task.sleep(for: .milliseconds(200))
         guard !Task.isCancelled else { return }
 
@@ -170,6 +182,7 @@ struct FoodSearchView: View {
             results = []
             loadFailed = true
         }
+        searching = false
     }
 
     // MARK: Amount entry

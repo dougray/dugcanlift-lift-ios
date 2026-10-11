@@ -20,6 +20,10 @@ import LiftReference
 /// macros per 100 g, as LIFT web's form takes them — whose rules are
 /// `FoodEntryEdit`'s, and logging it closes this sheet as logging a database
 /// food does.
+///
+/// The amount step serves a `LoggableFood`: a library record, or a food the
+/// person remembered against a barcode. A remembered food says so under its
+/// name and offers Edit and Forget; nothing else about the step differs.
 struct FoodSearchView: View {
     let mealType: MealType
     var onLogged: () -> Void = {}
@@ -35,17 +39,27 @@ struct FoodSearchView: View {
     /// (and its button) appears only once a search has really found nothing,
     /// not for the 200 ms debounce before every one.
     @State private var searching = false
-    @State private var selected: FoodRecord?
+    @State private var selected: LoggableFood?
     @State private var amountText = ""
-    /// The name a hand-added food starts with: the query, or blank.
-    @State private var manualName: ManualFood?
+    /// The one sheet food search presents at a time.
+    @State private var sheet: Sheet?
+    @State private var confirmingForget = false
     /// Set when the hand-added food was logged, so this sheet closes after the
     /// editor's own sheet has gone.
     @State private var loggedByHand = false
 
-    private struct ManualFood: Identifiable {
-        let name: String
-        var id: String { name }
+    private enum Sheet: Identifiable {
+        /// A food typed in by hand; the name is the query, or blank.
+        case byHand(name: String)
+        /// The editor for a remembered food, by its code.
+        case remembered(code: String)
+
+        var id: String {
+            switch self {
+            case .byHand(let name): return "hand:" + name
+            case .remembered(let code): return "remembered:" + code
+            }
+        }
     }
 
     private var servingUnit: ServingUnit { ServingUnit(rawValue: servingUnitRaw) ?? .grams }
@@ -56,6 +70,25 @@ struct FoodSearchView: View {
                 amountEntry(for: selected)
             } else {
                 searchList
+            }
+        }
+        .sheet(item: $sheet, onDismiss: {
+            guard loggedByHand else { return }
+            onLogged()
+            dismiss()
+        }) { sheet in
+            switch sheet {
+            case .byHand(let name):
+                FoodEntryEditorView(newNamed: name, mealType: mealType,
+                                    preferredUnit: servingUnit) { loggedByHand = true }
+                    .liftAppearance()
+            case .remembered(let code):
+                if let food = RememberedFoods.find(code: code, in: context) {
+                    FoodEntryEditorView(remembering: food, preferredUnit: servingUnit) {
+                        refreshSelected(code: code)
+                    }
+                    .liftAppearance()
+                }
             }
         }
     }
@@ -72,15 +105,6 @@ struct FoodSearchView: View {
                 .frame(height: 1)
                 .accessibilityHidden(true)
             searchResults
-        }
-        .sheet(item: $manualName, onDismiss: {
-            guard loggedByHand else { return }
-            onLogged()
-            dismiss()
-        }) { manual in
-            FoodEntryEditorView(newNamed: manual.name, mealType: mealType,
-                                preferredUnit: servingUnit) { loggedByHand = true }
-                .liftAppearance()
         }
         .navigationTitle("Log Food")
         .navigationBarTitleDisplayMode(.inline)
@@ -159,7 +183,7 @@ struct FoodSearchView: View {
         } else {
             List(results) { record in
                 Button {
-                    selected = record
+                    selected = LoggableFood(record: record)
                 } label: {
                     row(record)
                 }
@@ -174,7 +198,7 @@ struct FoodSearchView: View {
 
     private func addByHand(named name: String = "") {
         loggedByHand = false
-        manualName = ManualFood(name: name)
+        sheet = .byHand(name: name)
     }
 
     private func row(_ record: FoodRecord) -> some View {
@@ -219,21 +243,24 @@ struct FoodSearchView: View {
 
     // MARK: Amount entry
 
-    private func amountEntry(for record: FoodRecord) -> some View {
+    private func amountEntry(for food: LoggableFood) -> some View {
         let enteredAmount = Double(amountText)
         let grams = enteredAmount.map { servingUnit.toGrams($0) }
-        let preview = grams.map { record.nutrition(grams: $0) }
+        let preview = grams.map { food.nutrition(grams: $0) }
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(record.name)
+                    Text(food.name)
                         .font(Theme.cardTitle)
                         .foregroundStyle(Theme.accentText)
-                    if let brand = record.brand, !brand.isEmpty {
+                    if let brand = food.brand, !brand.isEmpty {
                         Text(brand)
                             .font(Theme.detail)
                             .foregroundStyle(Theme.textSecondary)
+                    }
+                    if let code = food.rememberedCode {
+                        rememberedLines(code: code)
                     }
                 }
 
@@ -273,16 +300,50 @@ struct FoodSearchView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Back") {
-                    self.selected = nil
-                    amountText = ""
-                }
+                Button("Back") { backToSearch() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Log") { log(record) }
+                Button("Log") { log(food) }
                     .disabled(!(enteredAmount.map { $0 > 0 } ?? false))
             }
         }
+    }
+
+    /// What a remembered food adds under its name: that the figures are the
+    /// person's own, and the two things they can do about it.
+    private func rememberedLines(code: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(LoggableFood.rememberedLine)
+                .font(Theme.detail)
+                .foregroundStyle(Theme.textSecondary)
+            LiftButton("Edit", isGhost: true) { sheet = .remembered(code: code) }
+                .accessibilityLabel(RememberedFoodWords.editTitle)
+            Button(RememberedFoodWords.forgetButton, role: .destructive) {
+                confirmingForget = true
+            }
+            .font(Theme.body)
+            .frame(minHeight: 44)
+            .forgetBarcodeConfirmation(isPresented: $confirmingForget) {
+                RememberedFoods.forget(code: code, in: context)
+                backToSearch()
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    /// After the editor saved: show what is now remembered, or go back to
+    /// search if it was forgotten from inside the editor.
+    private func refreshSelected(code: String) {
+        if let food = RememberedFoods.find(code: code, in: context) {
+            selected = LoggableFood(remembered: food)
+        } else {
+            backToSearch()
+        }
+    }
+
+    private func backToSearch() {
+        selected = nil
+        amountText = ""
     }
 
     private func previewCard(_ nutrition: NutritionFacts) -> some View {
@@ -314,17 +375,17 @@ struct FoodSearchView: View {
         .liftCardBackground()
     }
 
-    private func log(_ record: FoodRecord) {
+    private func log(_ food: LoggableFood) {
         guard let enteredAmount = Double(amountText), enteredAmount > 0 else { return }
         let grams = servingUnit.toGrams(enteredAmount)
         let entry = FoodEntry(
-            foodRefID: record.id,
-            name: record.name,
-            brand: record.brand,
+            foodRefID: food.id,
+            name: food.name,
+            brand: food.brand,
             quantity: enteredAmount,
             servingUnit: servingUnit.abbreviation,
             amountGrams: grams,
-            nutrition: record.nutrition(grams: grams),
+            nutrition: food.nutrition(grams: grams),
             mealType: mealType
         )
         context.insert(entry)

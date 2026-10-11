@@ -62,54 +62,16 @@ struct FoodSearchView: View {
 
     // MARK: Search
 
+    /// From the top: the search field (in the navigation bar's drawer, always
+    /// shown), the action rows, then what the search found.
     private var searchList: some View {
-        Group {
-            if loadFailed {
-                ContentUnavailableView {
-                    Label("Food data unavailable", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text("food.db is missing from the app bundle.")
-                } actions: {
-                    // Without the database, by hand is the only way to log,
-                    // so whatever was typed comes along.
-                    if trimmedQuery.isEmpty {
-                        LiftButton("Add food by hand") { addByHand() }
-                    } else {
-                        LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
-                    }
-                }
-            } else if !searching && results.isEmpty && trimmedQuery.count >= 2 {
-                ContentUnavailableView {
-                    Label("No Results for \u{201C}\(trimmedQuery)\u{201D}", systemImage: "magnifyingglass")
-                } description: {
-                    Text("Check the spelling or try a new search.")
-                } actions: {
-                    LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
-                }
-            } else {
-                List {
-                    Button { addByHand() } label: {
-                        Label("Add food by hand", systemImage: "square.and.pencil")
-                            .font(Theme.body)
-                            .foregroundStyle(Theme.accentText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("For a food that is not in the database. Macros per 100 g.")
-
-                    ForEach(results) { record in
-                        Button {
-                            selected = record
-                        } label: {
-                            row(record)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .listStyle(.plain)
-                .readableListMargins()
-            }
+        VStack(spacing: 0) {
+            actionRows
+            Rectangle()
+                .fill(Theme.hairline)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+            searchResults
         }
         .sheet(item: $manualName, onDismiss: {
             guard loggedByHand else { return }
@@ -122,7 +84,10 @@ struct FoodSearchView: View {
         }
         .navigationTitle("Log Food")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, prompt: "Search foods")
+        // At the top and always visible. Left to itself iOS 26 puts a sheet's
+        // search field at the bottom, under the results it filters.
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search foods")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
@@ -135,6 +100,73 @@ struct FoodSearchView: View {
         // the next one.
         .task(id: query) {
             await search()
+        }
+    }
+
+    /// Ways to log a food other than picking a search result, one row each,
+    /// pinned under the search field whatever the results are doing. A new
+    /// way in (scanning a barcode) is another row here, above "Add food by
+    /// hand".
+    private var actionRows: some View {
+        VStack(spacing: 0) {
+            actionRow("Add food by hand", systemImage: "square.and.pencil",
+                      hint: "For a food that is not in the database. Macros per 100 g.") {
+                addByHand()
+            }
+        }
+        .padding(.horizontal, 16)
+        .readableContentWidth()
+    }
+
+    private func actionRow(_ title: String, systemImage: String, hint: String,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(Theme.body)
+                .foregroundStyle(Theme.accentText)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(hint)
+    }
+
+    @ViewBuilder
+    private var searchResults: some View {
+        if loadFailed {
+            ContentUnavailableView {
+                Label("Food data unavailable", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text("food.db is missing from the app bundle.")
+            } actions: {
+                // Without the database, by hand is the only way to log,
+                // so whatever was typed comes along.
+                if trimmedQuery.isEmpty {
+                    LiftButton("Add food by hand") { addByHand() }
+                } else {
+                    LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
+                }
+            }
+        } else if !searching && results.isEmpty && trimmedQuery.count >= 2 {
+            ContentUnavailableView {
+                Label("No Results for \u{201C}\(trimmedQuery)\u{201D}", systemImage: "magnifyingglass")
+            } description: {
+                Text("Check the spelling or try a new search.")
+            } actions: {
+                LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
+            }
+        } else {
+            List(results) { record in
+                Button {
+                    selected = record
+                } label: {
+                    row(record)
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .readableListMargins()
         }
     }
 

@@ -350,12 +350,9 @@ enum BackupStore {
         // A section another client wrote that this app does not store goes back
         // out as it came in. Added last-wins-never: it can only fill a key this
         // app did not write, so a preserved copy cannot roll back real data. A
-        // section this app does store is never carried from that copy: one held
-        // before the app stored it would otherwise stand in for the store's own
-        // whenever the store had none, a backup written from data this phone
-        // does not hold. (`outdoor` is absorbed into the store above instead.)
+        // copy of a section in `droppedHeldSections` is never carried: see there.
         for (section, value) in storedForeignData()
-        where data[section] == nil && !storedSections.contains(section) && !neverBackedUp.contains(section) {
+        where data[section] == nil && !droppedHeldSections.contains(section) && !neverBackedUp.contains(section) {
             data[section] = value
         }
 
@@ -625,9 +622,8 @@ enum BackupStore {
         // Android's `routines`, anything a newer client adds -- is kept and
         // written back out, exactly like ext. Without it, restoring an Android
         // backup here and saving again silently dropped every routine.
-        // A stored section held from before this app stored it is dropped, not
-        // kept: see `build`.
-        var foreignData = storedForeignData().filter { !storedSections.contains($0.key) }
+        // A held copy of a section in `droppedHeldSections` is dropped, not kept.
+        var foreignData = retainedHeldData(storedForeignData())
         for (section, value) in payload where !storedSections.contains(section) && !neverBackedUp.contains(section) {
             foreignData[section] = value
         }
@@ -686,6 +682,24 @@ enum BackupStore {
         "food", "workouts", "weights", "coach", "goal", "settings", "recipes", "plan", "outdoor",
         "rememberedBarcodes"
     ]
+
+    /// Sections whose held foreign copy is dropped rather than carried: `build`
+    /// never writes one, and `restore` removes it from the stash it writes back.
+    ///
+    /// Only `rememberedBarcodes`. A build before this app stored remembered
+    /// foods held a file's copy as foreign data, and `build` would write that
+    /// copy in place of the store's own whenever the store had none -- a backup
+    /// carrying foods this phone does not hold. Nothing else writes the section
+    /// yet, so the copy is dropped rather than absorbed. `outdoor` is not here
+    /// and must never be: `absorbPreservedOutdoor` removes its held copy only
+    /// once the store has saved it, and a restore after a failed save keeps it
+    /// for the next try.
+    static let droppedHeldSections: Set<String> = ["rememberedBarcodes"]
+
+    /// The held foreign sections a restore keeps: all but `droppedHeldSections`.
+    static func retainedHeldData(_ held: [String: Any]) -> [String: Any] {
+        held.filter { !droppedHeldSections.contains($0.key) }
+    }
 
     /// Never written and never preserved, by the format: ticks mark one week's
     /// shop, and restoring last month's would show this week's list as bought.
@@ -846,7 +860,10 @@ enum BackupStore {
             var descriptor = FetchDescriptor<RememberedFood>(predicate: #Predicate { $0.code == normalised })
             descriptor.fetchLimit = 1
             if let existing = try? context.fetch(descriptor).first {
-                guard updatedAt > existing.updatedAt else { continue }
+                // In whole milliseconds, the file's own precision: the store
+                // keeps sub-millisecond dates, and restoring this phone's own
+                // backup must not count an unchanged food as a correction.
+                guard epochMs(updatedAt) > epochMs(existing.updatedAt) else { continue }
                 existing.name = name
                 existing.brand = brand
                 existing.per100g = per100g
@@ -878,10 +895,11 @@ enum BackupStore {
         return code
     }
 
-    /// `double`, finite only: a remembered food is written back out by
-    /// JSONSerialization, which cannot write NaN or infinity.
+    /// A number, read strictly: `finite`, so a JSON boolean or a string is not
+    /// one (`"fiberG": true` is unknown, never 1 g), and NaN or infinity, which
+    /// JSONSerialization could not write back out, is not one either.
     private static func number(_ value: Any?) -> Double? {
-        double(value).flatMap { $0.isFinite ? $0 : nil }
+        finite(value)
     }
 
     // MARK: - Small conversions

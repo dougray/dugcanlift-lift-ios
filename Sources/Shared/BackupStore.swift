@@ -689,8 +689,9 @@ enum BackupStore {
     /// Only `rememberedBarcodes`. A build before this app stored remembered
     /// foods held a file's copy as foreign data, and `build` would write that
     /// copy in place of the store's own whenever the store had none -- a backup
-    /// carrying foods this phone does not hold. Nothing else writes the section
-    /// yet, so the copy is dropped rather than absorbed. `outdoor` is not here
+    /// carrying foods this phone does not hold. `build` now writes the section
+    /// from the store and `restoreRememberedFoods` merges it in, so the held
+    /// copy is dropped rather than absorbed. `outdoor` is not here
     /// and must never be: `absorbPreservedOutdoor` removes its held copy only
     /// once the store has saved it, and a restore after a failed save keeps it
     /// for the next try.

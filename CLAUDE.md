@@ -412,12 +412,14 @@ the same road as a scanned one (`BarcodeQuery`). `ScanAvailability` has a
 .requestAccess`) on the first tap rather than at launch, and a refusal says
 "LIFT can't use the camera right now. You can allow it in Settings."
 
-**`Barcode` is the one rule for what a code is.** `Sources/Shared/Barcode.swift`
-keeps digits only, strips leading zeros, checks the GS1 check digit **first**,
-and refuses all zeros. With no symbology an 8-digit code is EAN-8 only; UPC-E is
-expanded only when the scanner says it read UPC-E, because the same eight
-digits can be either and guessing would file a food under another product's
-code. `Tests/Fixtures/barcodes.json` is hand-written and shared with the other
+**`Barcode` is the one rule for what a code is.** `Sources/Shared/Barcode.swift`,
+in the code's order: anything but digits (spaces and hyphens aside) is refused;
+the GS1 check digit is verified on 8, 12, 13 or 14 digits; then leading zeros
+are stripped so UPC-A, EAN-13 and GTIN-14 spellings meet; all zeros fails. With
+no symbology an 8-digit code is EAN-8 only; UPC-E is expanded only when the
+scanner says it read UPC-E, because the same eight digits can be either and
+guessing would file a food under another product's code.
+`Tests/Fixtures/barcodes.json` is hand-written and shared with the other
 builds. Never regenerate it from Swift: a fixture the code wrote proves only
 that the code agrees with itself.
 
@@ -425,9 +427,14 @@ that the code agrees with itself.
 `RememberedFood` (`.unique` on `code`) is schema V10, a lightweight migration
 (`v9ToV10`). **`RememberedFoods` (`Sources/App/RememberedFoods.swift`) is the one
 read and write path**: `find`, `remember`, `forget`. The scanner, the form,
-Edit and Forget, backups and `FoodRefResolver` all go through it, so they cannot
+Edit and Forget and `FoodRefResolver` all go through it, so they cannot
 disagree. `remember` upserts in place and keeps `rememberedAt`; a correction
 moves `updatedAt`, which is what a backup's newest-wins merge compares.
+**Backups are the one deliberate exception.** `BackupStore` reads and writes
+`RememberedFood` directly: `remember()` stamps `updatedAt` with now, which would
+defeat the newest-wins merge, and `BackupStore` lives in `Sources/Shared` (the
+widget compiles it) and cannot see `Sources/App`. Don't route backups through
+`remember()`.
 `BarcodeLookup.look` asks remembered foods first. **The barcode bundle (project
 2) slots in behind that same call, after them**, so a food the person entered
 always wins over a bundled one.

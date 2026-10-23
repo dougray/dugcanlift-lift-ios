@@ -4,7 +4,8 @@ import LiftCore
 import LiftReference
 
 /// Resolves an arbitrary `foodRefID` (whatever its source — a reference-
-/// database food or a recipe) into a name and gram-scaled nutrition.
+/// database food, a recipe or a remembered food kept against a barcode) into
+/// a name and gram-scaled nutrition.
 /// Neither existing logging path needs this: `FoodSearchView` already
 /// holds a `FoodRecord` from search, `PlannedMeal.toFoodEntry()` already
 /// holds a `Recipe`. A watch-originated request only ever hands over the

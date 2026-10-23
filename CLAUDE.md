@@ -245,8 +245,10 @@ watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
 companion move.
 
 **A struct a model stores is part of the schema.** SwiftData flattens
-`NutritionFacts` into one column per field on FoodEntry, Recipe and
-PlannedMeal, so a new field in LiftKit is a schema change here. LiftKit 1.9.0's
+`NutritionFacts` into one column per field on FoodEntry, Recipe, PlannedMeal
+and `RememberedFood.per100g`, so a new field in LiftKit is a schema change
+here, and the version that adds it must freeze `RememberedFood`'s V10 shape
+alongside the others. LiftKit 1.9.0's
 `saturatedFatG` needed `LiftSchemaV7` and a frozen seven-field copy; without it
 every existing install failed to open its store (134504). Verify any schema
 change by installing over a store the previous build wrote, not only in tests —
@@ -452,20 +454,23 @@ recipe or an unknown id stays a food this phone declines.
 **The wording is shared by three builds.** These strings are the same on iPhone,
 Android and web, so they change in all three or in none:
 "That barcode didn't scan cleanly. Try again.", "LIFT doesn't know this barcode
-yet. Enter it once and LIFT will remember it.", "A food you entered.",
-"LIFT can't use the camera right now. You can allow it in Settings." and the
-camera usage string in `project.yml`. Edit and Forget (with its confirmation)
-read from `RememberedFoodWords`, so the two places they appear cannot drift.
+yet. Enter it once and LIFT will remember it.", "A food you entered." and
+the camera usage string in `project.yml`. "LIFT can't use the camera right now.
+You can allow it in Settings." is this build's own wording, not one of them.
+Edit and Forget (with its confirmation) read from `RememberedFoodWords`, so the
+two places they appear cannot drift.
 
 **In a backup** it is `data.rememberedBarcodes` (BACKUP-FORMAT.md), merged **by
 code, newest wins**, comparing `updatedAt` in whole milliseconds. Restoring never
-deletes a remembered food, the library rule, not the roster's. `backupCode` pads
-a code to 14 digits before validating, so a GTIN-14 from another build is read
-and an EAN-13 is not rejected for its length. A date that cannot be read is
-treated as absent rather than crashing the restore. `droppedHeldSections` names
-the held foreign copies a restore removes rather than carries (only
-`rememberedBarcodes` today), so an older build's copy of the section is never
-written back in place of this phone's own.
+deletes a remembered food, the library rule, not the roster's. Codes are stored
+normalised, so they have lost their leading zeros (an 11-digit UPC-A, a 7-digit
+EAN-8), and `Barcode.read` would refuse that as a length. `backupCode` pads a
+code to 14 digits before validating, which restores a valid length without
+changing the check sum. A date that cannot be read is treated as absent rather
+than crashing the restore. `droppedHeldSections` names the held foreign copies a
+restore removes rather than carries (only `rememberedBarcodes` today), so an
+older build's copy of the section is never written back in place of this
+phone's own.
 
 **A remembered food never goes to a coach.** `CoachShare` reads names and
 nutrition off entries and never `foodRefID`, so the share carries the food by

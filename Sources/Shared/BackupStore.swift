@@ -828,7 +828,8 @@ enum BackupStore {
     /// A code is read through `Barcode.read` (see `backupCode`), so one written as
     /// scanned ("0036000291452") is stored under, and meets, its normalised
     /// spelling; a code that fails the check digit is skipped. So is a row
-    /// without a name and the four macros. An optional nutrient, brand or
+    /// without a name and the four macros, or with one of them negative; a
+    /// negative optional nutrient is unknown. An optional nutrient, brand or
     /// serving the row omits is nil -- on an update too, since the newer row
     /// is the whole food. Epoch ms are read as an integer or a double, and an
     /// impossible one as missing (`epochDate`): a bad `updatedAt` is oldest, a
@@ -847,13 +848,13 @@ enum BackupStore {
                 let rawCode = row["code"] as? String, let code = backupCode(rawCode),
                 let name = (row["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
                 let p = row["per100g"] as? [String: Any],
-                let calories = number(p["calories"]), let protein = number(p["proteinG"]),
-                let carbs = number(p["carbsG"]), let fat = number(p["fatG"])
+                let calories = amount(p["calories"]), let protein = amount(p["proteinG"]),
+                let carbs = amount(p["carbsG"]), let fat = amount(p["fatG"])
             else { continue }
             let updatedAt = epochDate(row["updatedAt"]) ?? Date(timeIntervalSince1970: 0)
             let per100g = NutritionFacts(calories: calories, proteinG: protein, carbsG: carbs, fatG: fat,
-                                         fiberG: number(p["fiberG"]), sugarG: number(p["sugarG"]),
-                                         sodiumMg: number(p["sodiumMg"]), saturatedFatG: number(p["saturatedFatG"]))
+                                         fiberG: amount(p["fiberG"]), sugarG: amount(p["sugarG"]),
+                                         sodiumMg: amount(p["sodiumMg"]), saturatedFatG: amount(p["saturatedFatG"]))
             let brand = ((row["brand"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
                 .flatMap { $0.isEmpty ? nil : $0 }
             let servingGrams = number(row["servingGrams"]).flatMap { $0 > 0 ? $0 : nil }
@@ -881,6 +882,13 @@ enum BackupStore {
             changed += 1
         }
         return changed
+    }
+
+    /// A nutrient amount: a number, and not below zero. A negative one is no
+    /// amount anyone means, so a required macro that is negative refuses the
+    /// row and an optional one reads as unknown, as the form treats one typed.
+    private static func amount(_ value: Any?) -> Double? {
+        number(value).flatMap { $0 >= 0 ? $0 : nil }
     }
 
     /// A file's `code`, normalised. The file holds codes already normalised,

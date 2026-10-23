@@ -22,7 +22,9 @@ import LiftCore
 ///
 /// **Macros.** Only editable for a *manual* entry — one whose `foodRefID` is
 /// empty, which is what a restore from LIFT web or Android produces, since
-/// those files carry no reference id. A food from the database or a recipe has
+/// those files carry no reference id, or `barcode:<code>`, whose numbers the
+/// person typed themselves. Correcting a `barcode:` entry changes that entry
+/// only, never the food remembered against the code. A food from the database or a recipe has
 /// a source its numbers came from; letting them drift from it would make the
 /// snapshot a lie about where it came from. The fields always show the totals
 /// for the amount currently typed. Typing a value fixes all eight at that
@@ -174,7 +176,8 @@ struct FoodEntryEdit: Equatable {
         self.name = name
         self.originalName = name
         self.mealType = mealType
-        self.isManual = foodRefID.trimmingCharacters(in: .whitespaces).isEmpty
+        let ref = foodRefID.trimmingCharacters(in: .whitespaces)
+        self.isManual = ref.isEmpty || ref.hasPrefix("barcode:")
         self.isNew = false
         self.editsRememberedFoodOnly = false
 
@@ -279,6 +282,29 @@ struct FoodEntryEdit: Equatable {
     /// the amount is a real number — there is nothing to hold them against
     /// otherwise. A new entry's are per 100 g, which needs no amount.
     var canEditMacros: Bool { isManual && (typesPer100g || amount != nil) }
+
+    /// The line under the macros card's title, in the terms its fields are in.
+    var macrosHint: String {
+        if isNew {
+            return "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fibre can be left blank — blank stays unknown, not zero."
+        }
+        if editsRememberedFoodOnly {
+            return "As the label reads them per 100\u{00A0}g. Fibre can be left blank — blank stays unknown, not zero."
+        }
+        if isManual { return "Totals for the amount above. Fibre can be left blank — blank stays unknown, not zero." }
+        return "From the food's own data, scaled to the amount above."
+    }
+
+    /// The line over saturated fat, sugar and sodium, likewise.
+    var detailsHint: String {
+        if typesPer100g {
+            return "Saturated fat, sugar and sodium, per 100\u{00A0}g like the macros. No goals — blank stays unknown, not zero."
+        }
+        if isManual {
+            return "Saturated fat, sugar and sodium, as totals for the amount above. No goals — blank stays unknown, not zero."
+        }
+        return "From the food's own data, scaled to the amount above. No goals."
+    }
 
     /// What the field shows: the text as typed, or the total at this amount —
     /// or, for a new entry, the value per 100 g.

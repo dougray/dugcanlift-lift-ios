@@ -33,6 +33,9 @@ struct FoodEntryEditorView: View {
     private var onSaved: () -> Void = {}
     /// The code of the remembered food being edited; nil in every other mode.
     private var rememberedCode: String?
+    /// The digits a new entry's barcode was read as, leading zeros kept, for
+    /// showing only; `edit.barcode` holds the normalised code it is saved under.
+    private var printedBarcode: String?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -58,13 +61,15 @@ struct FoodEntryEditorView: View {
 
     /// A food that is not in the database, added by hand: name (from the search
     /// query, when there was one), meal, amount, and macros per 100 g.
-    /// With a `barcode` (normalised), saving also remembers the food against it.
+    /// With a `barcode`, saving also remembers the food against its normalised
+    /// code, and the form shows the code as it was read.
     init(newNamed name: String, mealType: MealType, preferredUnit: ServingUnit,
-         barcode: String? = nil, onSaved: @escaping () -> Void = {}) {
+         barcode: Barcode? = nil, onSaved: @escaping () -> Void = {}) {
         self.entry = nil
         self.onSaved = onSaved
+        self.printedBarcode = barcode?.printed
         var edit = FoodEntryEdit(newNamed: name, mealType: mealType, preferredUnit: preferredUnit)
-        edit.barcode = barcode
+        edit.barcode = barcode?.normalised
         _edit = State(initialValue: edit)
     }
 
@@ -186,7 +191,7 @@ struct FoodEntryEditorView: View {
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                         .accessibilityLabel("Barcode")
-                        // Digit by digit, as it is printed, not as one number.
+                        // Digit by digit, not as one number.
                         .accessibilityValue(Text(code).speechSpellsOutCharacters())
                 }
             }
@@ -204,10 +209,11 @@ struct FoodEntryEditorView: View {
         }
     }
 
-    /// Read-only: the code a new entry was scanned against, or the one whose
-    /// remembered food is being edited.
+    /// Read-only: the code a new entry was scanned against, as read, or the one
+    /// whose remembered food is being edited. That one is shown as stored,
+    /// normalised: the digits it was first read as are not kept.
     private var barcodeShown: String? {
-        rememberedCode ?? (edit.isNew ? edit.barcode : nil)
+        rememberedCode ?? (edit.isNew ? printedBarcode : nil)
     }
 
     /// The field says "Amount, grams" itself, so the title and the unit beside
@@ -252,15 +258,13 @@ struct FoodEntryEditorView: View {
     @ViewBuilder
     private var macrosSection: some View {
         if edit.isNew || edit.editsRememberedFoodOnly {
-            card("Macros per 100\u{00A0}g", hint: edit.isNew
-                 ? "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fibre can be left blank — blank stays unknown, not zero."
-                 : "As the label reads them per 100\u{00A0}g. Fibre can be left blank — blank stays unknown, not zero.") {
+            card("Macros per 100\u{00A0}g", hint: edit.macrosHint) {
                 // Two to a row: "Protein (g/100g)" does not fit four across.
                 macroField(.calories)
                 fieldGrid([.protein, .carbs, .fat, .fiber])
             }
         } else if edit.isManual {
-            card("Macros", hint: "Totals for the amount above. Fibre can be left blank — blank stays unknown, not zero.") {
+            card("Macros", hint: edit.macrosHint) {
                 // Calories on its own row and the four gram figures under it,
                 // as the recipe editor lays them out.
                 macroField(.calories)
@@ -272,7 +276,7 @@ struct FoodEntryEditorView: View {
                 }
             }
         } else if let nutrition = edit.nutrition {
-            card("Macros", hint: "From the food's own data, scaled to the amount above.") {
+            card("Macros", hint: edit.macrosHint) {
                 // Truncated with Int(), as the log row and FoodSearchView's
                 // preview show them, so the same entry reads the same here.
                 Text("\(Int(nutrition.calories)) kcal")
@@ -319,12 +323,12 @@ struct FoodEntryEditorView: View {
 
             if showingMoreNutrients {
                 if edit.isNew || edit.editsRememberedFoodOnly {
-                    Text("Saturated fat, sugar and sodium, per 100\u{00A0}g like the macros. No goals — blank stays unknown, not zero.")
+                    Text(edit.detailsHint)
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                     fieldGrid([.saturatedFat, .sugar, .sodium])
                 } else if edit.isManual {
-                    Text("Saturated fat, sugar and sodium, as totals for the amount above. No goals — blank stays unknown, not zero.")
+                    Text(edit.detailsHint)
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                     HStack(alignment: .top, spacing: 10) {
@@ -334,7 +338,7 @@ struct FoodEntryEditorView: View {
                     }
                 } else if let nutrition = edit.nutrition,
                           NutrientDetailsDisplay.entryLine(nutrition) != nil {
-                    Text("From the food's own data, scaled to the amount above. No goals.")
+                    Text(edit.detailsHint)
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                     HStack(spacing: 14) {

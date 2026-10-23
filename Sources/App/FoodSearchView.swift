@@ -80,15 +80,16 @@ struct FoodSearchView: View {
         case byHand(name: String)
         /// The editor for a remembered food, by its code.
         case remembered(code: String)
-        /// A food typed in by hand against a barcode nothing knows yet
-        /// (normalised); saving logs it and remembers it.
-        case byBarcode(code: String)
+        /// A food typed in by hand against a barcode nothing knows yet; saving
+        /// logs it and remembers it under the normalised code, and the form
+        /// shows the digits as read.
+        case byBarcode(Barcode)
 
         var id: String {
             switch self {
             case .byHand(let name): return "hand:" + name
             case .remembered(let code): return "remembered:" + code
-            case .byBarcode(let code): return "barcode:" + code
+            case .byBarcode(let code): return "barcode:" + code.normalised
             }
         }
     }
@@ -120,6 +121,14 @@ struct FoodSearchView: View {
     private enum TypedCode: Equatable {
         case remembered(LoggableFood)
         case unknown(Barcode)
+
+        /// The code it answers for, normalised.
+        var normalised: String? {
+            switch self {
+            case .remembered(let food): return food.rememberedCode
+            case .unknown(let code): return code.normalised
+            }
+        }
     }
 
     /// Read fresh each time, so a tap after coming back from Settings sees
@@ -260,7 +269,7 @@ struct FoodSearchView: View {
     /// The by-hand form, with the code attached and no name yet.
     private func enter(_ code: Barcode) {
         loggedNewFood = false
-        sheet = .byBarcode(code: code.normalised)
+        sheet = .byBarcode(code)
     }
 
     // MARK: Search
@@ -401,7 +410,9 @@ struct FoodSearchView: View {
             .readableListMargins()
         case .unknown(let code):
             ContentUnavailableView {
-                Label(trimmedQuery, systemImage: "barcode")
+                Label(code.printed, systemImage: "barcode")
+                    // Digit by digit, as the form's Barcode line reads it.
+                    .speechSpellsOutCharacters()
             } description: {
                 Text(BarcodeLookup.notFoundMessage)
             } actions: {
@@ -435,15 +446,23 @@ struct FoodSearchView: View {
     private func search() async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         // A barcode is looked up, not searched for by name; a number that
-        // fails its check digit falls through to an ordinary search.
-        lookUpTypedCode()
-        if typedCode != nil {
+        // fails its check digit falls through to an ordinary search. The
+        // lookup waits out the same debounce as a name search, so an 8- or
+        // 12-digit start of a longer code never says "doesn't know" mid-typing.
+        // A different code, or none, stops showing the last one's answer now;
+        // the same code (back from the amount step) is looked up at once.
+        let digits = BarcodeQuery.barcodeDigits(in: query)
+        let code = digits.flatMap { try? Barcode.read($0).get() }
+        if code == nil || code?.normalised != typedCode?.normalised {
+            typedCode = nil
+        } else {
+            lookUpTypedCode()
             results = []
             loadFailed = false
             searching = false
             return
         }
-        guard trimmed.count >= 2 else {
+        guard code != nil || trimmed.count >= 2 else {
             results = []
             loadFailed = false
             searching = false
@@ -453,6 +472,16 @@ struct FoodSearchView: View {
         searching = true
         try? await Task.sleep(for: .milliseconds(200))
         guard !Task.isCancelled else { return }
+
+        if code != nil {
+            lookUpTypedCode()
+            if typedCode != nil {
+                results = []
+                loadFailed = false
+                searching = false
+                return
+            }
+        }
 
         do {
             let found = try await ReferenceDatabase.shared.searchFoods(trimmed)

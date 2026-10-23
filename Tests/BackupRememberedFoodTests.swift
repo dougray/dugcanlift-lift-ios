@@ -126,6 +126,54 @@ final class BackupRememberedFoodTests: XCTestCase {
         XCTAssertNotNil(BackupStore.storedForeignData()["steps"])
     }
 
+    /// The guard against a held `rememberedBarcodes` copy is that section's
+    /// alone. A held `outdoor` copy is removed only once the store has saved it
+    /// (`absorbPreservedOutdoor`), so a restore after a failed save must keep it
+    /// for the next try, exactly as before remembered foods existed.
+    func testOnlyAHeldRememberedFoodsCopyIsDropped() {
+        let held: [String: Any] = [
+            "outdoor": [["id": "run-1"]],
+            "rememberedBarcodes": [["code": "36000291452"]],
+            "steps": ["2026-10-01": 9000]
+        ]
+        let kept = BackupStore.retainedHeldData(held)
+        XCTAssertNotNil(kept["outdoor"], "a held outdoor copy waits for its absorb to save")
+        XCTAssertNotNil(kept["steps"])
+        XCTAssertNil(kept["rememberedBarcodes"])
+        XCTAssertEqual(BackupStore.droppedHeldSections, ["rememberedBarcodes"])
+    }
+
+    /// The file holds whole milliseconds and the store holds sub-millisecond
+    /// dates, so restoring this phone's own backup must not count an unchanged
+    /// food as a newer correction.
+    func testRestoringAnUnchangedFoodComparesToTheMillisecond() throws {
+        let phone = makeContext()
+        let when = Date(timeIntervalSince1970: 1_000.0006)
+        RememberedFoods.remember(code: "36000291452", name: "Corn flakes", per100g: flakes, in: phone, now: when)
+        let file = try BackupStore.build(context: phone, defaults: isolatedDefaults("\(#function).build"))
+        let result = BackupStore.restore(context: phone, from: file, defaults: isolatedDefaults())
+        XCTAssertEqual(result.added, 0, "nothing in the file is newer than what the phone has")
+        XCTAssertEqual(RememberedFoods.find(code: "36000291452", in: phone)?.updatedAt, when)
+    }
+
+    /// Numbers are read strictly: a JSON boolean or a string is not a nutrient.
+    func testABooleanOrAStringIsNotANumber() throws {
+        let file = try JSONSerialization.data(withJSONObject: [
+            "v": 1, "app": "lift", "saved": "2026-10-23",
+            "data": ["rememberedBarcodes": [
+                ["code": "36000291452", "name": "Corn flakes", "updatedAt": 1_000_000,
+                 "per100g": ["calories": 357, "proteinG": 7, "carbsG": 84, "fatG": 0.4,
+                             "fiberG": true, "sodiumMg": "12"]]
+            ]]
+        ] as [String: Any])
+        let phone = makeContext()
+        XCTAssertTrue(BackupStore.restore(context: phone, from: file, defaults: isolatedDefaults()).ok)
+        let food = try XCTUnwrap(RememberedFoods.find(code: "36000291452", in: phone))
+        XCTAssertNil(food.per100g.fiberG, "true is not 1 g of fibre")
+        XCTAssertNil(food.per100g.sodiumMg, "a string is not a number here")
+        XCTAssertEqual(food.per100g.calories, 357)
+    }
+
     /// Another build may write a code as scanned rather than normalised. It is
     /// stored under the normalised code and meets the one already remembered,
     /// newest `updatedAt` winning, whether the file wrote epoch ms as an

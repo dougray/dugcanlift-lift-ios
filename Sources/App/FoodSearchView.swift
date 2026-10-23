@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftData
 import SwiftUI
 import WidgetKit
@@ -67,6 +68,9 @@ struct FoodSearchView: View {
     @State private var scanning = false
     /// What a scan found, held until the cover has gone.
     @State private var scanOutcome: BarcodeLookup.Outcome?
+    /// Set when the camera couldn't start or went away mid-scan; said once the
+    /// cover has gone.
+    @State private var scannerLostCamera = false
     @State private var scanMessage: ScanMessage?
     /// What the typed query is, when it is a barcode; nil for a name search.
     @State private var typedCode: TypedCode?
@@ -118,9 +122,12 @@ struct FoodSearchView: View {
         case unknown(Barcode)
     }
 
+    /// Read fresh each time, so a tap after coming back from Settings sees
+    /// the camera as it is now.
     private var scanAvailability: ScanAvailability {
         ScanAvailability.current(isSupported: DataScannerViewController.isSupported,
-                                 isAvailable: DataScannerViewController.isAvailable)
+                                 isAvailable: DataScannerViewController.isAvailable,
+                                 cameraAccess: .init(AVCaptureDevice.authorizationStatus(for: .video)))
     }
 
     private var servingUnit: ServingUnit { ServingUnit(rawValue: servingUnitRaw) ?? .grams }
@@ -194,6 +201,9 @@ struct FoodSearchView: View {
             BarcodeScannerView { raw, symbology in
                 scanOutcome = BarcodeLookup.look(up: raw, symbology: symbology, in: context)
                 scanning = false
+            } onUnavailable: {
+                scannerLostCamera = true
+                scanning = false
             }
             .ignoresSafeArea()
             .navigationTitle("Scan a barcode")
@@ -207,9 +217,20 @@ struct FoodSearchView: View {
         .liftAppearance()
     }
 
+    /// The first tap on a phone never asked asks for the camera; nothing else
+    /// is presented while the system's prompt is up, and the answer decides.
     private func startScan() {
         switch scanAvailability {
         case .ready: scanning = true
+        case .needsPermission:
+            Task { @MainActor in
+                _ = await AVCaptureDevice.requestAccess(for: .video)
+                if scanAvailability == .ready {
+                    scanning = true
+                } else {
+                    scanMessage = .cameraUnavailable
+                }
+            }
         case .unavailable: scanMessage = .cameraUnavailable
         case .unsupported: break
         }
@@ -218,6 +239,11 @@ struct FoodSearchView: View {
     /// Runs once the cover has gone, so whatever comes next is the only
     /// presentation in flight.
     private func scannerDismissed() {
+        if scannerLostCamera {
+            scannerLostCamera = false
+            scanMessage = .cameraUnavailable
+            return
+        }
         guard let outcome = scanOutcome else { return }
         scanOutcome = nil
         switch outcome {

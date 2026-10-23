@@ -29,8 +29,8 @@ import LiftCore
 /// optional non-optional. Any of those needs a `.custom` stage with a real
 /// `willMigrate`/`didMigrate`, not another `.lightweight`.
 ///
-/// When the shape changes again: add a `V9`, add a stage from `V8` to `V9`,
-/// and point `LiftStore.schema` at the new version. That includes a change to
+/// When the shape changes again: add the next version, add a stage from the
+/// current one to it, and point `LiftStore.schema` at the new version. That includes a change to
 /// a struct a model stores, such as `NutritionFacts` — see
 /// `LiftPreSaturatedFatShapes`. Never edit a version that
 /// has shipped — a store in the wild was written against it. (Freezing an

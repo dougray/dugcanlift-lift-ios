@@ -156,6 +156,30 @@ final class BackupRememberedFoodTests: XCTestCase {
         XCTAssertEqual(RememberedFoods.find(code: "36000291452", in: phone)?.updatedAt, when)
     }
 
+    /// A negative amount is not a nutrient: a row with a negative required
+    /// macro is not a food, and a negative optional one is unknown.
+    func testANegativeMacroIsRefusedAndANegativeOptionalIsUnknown() throws {
+        let file = try JSONSerialization.data(withJSONObject: [
+            "v": 1, "app": "lift", "saved": "2026-10-23",
+            "data": ["rememberedBarcodes": [
+                ["code": "36000291452", "name": "Negative protein", "updatedAt": 1_000_000,
+                 "per100g": ["calories": 357, "proteinG": -7, "carbsG": 84, "fatG": 0.4]],
+                ["code": "12345000065", "name": "Negative sodium", "updatedAt": 1_000_000,
+                 "per100g": ["calories": 357, "proteinG": 7, "carbsG": 84, "fatG": 0,
+                             "fiberG": -3, "sodiumMg": -12, "sugarG": 4, "saturatedFatG": -0.1]]
+            ]]
+        ] as [String: Any])
+        let phone = makeContext()
+        XCTAssertTrue(BackupStore.restore(context: phone, from: file, defaults: isolatedDefaults()).ok)
+        XCTAssertNil(RememberedFoods.find(code: "36000291452", in: phone), "a negative macro is not a food")
+        let food = try XCTUnwrap(RememberedFoods.find(code: "12345000065", in: phone))
+        XCTAssertEqual(food.per100g.fatG, 0, "zero is a number")
+        XCTAssertNil(food.per100g.fiberG)
+        XCTAssertNil(food.per100g.sodiumMg)
+        XCTAssertNil(food.per100g.saturatedFatG)
+        XCTAssertEqual(food.per100g.sugarG, 4)
+    }
+
     /// Numbers are read strictly: a JSON boolean or a string is not a nutrient.
     func testABooleanOrAStringIsNotANumber() throws {
         let file = try JSONSerialization.data(withJSONObject: [

@@ -60,4 +60,12 @@ final class ScanAvailabilityTests: XCTestCase {
         XCTAssertEqual(ScanAvailability.unavailableMessage, "LIFT can't use the camera right now. You can allow it in Settings.")
         XCTAssertEqual(BarcodeLookup.notFoundMessage, "LIFT doesn't know this barcode yet. Enter it once and LIFT will remember it.")
     }
+
+    /// The string iOS shows when LIFT first asks for the camera, as the built
+    /// app carries it (the tests are hosted by the app). Shared wording across
+    /// the three LIFT builds: it changes in all of them or in none.
+    func testTheCameraUsageStringIsTheSharedWording() {
+        XCTAssertEqual(Bundle.main.infoDictionary?["NSCameraUsageDescription"] as? String,
+                       "LIFT reads food barcodes with the camera. What the camera sees stays on your iPhone.")
+    }
 }

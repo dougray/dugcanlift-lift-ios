@@ -174,6 +174,47 @@ final class BackupRememberedFoodTests: XCTestCase {
         XCTAssertEqual(food.per100g.calories, 357)
     }
 
+    private func file(updatedAt: Any, rememberedAt: Any? = nil) throws -> Data {
+        var row: [String: Any] = [
+            "code": "36000291452", "name": "Corrupt", "updatedAt": updatedAt,
+            "per100g": ["calories": 1, "proteinG": 1, "carbsG": 1, "fatG": 1]
+        ]
+        rememberedAt.map { row["rememberedAt"] = $0 }
+        return try JSONSerialization.data(withJSONObject: [
+            "v": 1, "app": "lift", "saved": "2026-10-23", "data": ["rememberedBarcodes": [row]]
+        ] as [String: Any])
+    }
+
+    /// An epoch-ms value past JavaScript's last date (8.64e15) is no date: it
+    /// reads as missing, so it can neither trap a restore nor win a merge.
+    func testAnImpossibleUpdatedAtForARememberedCodeChangesNothing() throws {
+        let phone = makeContext()
+        let when = Date(timeIntervalSince1970: 1_000)
+        RememberedFoods.remember(code: "36000291452", name: "Kept", per100g: flakes, in: phone, now: when)
+        let result = BackupStore.restore(context: phone, from: try file(updatedAt: 1e300),
+                                         defaults: isolatedDefaults())
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(result.added, 0)
+        let food = try XCTUnwrap(RememberedFoods.find(code: "36000291452", in: phone))
+        XCTAssertEqual(food.name, "Kept")
+        XCTAssertEqual(food.updatedAt, when)
+    }
+
+    func testAnImpossibleDateOnANewCodeIsStoredAsMissingAndExportsSanely() throws {
+        let phone = makeContext()
+        XCTAssertTrue(BackupStore.restore(context: phone, from: try file(updatedAt: 1e300, rememberedAt: 1e300),
+                                          defaults: isolatedDefaults()).ok)
+        let food = try XCTUnwrap(RememberedFoods.find(code: "36000291452", in: phone))
+        XCTAssertEqual(food.updatedAt, Date(timeIntervalSince1970: 0), "a bad updatedAt reads as oldest")
+        XCTAssertEqual(food.rememberedAt, food.updatedAt, "a bad rememberedAt falls back as a missing one does")
+
+        let backup = try BackupStore.build(context: phone, defaults: isolatedDefaults("\(#function).build"))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        let row = try XCTUnwrap(((json["data"] as? [String: Any])?["rememberedBarcodes"] as? [[String: Any]])?.first)
+        XCTAssertEqual(row["updatedAt"] as? Int, 0)
+        XCTAssertEqual(row["rememberedAt"] as? Int, 0)
+    }
+
     /// Another build may write a code as scanned rather than normalised. It is
     /// stored under the normalised code and meets the one already remembered,
     /// newest `updatedAt` winning, whether the file wrote epoch ms as an

@@ -829,7 +829,9 @@ enum BackupStore {
     /// spelling; a code that fails the check digit is skipped. So is a row
     /// without a name and the four macros. An optional nutrient, brand or
     /// serving the row omits is nil -- on an update too, since the newer row
-    /// is the whole food. Epoch ms are read as an integer or a double. Fetches
+    /// is the whole food. Epoch ms are read as an integer or a double, and an
+    /// impossible one as missing (`epochDate`): a bad `updatedAt` is oldest, a
+    /// bad `rememberedAt` falls back to `updatedAt`. Fetches
     /// before writing: `code` is unique, and inserting a second object with it
     /// would replace the first rather than merge.
     ///
@@ -847,7 +849,7 @@ enum BackupStore {
                 let calories = number(p["calories"]), let protein = number(p["proteinG"]),
                 let carbs = number(p["carbsG"]), let fat = number(p["fatG"])
             else { continue }
-            let updatedAt = dateMs(number(row["updatedAt"])) ?? Date(timeIntervalSince1970: 0)
+            let updatedAt = epochDate(row["updatedAt"]) ?? Date(timeIntervalSince1970: 0)
             let per100g = NutritionFacts(calories: calories, proteinG: protein, carbsG: carbs, fatG: fat,
                                          fiberG: number(p["fiberG"]), sugarG: number(p["sugarG"]),
                                          sodiumMg: number(p["sodiumMg"]), saturatedFatG: number(p["saturatedFatG"]))
@@ -870,7 +872,7 @@ enum BackupStore {
                 existing.servingGrams = servingGrams
                 existing.updatedAt = updatedAt
             } else {
-                let rememberedAt = dateMs(number(row["rememberedAt"])) ?? updatedAt
+                let rememberedAt = epochDate(row["rememberedAt"]) ?? updatedAt
                 context.insert(RememberedFood(code: normalised, name: name, brand: brand, per100g: per100g,
                                               servingGrams: servingGrams,
                                               rememberedAt: rememberedAt, updatedAt: updatedAt))
@@ -893,6 +895,15 @@ enum BackupStore {
             : trimmed
         guard case .success(let code) = Barcode.read(padded) else { return nil }
         return code
+    }
+
+    /// An epoch-ms date, or nil for one that is absent or impossible: past
+    /// JavaScript's last date (8.64e15 ms either side of 1970), or not finite.
+    /// Read as missing, so a corrupt file can neither trap `epochMs`'s `Int`
+    /// conversion here or at the next `build`, nor win a newest-wins merge.
+    private static func epochDate(_ value: Any?) -> Date? {
+        guard let ms = number(value), abs(ms) <= 8.64e15 else { return nil }
+        return Date(timeIntervalSince1970: ms / 1000)
     }
 
     /// A number, read strictly: `finite`, so a JSON boolean or a string is not

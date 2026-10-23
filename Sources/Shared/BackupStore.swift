@@ -323,10 +323,39 @@ enum BackupStore {
             ]
         }
 
+        // ---- remembered foods ----
+        // BACKUP-FORMAT.md `rememberedBarcodes[]`, one row per food entered
+        // against a barcode: `code` (normalised digits), `name`, `brand` and
+        // `servingGrams` each omitted when nil, `per100g` in the `food[]`
+        // spellings with every optional nutrient omitted when unknown (never
+        // 0), and `rememberedAt` / `updatedAt` in epoch ms. Omitted entirely
+        // when there are none. Never in a share to a coach. Restored by
+        // `restoreRememberedFoods`, newest `updatedAt` winning.
+        let remembered = try context.fetch(FetchDescriptor<RememberedFood>(sortBy: [SortDescriptor(\.code)]))
+        if !remembered.isEmpty {
+            data["rememberedBarcodes"] = remembered.map { food -> [String: Any] in
+                var row: [String: Any] = [
+                    "code": food.code,
+                    "name": food.name,
+                    "per100g": nutritionRecord(food.per100g),
+                    "rememberedAt": epochMs(food.rememberedAt),
+                    "updatedAt": epochMs(food.updatedAt)
+                ]
+                food.brand.map { row["brand"] = $0 }
+                food.servingGrams.map { row["servingGrams"] = $0 }
+                return row
+            }
+        }
+
         // A section another client wrote that this app does not store goes back
         // out as it came in. Added last-wins-never: it can only fill a key this
-        // app did not write, so a preserved copy cannot roll back real data.
-        for (section, value) in storedForeignData() where data[section] == nil && !neverBackedUp.contains(section) {
+        // app did not write, so a preserved copy cannot roll back real data. A
+        // section this app does store is never carried from that copy: one held
+        // before the app stored it would otherwise stand in for the store's own
+        // whenever the store had none, a backup written from data this phone
+        // does not hold. (`outdoor` is absorbed into the store above instead.)
+        for (section, value) in storedForeignData()
+        where data[section] == nil && !storedSections.contains(section) && !neverBackedUp.contains(section) {
             data[section] = value
         }
 
@@ -587,6 +616,7 @@ enum BackupStore {
         if restoredPlanMealsChanged { restoredPlanMeals.save(to: defaults) }
 
         added += restoreOutdoor(payload["outdoor"], iosExtras: ios["outdoor"] as? [String: Any] ?? [:], context: context)
+        added += restoreRememberedFoods(payload["rememberedBarcodes"], context: context)
         // Before the foreign sections are gathered below, so a copy an earlier
         // build preserved is stored, not carried forward again.
         absorbPreservedOutdoor(context: context)
@@ -595,7 +625,9 @@ enum BackupStore {
         // Android's `routines`, anything a newer client adds -- is kept and
         // written back out, exactly like ext. Without it, restoring an Android
         // backup here and saving again silently dropped every routine.
-        var foreignData = storedForeignData()
+        // A stored section held from before this app stored it is dropped, not
+        // kept: see `build`.
+        var foreignData = storedForeignData().filter { !storedSections.contains($0.key) }
         for (section, value) in payload where !storedSections.contains(section) && !neverBackedUp.contains(section) {
             foreignData[section] = value
         }
@@ -651,7 +683,8 @@ enum BackupStore {
     /// carries is preserved rather than dropped. See BACKUP-FORMAT.md, "Unknown
     /// sections".
     static let storedSections: Set<String> = [
-        "food", "workouts", "weights", "coach", "goal", "settings", "recipes", "plan", "outdoor"
+        "food", "workouts", "weights", "coach", "goal", "settings", "recipes", "plan", "outdoor",
+        "rememberedBarcodes"
     ]
 
     /// Never written and never preserved, by the format: ticks mark one week's
@@ -768,6 +801,87 @@ enum BackupStore {
         } else if let encoded = try? JSONSerialization.data(withJSONObject: foreign) {
             UserDefaults.standard.set(encoded, forKey: foreignDataKey)
         }
+    }
+
+    // MARK: - Remembered foods
+
+    /// Merges a file's `rememberedBarcodes[]` (BACKUP-FORMAT.md; the shape is
+    /// `build`'s) into the store, by code, newest `updatedAt` winning: an older
+    /// backup must never overwrite a correction made since, and an equal one
+    /// changes nothing. A file without the section changes nothing.
+    ///
+    /// A code is read through `Barcode.read` (see `backupCode`), so one written as
+    /// scanned ("0036000291452") is stored under, and meets, its normalised
+    /// spelling; a code that fails the check digit is skipped. So is a row
+    /// without a name and the four macros. An optional nutrient, brand or
+    /// serving the row omits is nil -- on an update too, since the newer row
+    /// is the whole food. Epoch ms are read as an integer or a double. Fetches
+    /// before writing: `code` is unique, and inserting a second object with it
+    /// would replace the first rather than merge.
+    ///
+    /// Returns how many foods were added or updated. Does not save; `restore`
+    /// does, once.
+    @discardableResult
+    static func restoreRememberedFoods(_ section: Any?, context: ModelContext) -> Int {
+        guard let rows = section as? [Any] else { return 0 }
+        var changed = 0
+        for case let row as [String: Any] in rows {
+            guard
+                let rawCode = row["code"] as? String, let code = backupCode(rawCode),
+                let name = (row["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+                let p = row["per100g"] as? [String: Any],
+                let calories = number(p["calories"]), let protein = number(p["proteinG"]),
+                let carbs = number(p["carbsG"]), let fat = number(p["fatG"])
+            else { continue }
+            let updatedAt = dateMs(number(row["updatedAt"])) ?? Date(timeIntervalSince1970: 0)
+            let per100g = NutritionFacts(calories: calories, proteinG: protein, carbsG: carbs, fatG: fat,
+                                         fiberG: number(p["fiberG"]), sugarG: number(p["sugarG"]),
+                                         sodiumMg: number(p["sodiumMg"]), saturatedFatG: number(p["saturatedFatG"]))
+            let brand = ((row["brand"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
+                .flatMap { $0.isEmpty ? nil : $0 }
+            let servingGrams = number(row["servingGrams"]).flatMap { $0 > 0 ? $0 : nil }
+
+            // Bound first: `#Predicate` captures values, not a key path into `code`.
+            let normalised = code.normalised
+            var descriptor = FetchDescriptor<RememberedFood>(predicate: #Predicate { $0.code == normalised })
+            descriptor.fetchLimit = 1
+            if let existing = try? context.fetch(descriptor).first {
+                guard updatedAt > existing.updatedAt else { continue }
+                existing.name = name
+                existing.brand = brand
+                existing.per100g = per100g
+                existing.servingGrams = servingGrams
+                existing.updatedAt = updatedAt
+            } else {
+                let rememberedAt = dateMs(number(row["rememberedAt"])) ?? updatedAt
+                context.insert(RememberedFood(code: normalised, name: name, brand: brand, per100g: per100g,
+                                              servingGrams: servingGrams,
+                                              rememberedAt: rememberedAt, updatedAt: updatedAt))
+            }
+            changed += 1
+        }
+        return changed
+    }
+
+    /// A file's `code`, normalised. The file holds codes already normalised,
+    /// and normalising strips leading zeros ("36000291452" is 11 digits), which
+    /// `Barcode.read` would refuse as no barcode length. Leading zeros do not
+    /// change the GS1 check sum, so an all-digit code is padded back to 14
+    /// before reading: the inverse of the strip, with the check digit still
+    /// checked. A code written as scanned reads as it is.
+    private static func backupCode(_ raw: String) -> Barcode? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let padded = !trimmed.isEmpty && trimmed.count < 14 && trimmed.allSatisfy { $0.isASCII && $0.isNumber }
+            ? String(repeating: "0", count: 14 - trimmed.count) + trimmed
+            : trimmed
+        guard case .success(let code) = Barcode.read(padded) else { return nil }
+        return code
+    }
+
+    /// `double`, finite only: a remembered food is written back out by
+    /// JSONSerialization, which cannot write NaN or infinity.
+    private static func number(_ value: Any?) -> Double? {
+        double(value).flatMap { $0.isFinite ? $0 : nil }
     }
 
     // MARK: - Small conversions

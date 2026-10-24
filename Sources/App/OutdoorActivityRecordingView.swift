@@ -9,10 +9,10 @@ import LiftCore
 ///
 /// Presentation is owned entirely by the caller: this view reports a
 /// finished activity via `onFinish` and otherwise dismisses itself (Cancel).
-/// It never presents the review screen itself — see `OutdoorActivityListView`,
-/// which presents review as a sibling `.fullScreenCover`, not nested inside
-/// this one, so finishing a run can never leave a stale recording screen
-/// sitting underneath.
+/// It never presents the review screen itself — see `OutdoorDaySection` in
+/// TrainView.swift, which presents review as a sibling `.fullScreenCover`, not
+/// nested inside this one, so finishing a run can never leave a stale
+/// recording screen sitting underneath.
 ///
 /// The recording itself -- tracker, start time, lifecycle -- is the caller's
 /// `OutdoorRecording`, not this view's `@State`: switching light and dark

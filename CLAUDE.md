@@ -156,15 +156,21 @@ points. There is no map behind it, so no tile server learns where the lifter
 runs. Do not bring MapKit back for a nicer backdrop; the distance and time beside
 each card carry the facts.
 
-**A recording ends on Cancel or Finish, never on `onDisappear`.** Switching
-light and dark mid-run (a phone on Auto does it at sunset) rebuilt the
-recording screen with fresh `@State`: its `onDisappear` stopped the tracker, the
-new view's `onAppear` started an empty one, and the run was gone. So the
+**A recording ends on Cancel or Finish, never on `onDisappear`.** Under the
+paged-`TabView` shell (until f0968df, 2026-10-08), switching light and dark
+mid-run (a phone on Auto does it at sunset) rebuilt the recording screen with
+fresh `@State`: its `onDisappear` stopped the tracker, the new view's
+`onAppear` started an empty one, and the run was gone. Current main no longer
+rebuilds the screen on that switch, but nothing promises it never will. So the
 recording -- tracker, start time, lifecycle -- is an `OutdoorRecording` held by
 the presenter (`OutdoorDaySection`) and handed to the cover as its item, and
 `RecordingLifecycle` decides what an event means: the first appear starts,
 disappear and any later appear do nothing, Cancel / Finish / the cover's
 `onDismiss` stop. Never start or stop location from a view's lifecycle alone.
+**This relies on `OutdoorDaySection` keeping its identity while a recording is
+presented**: never `.id(date)` it, never put it behind an `if` or `switch`, and
+never a shell that destroys tabs -- a new `OutdoorDaySection` is a new `@State`,
+and the run goes with the old one.
 
 **Light and dark both exist, and System is the default.** `Theme`'s tokens
 resolve per interface style (LiftKit 1.7.0). Apply `.liftAppearance()` — never

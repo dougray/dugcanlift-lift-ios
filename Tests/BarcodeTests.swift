@@ -80,6 +80,32 @@ final class BarcodeTests: XCTestCase {
                        "a UPC-E shows the eight digits on the pack")
     }
 
+    /// Vision reports a UPC-A as EAN-13 with a leading "0", so a 12-digit US
+    /// packet would otherwise show 13 digits. Only the scanner saying EAN-13
+    /// trims it; typed digits are shown exactly as typed. Equality and lookup
+    /// are on `normalised` and do not move.
+    func testAScannedUPCAIsShownAsPrintedOnThePacket() throws {
+        XCTAssertEqual(Barcode.printedDigits(payload: "0036000291452", symbology: .ean13), "036000291452")
+        let scanned = try Barcode.read("0036000291452", symbology: .ean13).get()
+        XCTAssertEqual(scanned.printed, "036000291452")
+        XCTAssertEqual(scanned.normalised, "36000291452")
+        XCTAssertEqual(scanned, try Barcode.read("036000291452").get())
+        XCTAssertEqual(try Barcode.read("0036000291452", symbology: .ean13).get().normalised,
+                       try Barcode.read("0036000291452").get().normalised, ".ean13 reads like nil")
+    }
+
+    func testARealEAN13AndTypedCodesAreShownAsGiven() throws {
+        XCTAssertEqual(Barcode.printedDigits(payload: "4006381333931", symbology: .ean13), "4006381333931")
+        XCTAssertEqual(try Barcode.read("4006381333931", symbology: .ean13).get().printed, "4006381333931")
+        // Typed: no symbology, so exactly what was typed, 13 digits and all.
+        XCTAssertEqual(Barcode.printedDigits(payload: "0036000291452", symbology: nil), "0036000291452")
+        XCTAssertEqual(try Barcode.read("0036000291452").get().printed, "0036000291452")
+        // Not 13 digits, or not EAN-13: untouched.
+        XCTAssertEqual(Barcode.printedDigits(payload: "036000291452", symbology: .ean13), "036000291452")
+        XCTAssertEqual(Barcode.printedDigits(payload: "0036000291452", symbology: .upce), "0036000291452")
+        XCTAssertEqual(Barcode.printedDigits(payload: "01234565", symbology: .ean8), "01234565")
+    }
+
     func testTheMessageIsTheSharedWording() {
         XCTAssertEqual(Barcode.didNotScanCleanlyMessage, "That barcode didn't scan cleanly. Try again.")
     }

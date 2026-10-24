@@ -421,6 +421,10 @@ are stripped so UPC-A, EAN-13 and GTIN-14 spellings meet; all zeros fails. With
 no symbology an 8-digit code is EAN-8 only; UPC-E is expanded only when the
 scanner says it read UPC-E, because the same eight digits can be either and
 guessing would file a food under another product's code.
+What the form shows is `printed`: the digits as given, except that a scanned
+EAN-13 of thirteen digits starting "0" shows its last twelve
+(`Barcode.printedDigits`), because Vision reports a UPC-A that way and the packet
+prints twelve. Display only; `normalised` is the same either way.
 `Tests/Fixtures/barcodes.json` is hand-written and shared with the other
 builds. Never regenerate it from Swift: a fixture the code wrote proves only
 that the code agrees with itself.
@@ -450,6 +454,8 @@ watch's list are built from entries, so a forgotten food can still be offered
 there: the watch's food-logged path falls back to the newest entry's own stored
 values for a `barcode:` ref only (`FoodRefResolver.storedNutrition`). A deleted
 recipe or an unknown id stays a food this phone declines.
+A `barcode:` entry is corrected like any food you typed, and correcting it never
+changes the remembered food.
 
 **The wording is shared by three builds.** These strings are the same on iPhone,
 Android and web, so they change in all three or in none:

@@ -13,22 +13,29 @@ import LiftCore
 /// which presents review as a sibling `.fullScreenCover`, not nested inside
 /// this one, so finishing a run can never leave a stale recording screen
 /// sitting underneath.
+///
+/// The recording itself -- tracker, start time, lifecycle -- is the caller's
+/// `OutdoorRecording`, not this view's `@State`: switching light and dark
+/// rebuilt this view with fresh state mid-run, and a tracker held here was
+/// lost with it. This view only reports what happens to it
+/// (`RecordingLifecycle` decides what that means).
 struct OutdoorActivityRecordingView: View {
-    let activityType: OutdoorActivityType
+    let recording: OutdoorRecording
     let onFinish: (OutdoorActivity) -> Void
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
 
-    @State private var tracker = LocationTracker()
-    @State private var startedAt = Date.now
     @State private var now = Date.now
     @State private var confirmingDiscard = false
     @State private var saveFailed = false
 
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    private var activityType: OutdoorActivityType { recording.activityType }
+    private var tracker: LocationTracker { recording.tracker }
+    private var startedAt: Date { recording.startedAt }
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
     private var elapsed: TimeInterval { now.timeIntervalSince(startedAt) }
     private var distanceMeters: Double { OutdoorActivityMath.totalDistanceMeters(tracker.points) }
@@ -92,15 +99,12 @@ struct OutdoorActivityRecordingView: View {
         } message: {
             Text("Still recording, and the route so far is kept. Try Finish again.")
         }
-        .onAppear {
-            guard !tracker.isTracking else { return }
-            tracker.requestAuthorization()
-            tracker.start()
-            startedAt = .now
-        }
-        .onDisappear {
-            tracker.stop()
-        }
+        // Reported, not acted on: a disappear followed at once by an appear is
+        // SwiftUI rebuilding this screen (a light/dark switch does it), not the
+        // person leaving it. `RecordingLifecycle` starts the run on the first
+        // appear only and stops it only on Cancel, Finish or a real dismissal.
+        .onAppear { recording.handle(.appear) }
+        .onDisappear { recording.handle(.disappear) }
         .onReceive(tick) { now = $0 }
     }
 
@@ -147,7 +151,7 @@ struct OutdoorActivityRecordingView: View {
         context.insert(activity)
         do {
             try context.save()
-            tracker.stop()
+            recording.handle(.finish)
             onFinish(activity)
         } catch {
             // Do not call onFinish or dismiss on a failed save: leave the
@@ -160,7 +164,7 @@ struct OutdoorActivityRecordingView: View {
     }
 
     private func discard() {
-        tracker.stop()
+        recording.handle(.cancel)
         dismiss()
     }
 }

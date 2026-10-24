@@ -71,6 +71,8 @@ final class OutdoorRecording: Identifiable {
     private(set) var startedAt = Date.now
     private var lifecycle = RecordingLifecycle()
 
+    var phase: RecordingLifecycle.Phase { lifecycle.phase }
+
     init(activityType: OutdoorActivityType) {
         self.activityType = activityType
     }

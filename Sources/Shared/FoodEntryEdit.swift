@@ -43,8 +43,8 @@ import LiftCore
 /// Blank still stays blank and the same four are required: LIFT web's form
 /// reads a blank protein, carbs or fat as 0, and this does not copy that.
 /// `makeEntry()` builds what `FoodSearchView.log` would for a database food, with
-/// `foodRefID` empty — which is what makes it manual — and no brand. Reopened
-/// later it is an ordinary manual entry, edited as totals at its amount.
+/// `foodRefID` empty (or `barcode:<code>`, below) — which is what makes it
+/// manual — and no brand. Reopened later it is an ordinary manual entry, edited as totals at its amount.
 ///
 /// **A barcode.** A new entry may carry the barcode it was added against
 /// (`barcode`, `Barcode.normalised`). Then `makeEntry()` writes

@@ -9,8 +9,9 @@ import VisionKit
 /// leaving a dark screen with only Cancel on it.
 ///
 /// UPC-A has no symbology of its own here: Vision reports it as EAN-13 with a
-/// leading zero, which `Barcode` strips. UPC-E is the one that needs saying,
-/// because its eight digits are otherwise read as EAN-8 (ruling R1).
+/// leading zero. `Barcode` strips that for lookup, and EAN-13 is passed on so
+/// `Barcode.printedDigits` can show the packet's twelve (R17). UPC-E needs
+/// saying too, because its eight digits are otherwise read as EAN-8 (R1).
 struct BarcodeScannerView: UIViewControllerRepresentable {
     let onCode: (String, BarcodeSymbology?) -> Void
     let onUnavailable: () -> Void
@@ -93,7 +94,12 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
                 guard case .barcode(let barcode) = item, let value = barcode.payloadStringValue else { continue }
                 finished = true
                 scanner.stopScanning()
-                let symbology: BarcodeSymbology? = barcode.observation.symbology == .upce ? .upce : nil
+                let symbology: BarcodeSymbology?
+                switch barcode.observation.symbology {
+                case .upce: symbology = .upce
+                case .ean13: symbology = .ean13
+                default: symbology = nil
+                }
                 onCode(value, symbology)
                 return
             }

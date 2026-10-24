@@ -17,8 +17,9 @@ enum BarcodeProblem: Error, Equatable { case didNotScanCleanly }
 /// carries. `printed` is only for showing the code to the person.
 struct Barcode: Equatable, Hashable {
     let normalised: String
-    /// The digits as read, leading zeros kept (a UPC-E's eight): what the
-    /// pack shows. Never stored, compared or looked up.
+    /// The digits as the packet prints them, leading zeros kept (a UPC-E's
+    /// eight; a UPC-A's twelve even when the scanner called it EAN-13, see
+    /// `printedDigits`). Never stored, compared or looked up.
     let printed: String
 
     static let didNotScanCleanlyMessage = "That barcode didn't scan cleanly. Try again."
@@ -40,7 +41,17 @@ struct Barcode: Equatable, Hashable {
             guard let full = expandUPCE(digits) else { return .failure(.didNotScanCleanly) }
             return checked(full, printed: digits)
         }
-        return checked(digits, printed: digits)
+        return checked(digits, printed: printedDigits(payload: digits, symbology: symbology))
+    }
+
+    /// What to show for a payload. Vision reports a UPC-A as EAN-13 with a
+    /// leading "0", so when the scanner says EAN-13 and the payload is thirteen
+    /// digits starting "0", the packet's own twelve are the last twelve. Typed
+    /// digits (no symbology) are shown exactly as given. Display only:
+    /// `normalised` is the same either way.
+    static func printedDigits(payload: String, symbology: BarcodeSymbology?) -> String {
+        guard symbology == .ean13, payload.count == 13, payload.hasPrefix("0") else { return payload }
+        return String(payload.dropFirst())
     }
 
     /// UPC-E (number system, six digits, check) to UPC-A. Nil unless 8 digits

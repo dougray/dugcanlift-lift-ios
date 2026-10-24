@@ -11,7 +11,13 @@
     { "raw": "0-36000-29145-2","normalised": "36000291452",   "note": "dashes are ignored" }
   ],
   "upce": [
-    { "raw": "01234565", "symbology": "upce", "expandsTo": "012345000065", "normalised": "12345000065", "note": "UPC-E, last digit 5-9 rule" }
+    { "raw": "01234565", "symbology": "upce", "expandsTo": "012345000065", "normalised": "12345000065", "note": "UPC-E, last digit 5-9 rule" },
+    { "raw": "04252614", "symbology": "upce", "expandsTo": "042100005264", "normalised": "42100005264", "note": "UPC-E, last digit 0-2 rule (1)" },
+    { "raw": "06543226", "symbology": "upce", "expandsTo": "065200004326", "normalised": "65200004326", "note": "UPC-E, last digit 0-2 rule (2)" },
+    { "raw": "01234531", "symbology": "upce", "expandsTo": "012300000451", "normalised": "12300000451", "note": "UPC-E, last digit 3 rule" },
+    { "raw": "15678932", "symbology": "upce", "expandsTo": "156700000892", "normalised": "156700000892", "note": "UPC-E, last digit 3 rule, number system 1" },
+    { "raw": "01234543", "symbology": "upce", "expandsTo": "012340000053", "normalised": "12340000053", "note": "UPC-E, last digit 4 rule" },
+    { "raw": "12345649", "symbology": "upce", "expandsTo": "123450000069", "normalised": "123450000069", "note": "UPC-E, last digit 4 rule, number system 1" }
   ],
   "invalid": [
     { "raw": "036000291453",  "note": "UPC-A, last digit changed" },
@@ -21,6 +27,9 @@
     { "raw": "00000000",      "note": "all zeros, 8 digits" },
     { "raw": "1234567",       "note": "7 digits is no retail length" },
     { "raw": "123456789012345", "note": "15 digits is too long" },
-    { "raw": "",              "note": "nothing" }
+    { "raw": "",              "note": "nothing" },
+    { "raw": "12345678901A",  "note": "a letter is not a digit" },
+    { "raw": "+036000291452", "note": "a sign is not a digit" },
+    { "raw": "٠٣٦٠٠٠٢٩١٤٥٢", "note": "Arabic-Indic digits for 036000291452: only ASCII 0-9 count" }
   ]
 }

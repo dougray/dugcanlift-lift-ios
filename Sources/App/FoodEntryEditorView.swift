@@ -4,9 +4,10 @@ import WidgetKit
 import LiftCore
 
 /// Edits a food entry already in the log, in place: same id, same day, same
-/// `loggedAt`. The rules — how an amount rescales the macros, which entries let
-/// the macros be typed, what blank means — are `FoodEntryEdit`'s, so they are
-/// tested without a view.
+/// `loggedAt` — or, opened with `init(newNamed:...)` from food search's "Add
+/// food by hand", adds one with its macros typed per 100 g. The rules — how
+/// an amount rescales the macros, which entries let the macros be typed, what
+/// blank means — are `FoodEntryEdit`'s, so they are tested without a view.
 ///
 /// **Apple Health.** LIFT for iOS does not write food to Health: nothing in
 /// `HealthKitManager` saves a dietary sample, so an entry logged on this phone
@@ -17,10 +18,15 @@ import LiftCore
 /// says so in words for an entry that carries one, rather than implying Health
 /// was updated.
 struct FoodEntryEditorView: View {
-    let entry: FoodEntry
+    /// nil for a food being added by hand.
+    let entry: FoodEntry?
+    /// After a new entry is saved, before this sheet goes away.
+    private var onSaved: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     @State private var edit: FoodEntryEdit
 
@@ -38,48 +44,84 @@ struct FoodEntryEditorView: View {
         _edit = State(initialValue: FoodEntryEdit(entry: entry, preferredUnit: preferredUnit))
     }
 
+    /// A food that is not in the database, added by hand: name (from the search
+    /// query, when there was one), meal, amount, and macros per 100 g.
+    init(newNamed name: String, mealType: MealType, preferredUnit: ServingUnit,
+         onSaved: @escaping () -> Void = {}) {
+        self.entry = nil
+        self.onSaved = onSaved
+        _edit = State(initialValue: FoodEntryEdit(newNamed: name, mealType: mealType,
+                                                  preferredUnit: preferredUnit))
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    nameSection
-                    amountSection
-                    mealSection
-                    macrosSection
-                    moreNutrientsSection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        nameSection
+                        amountSection
+                        mealSection
+                        macrosSection
+                        moreNutrientsSection
+                        totalsSection
 
-                    if let problem = edit.problem {
-                        Text(problem)
-                            .font(Theme.detail)
-                            .foregroundStyle(Theme.accentText)
-                    }
+                        if let problem = edit.problem {
+                            Text(problem)
+                                .font(Theme.detail)
+                                .foregroundStyle(Theme.accentText)
+                        }
 
-                    if entry.healthKitUUID != nil {
-                        Text("This entry was saved to Apple Health by an earlier install. Changes here stay in LIFT — edit it in the Health app too if it should match.")
-                            .font(Theme.detail)
-                            .foregroundStyle(Theme.textSecondary)
+                        if entry?.healthKitUUID != nil {
+                            Text("This entry was saved to Apple Health by an earlier install. Changes here stay in LIFT — edit it in the Health app too if it should match.")
+                                .font(Theme.detail)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .readableContentWidth()
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .liftScreen()
+                .background(Theme.background)
+                .navigationTitle(edit.isNew ? "Add food" : "Edit food")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") { save() }
+                            .disabled(edit.result == nil)
+                    }
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { focus = nil }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .readableContentWidth()
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .liftScreen()
-            .background(Theme.background)
-            .navigationTitle("Edit food")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(edit.result == nil)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { focus = nil }
+                // A new food starts typing where the gap is: the name when the
+                // search gave none, calories when it did. Never under
+                // VoiceOver, which places its own focus, and never over a
+                // field the person has already chosen.
+                .task {
+                    guard edit.isNew, !voiceOverEnabled else { return }
+                    // Decided before the wait, so typing into the name during
+                    // it cannot send focus to calories mid-word.
+                    let target: Field = edit.name.trimmingCharacters(in: .whitespaces).isEmpty
+                        ? .name : .macro(.calories)
+                    // A sheet still presenting drops focus, so wait it out.
+                    // Cancelled (sheet closed) or a field already chosen:
+                    // do nothing.
+                    guard (try? await Task.sleep(for: .milliseconds(450))) != nil,
+                          focus == nil else { return }
+                    focus = target
+                    // Calories sits low enough for the keyboard to cover it,
+                    // so once the keyboard is up it is scrolled into view.
+                    guard target != .name,
+                          (try? await Task.sleep(for: .milliseconds(600))) != nil,
+                          focus == target else { return }
+                    withAnimation { proxy.scrollTo(FoodEntryEdit.Macro.calories, anchor: .center) }
                 }
             }
         }
@@ -98,7 +140,7 @@ struct FoodEntryEditorView: View {
                     .padding(Theme.cardPadding / 2)
                     .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
             }
-        } else {
+        } else if let entry {
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.name)
                     .font(Theme.cardTitle)
@@ -112,18 +154,22 @@ struct FoodEntryEditorView: View {
         }
     }
 
+    /// The field says "Amount, grams" itself, so the title and the unit beside
+    /// it are hidden from VoiceOver rather than read a second and third time.
     private var amountSection: some View {
-        card("Amount") {
+        card("Amount", titleIsFieldLabel: true) {
             HStack {
                 TextField("0", text: $edit.amountText)
                     .keyboardType(.decimalPad)
                     .focused($focus, equals: .amount)
+                    .accessibilityLabel(edit.spokenAmountLabel)
                     .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
                     .disabled(!edit.canChangeAmount)
                 Text(edit.amountUnitLabel)
                     .font(Theme.body)
                     .foregroundStyle(Theme.textSecondary)
+                    .accessibilityHidden(true)
             }
             .padding(Theme.cardPadding)
             .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
@@ -149,7 +195,13 @@ struct FoodEntryEditorView: View {
 
     @ViewBuilder
     private var macrosSection: some View {
-        if edit.isManual {
+        if edit.isNew {
+            card("Macros per 100\u{00A0}g", hint: "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fibre can be left blank — blank stays unknown, not zero.") {
+                // Two to a row: "Protein (g/100g)" does not fit four across.
+                macroField(.calories)
+                fieldGrid([.protein, .carbs, .fat, .fiber])
+            }
+        } else if edit.isManual {
             card("Macros", hint: "Totals for the amount above. Fibre can be left blank — blank stays unknown, not zero.") {
                 // Calories on its own row and the four gram figures under it,
                 // as the recipe editor lays them out.
@@ -208,7 +260,12 @@ struct FoodEntryEditorView: View {
             .accessibilityValue(showingMoreNutrients ? "Expanded" : "Collapsed")
 
             if showingMoreNutrients {
-                if edit.isManual {
+                if edit.isNew {
+                    Text("Saturated fat, sugar and sodium, per 100\u{00A0}g like the macros. No goals — blank stays unknown, not zero.")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                    fieldGrid([.saturatedFat, .sugar, .sodium])
+                } else if edit.isManual {
                     Text("Saturated fat, sugar and sodium, as totals for the amount above. No goals — blank stays unknown, not zero.")
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
@@ -241,6 +298,34 @@ struct FoodEntryEditorView: View {
         .liftCardBackground()
     }
 
+    /// A new entry's fields are per 100 g, so the totals that will be logged —
+    /// for the amount typed — are shown on their own, the way food search
+    /// previews a database food. Nothing until there is something to total.
+    @ViewBuilder
+    private var totalsSection: some View {
+        if edit.isNew, edit.amount != nil, let nutrition = edit.nutrition {
+            card("Totals for \(edit.amountText.trimmingCharacters(in: .whitespaces)) \(edit.amountUnitLabel)") {
+                // Truncated with Int(), as FoodSearchView's preview and the log
+                // row show them, so the entry reads the same once it is logged.
+                Text("\(Int(nutrition.calories)) kcal")
+                    .font(Theme.figure)
+                    .foregroundStyle(Theme.textPrimary)
+                HStack(spacing: 14) {
+                    macroFigure("Protein", nutrition.proteinG)
+                    macroFigure("Carbs", nutrition.carbsG)
+                    macroFigure("Fat", nutrition.fatG)
+                    if let fiber = nutrition.fiberG { macroFigure("Fibre", fiber) }
+                }
+                if let details = NutrientDetailsDisplay.entryLine(nutrition) {
+                    Text(details)
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
     /// How many of the three are known, for the collapsed header: "2 of 3".
     private var detailsSummary: String? {
         guard let nutrition = edit.nutrition else { return nil }
@@ -262,18 +347,33 @@ struct FoodEntryEditorView: View {
         }
     }
 
+    /// Two fields to a row, or one from xLarge text up, where "Saturated fat
+    /// (g/100g)" no longer fits half the width of a 375 pt phone and the
+    /// "per 100 g" — the whole point of the label — would be cut off.
+    private func fieldGrid(_ macros: [FoodEntryEdit.Macro]) -> some View {
+        let columns = dynamicTypeSize >= .xLarge ? 1 : 2
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top),
+                                        count: columns),
+                         alignment: .leading, spacing: 10) {
+            ForEach(macros) { macroField($0) }
+        }
+    }
+
     private func macroField(_ macro: FoodEntryEdit.Macro) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("\(macro.label) (\(macro.unit))")
+            Text(edit.fieldLabel(for: macro))
                 .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                // The field carries it, in words; read once, not twice.
+                .accessibilityHidden(true)
             TextField("—", text: Binding(
                 get: { edit.text(for: macro) },
                 set: { edit.setText($0, for: macro) }
             ))
             .keyboardType(.decimalPad)
+            .accessibilityLabel(edit.spokenFieldLabel(for: macro))
             .focused($focus, equals: .macro(macro))
             .font(Theme.body)
             .padding(8)
@@ -281,6 +381,7 @@ struct FoodEntryEditorView: View {
             .background(Theme.background, in: .rect(cornerRadius: Theme.chipRadius))
             .disabled(!edit.canEditMacros)
         }
+        .id(macro)
     }
 
     private func macroFigure(_ label: String, _ grams: Double) -> some View {
@@ -296,6 +397,7 @@ struct FoodEntryEditorView: View {
 
     private func card<Content: View>(
         _ title: String,
+        titleIsFieldLabel: Bool = false,
         hint: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -303,6 +405,7 @@ struct FoodEntryEditorView: View {
             Text(title)
                 .font(Theme.sectionLabel)
                 .foregroundStyle(Theme.accentText)
+                .accessibilityHidden(titleIsFieldLabel)
             if let hint {
                 Text(hint)
                     .font(Theme.detail)
@@ -318,10 +421,16 @@ struct FoodEntryEditorView: View {
     // MARK: Saving
 
     private func save() {
-        guard edit.apply(to: entry) else { return }
+        if let entry {
+            guard edit.apply(to: entry) else { return }
+        } else {
+            guard let new = edit.makeEntry() else { return }
+            context.insert(new)
+        }
         try? context.save()
         WidgetCenter.shared.reloadAllTimelines()
         WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
+        if entry == nil { onSaved() }
         dismiss()
     }
 }

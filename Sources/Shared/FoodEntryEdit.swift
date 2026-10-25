@@ -22,7 +22,9 @@ import LiftCore
 ///
 /// **Macros.** Only editable for a *manual* entry — one whose `foodRefID` is
 /// empty, which is what a restore from LIFT web or Android produces, since
-/// those files carry no reference id. A food from the database or a recipe has
+/// those files carry no reference id, or `barcode:<code>`, whose numbers the
+/// person typed themselves. Correcting a `barcode:` entry changes that entry
+/// only, never the food remembered against the code. A food from the database or a recipe has
 /// a source its numbers came from; letting them drift from it would make the
 /// snapshot a lie about where it came from. The fields always show the totals
 /// for the amount currently typed. Typing a value fixes all eight at that
@@ -41,8 +43,21 @@ import LiftCore
 /// Blank still stays blank and the same four are required: LIFT web's form
 /// reads a blank protein, carbs or fat as 0, and this does not copy that.
 /// `makeEntry()` builds what `FoodSearchView.log` would for a database food, with
-/// `foodRefID` empty — which is what makes it manual — and no brand. Reopened
-/// later it is an ordinary manual entry, edited as totals at its amount.
+/// `foodRefID` empty (or `barcode:<code>`, below) — which is what makes it
+/// manual — and no brand. Reopened later it is an ordinary manual entry, edited as totals at its amount.
+///
+/// **A barcode.** A new entry may carry the barcode it was added against
+/// (`barcode`, `Barcode.normalised`). Then `makeEntry()` writes
+/// `foodRefID` `barcode:<code>` rather than empty, and `per100g` — the fields
+/// exactly as typed, at no amount — is what the editor remembers against that
+/// code, so the next scan finds the food as its label reads, not as one
+/// serving of it.
+///
+/// **A remembered food** (`init(remembering:preferredUnit:)`): only what LIFT
+/// remembers about a barcode, never a log entry. Its name and per-100 g
+/// fields, prefilled, with an unknown left blank. No meal and no amount: the
+/// amount is held at 100 g and never shown, so `problem` never asks for one,
+/// and `makeEntry()` is always nil.
 ///
 /// **Numbers.** Written with a `.` decimal, and read back accepting `.` or `,`,
 /// because the decimal pad types a comma in many locales. Formatter and parser
@@ -106,6 +121,16 @@ struct FoodEntryEdit: Equatable {
     let isManual: Bool
     /// Not in the log yet: macros typed per 100 g. See "A new entry" above.
     let isNew: Bool
+    /// Editing what LIFT remembers about a barcode, not an entry. See "A
+    /// remembered food" above.
+    let editsRememberedFoodOnly: Bool
+    /// The normalised code a new entry was added against. Read only by
+    /// `makeEntry()`, which only a new entry makes, so it means nothing in the
+    /// other modes.
+    var barcode: String?
+
+    /// The fields are per 100 g as typed, rather than totals at an amount.
+    private var typesPer100g: Bool { isNew || editsRememberedFoodOnly }
 
     var name: String
     var mealType: MealType
@@ -115,7 +140,7 @@ struct FoodEntryEdit: Equatable {
     /// amount it was typed against is still the amount on screen. A new
     /// entry's fields are per 100 g, not totals, so its text is kept as typed.
     var amountText: String {
-        didSet { if amountText != oldValue && !isNew { typedText = [:] } }
+        didSet { if amountText != oldValue && !typesPer100g { typedText = [:] } }
     }
 
     // The entry as it was, so an untouched amount changes nothing at all.
@@ -151,8 +176,10 @@ struct FoodEntryEdit: Equatable {
         self.name = name
         self.originalName = name
         self.mealType = mealType
-        self.isManual = foodRefID.trimmingCharacters(in: .whitespaces).isEmpty
+        let ref = foodRefID.trimmingCharacters(in: .whitespaces)
+        self.isManual = ref.isEmpty || ref.hasPrefix("barcode:")
         self.isNew = false
+        self.editsRememberedFoodOnly = false
 
         if let amountGrams {
             mode = .weight(preferredUnit)
@@ -169,28 +196,33 @@ struct FoodEntryEdit: Equatable {
         originalServingUnit = servingUnit
         originalAmountGrams = amountGrams
 
-        var macros: [Macro: Double] = [
-            .calories: nutrition.calories,
-            .protein: nutrition.proteinG,
-            .carbs: nutrition.carbsG,
-            .fat: nutrition.fatG
-        ]
-        macros[.fiber] = nutrition.fiberG
-        macros[.saturatedFat] = nutrition.saturatedFatG
-        macros[.sugar] = nutrition.sugarG
-        macros[.sodium] = nutrition.sodiumMg
-        base = macros
+        base = Self.values(of: nutrition)
     }
 
     /// A food added by hand, not in the log yet: macros per 100 g, every one
     /// blank, and 100 g eaten in the person's unit. Left untouched, the amount
     /// is exactly 100 g rather than whatever its rounded text reads back as.
     init(newNamed name: String, mealType: MealType, preferredUnit: ServingUnit) {
+        self.init(per100gNamed: name, mealType: mealType, preferredUnit: preferredUnit,
+                  rememberedFoodOnly: false)
+    }
+
+    /// What LIFT remembers about a barcode: its name and per-100 g values,
+    /// an unknown one blank. The meal is a placeholder nothing reads.
+    init(remembering food: RememberedFood, preferredUnit: ServingUnit) {
+        self.init(per100gNamed: food.name, mealType: .snack, preferredUnit: preferredUnit,
+                  rememberedFoodOnly: true)
+        base = Self.values(of: food.per100g)
+    }
+
+    private init(per100gNamed name: String, mealType: MealType, preferredUnit: ServingUnit,
+                 rememberedFoodOnly: Bool) {
         self.name = name
         originalName = name
         self.mealType = mealType
         isManual = true
-        isNew = true
+        isNew = !rememberedFoodOnly
+        editsRememberedFoodOnly = rememberedFoodOnly
         mode = .weight(preferredUnit)
         originalAmount = 100
         originalAmountText = Self.format(preferredUnit.fromGrams(100))
@@ -249,20 +281,43 @@ struct FoodEntryEdit: Equatable {
     /// The macro fields are editable only for a manual entry, and only while
     /// the amount is a real number — there is nothing to hold them against
     /// otherwise. A new entry's are per 100 g, which needs no amount.
-    var canEditMacros: Bool { isManual && (isNew || amount != nil) }
+    var canEditMacros: Bool { isManual && (typesPer100g || amount != nil) }
+
+    /// The line under the macros card's title, in the terms its fields are in.
+    var macrosHint: String {
+        if isNew {
+            return "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fibre can be left blank — blank stays unknown, not zero."
+        }
+        if editsRememberedFoodOnly {
+            return "As the label reads them per 100\u{00A0}g. Fibre can be left blank — blank stays unknown, not zero."
+        }
+        if isManual { return "Totals for the amount above. Fibre can be left blank — blank stays unknown, not zero." }
+        return "From the food's own data, scaled to the amount above."
+    }
+
+    /// The line over saturated fat, sugar and sodium, likewise.
+    var detailsHint: String {
+        if typesPer100g {
+            return "Saturated fat, sugar and sodium, per 100\u{00A0}g like the macros. No goals — blank stays unknown, not zero."
+        }
+        if isManual {
+            return "Saturated fat, sugar and sodium, as totals for the amount above. No goals — blank stays unknown, not zero."
+        }
+        return "From the food's own data, scaled to the amount above. No goals."
+    }
 
     /// What the field shows: the text as typed, or the total at this amount —
     /// or, for a new entry, the value per 100 g.
     func text(for macro: Macro) -> String {
         if let typed = typedText[macro] { return typed }
         guard let value = base[macro] else { return "" }
-        return Self.format(isNew ? value : value * (ratio ?? 1))
+        return Self.format(typesPer100g ? value : value * (ratio ?? 1))
     }
 
     /// The field's label: "Protein (g)", or for a new entry LIFT web's
     /// "Protein (g/100g)" and "Calories (per 100 g)".
     func fieldLabel(for macro: Macro) -> String {
-        guard isNew else { return "\(macro.label) (\(macro.unit))" }
+        guard typesPer100g else { return "\(macro.label) (\(macro.unit))" }
         if macro == .calories { return "Calories (per 100 g)" }
         return "\(macro.label) (\(macro.unit)/100g)"
     }
@@ -276,7 +331,7 @@ struct FoodEntryEdit: Equatable {
         case .sodium:   unit = "milligrams"
         default:        unit = "grams"
         }
-        guard isNew else { return "\(macro.label), \(unit)" }
+        guard typesPer100g else { return "\(macro.label), \(unit)" }
         if macro == .calories { return "Calories per 100 grams" }
         return "\(macro.label), \(unit) per 100 grams"
     }
@@ -291,7 +346,7 @@ struct FoodEntryEdit: Equatable {
 
     mutating func setText(_ text: String, for macro: Macro) {
         guard canEditMacros else { return }
-        if !isNew, let amount, let ratio, ratio != 1 {
+        if !typesPer100g, let amount, let ratio, ratio != 1 {
             // Re-base every value at the amount on screen, so what is typed and
             // what is not are totals for the same amount.
             base = base.mapValues { $0 * ratio }
@@ -303,8 +358,17 @@ struct FoodEntryEdit: Equatable {
     }
 
     /// Nutrition at the amount on screen. nil when a required macro is blank.
-    var nutrition: NutritionFacts? {
-        let r = ratio ?? 1
+    var nutrition: NutritionFacts? { facts(times: ratio ?? 1) }
+
+    /// The fields as typed, per 100 g, whatever the amount: what is remembered
+    /// against a barcode. nil when a required macro is blank, and for an entry
+    /// already in the log, whose fields are totals rather than per 100 g.
+    var per100g: NutritionFacts? {
+        guard typesPer100g else { return nil }
+        return facts(times: 1)
+    }
+
+    private func facts(times r: Double) -> NutritionFacts? {
         guard let calories = base[.calories], let protein = base[.protein],
               let carbs = base[.carbs], let fat = base[.fat] else { return nil }
         return NutritionFacts(
@@ -361,12 +425,13 @@ struct FoodEntryEdit: Equatable {
     }
 
     /// A new entry, as `FoodSearchView.log` makes one for a database food, with
-    /// an empty `foodRefID` and no brand. nil while something is missing, and
+    /// an empty `foodRefID` — or `barcode:<code>` when it carries one — and no
+    /// brand. nil while something is missing, and
     /// always nil for an entry that is already in the log.
     func makeEntry(loggedAt: Date = .now) -> FoodEntry? {
         guard isNew, let result else { return nil }
         return FoodEntry(
-            foodRefID: "",
+            foodRefID: barcode.map { "barcode:" + $0 } ?? "",
             name: result.name,
             brand: nil,
             quantity: result.quantity,
@@ -395,6 +460,22 @@ struct FoodEntryEdit: Equatable {
     }
 
     // MARK: - Numbers
+
+    /// A `NutritionFacts` as field values: an unknown optional is a missing
+    /// key, which the field shows blank.
+    private static func values(of nutrition: NutritionFacts) -> [Macro: Double] {
+        var macros: [Macro: Double] = [
+            .calories: nutrition.calories,
+            .protein: nutrition.proteinG,
+            .carbs: nutrition.carbsG,
+            .fat: nutrition.fatG
+        ]
+        macros[.fiber] = nutrition.fiberG
+        macros[.saturatedFat] = nutrition.saturatedFatG
+        macros[.sugar] = nutrition.sugarG
+        macros[.sodium] = nutrition.sodiumMg
+        return macros
+    }
 
     private static func isServingWord(_ unit: String) -> Bool {
         let lower = unit.lowercased()

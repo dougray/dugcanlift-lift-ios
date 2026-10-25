@@ -8,8 +8,10 @@ struct QueuedRecipe: Identifiable, Equatable {
 
 /// When a recipe Safari handed over may open, as a value type with no view in
 /// it: the rule MacroFields follows, because a rule in a view's `@State`
-/// cannot be tested and this one decides whether a recipe is lost -- the file
-/// queue is emptied the moment it is drained.
+/// cannot be tested and this one decides whether a recipe is lost. A recipe's
+/// file in the App Group is deleted only when its review is finished
+/// (`takeFinished`), so LIFT reads the file again on every activation and
+/// this queue is what keeps a recipe from opening twice.
 ///
 /// SwiftUI shows one presentation at a time on a view and silently drops a
 /// second one, so a recipe must never be offered while LiftApp's plan sheet or
@@ -30,11 +32,15 @@ struct RecipeReviewQueue<Report> {
     private(set) var reviewing: QueuedRecipe?
     private(set) var reviewingAppeared = false
     private(set) var heldReports: [Report] = []
+    /// Reviews that ended in Save or Cancel, whose files are now to be deleted.
+    private(set) var finished: [PendingRecipeImports.Item] = []
 
-    /// Adds what the share extension queued, skipping a recipe already waiting
-    /// or under review: the same page shared twice is one review, not two.
+    /// Adds what the share extension queued, skipping a recipe already waiting,
+    /// under review, or finished and not yet deleted: the same page shared
+    /// twice is one review, and a file read again is not a new one.
     mutating func enqueue(_ items: [PendingRecipeImports.Item]) {
-        for item in items where reviewing?.item != item && !waiting.contains(where: { $0.item == item }) {
+        for item in items where reviewing?.item != item
+            && !waiting.contains(where: { $0.item == item }) && !finished.contains(item) {
             waiting.append(QueuedRecipe(item: item))
         }
     }
@@ -67,12 +73,22 @@ struct RecipeReviewQueue<Report> {
     /// returns true, and any later one finds nothing under review and returns
     /// false. The sheet's binding setter and its `onDismiss` may both call it;
     /// the caller advances only from `onDismiss`, so a close is one advance.
+    /// The sheet cannot be swiped away, so a close is Save or Cancel: the
+    /// recipe is finished.
     @discardableResult
     mutating func dismissed() -> Bool {
-        guard reviewing != nil else { return false }
+        guard let ended = reviewing else { return false }
+        finished.append(ended.item)
         reviewing = nil
         reviewingAppeared = false
         return true
+    }
+
+    /// The recipes whose reviews finished since the last call, for the caller
+    /// to delete from the App Group.
+    mutating func takeFinished() -> [PendingRecipeImports.Item] {
+        defer { finished = [] }
+        return finished
     }
 
     /// A plan outcome is ready: returned to be shown now, or held (nil) while a

@@ -37,15 +37,26 @@ import LiftReference
 /// amount step or the form appears, because SwiftUI drops a presentation
 /// started while another is still animating away.
 struct FoodSearchView: View {
-    let mealType: MealType
     var onLogged: () -> Void = {}
+
+    /// The meal this logs into. It starts as the guess from the time of day,
+    /// as LIFT web's meal chips do, and the amount step and the by-hand form
+    /// can change it: a late breakfast is still breakfast.
+    @State private var meal: MealType
+
+    init(mealType: MealType, onLogged: @escaping () -> Void = {}) {
+        self.onLogged = onLogged
+        _meal = State(initialValue: mealType)
+    }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
 
     @State private var query = ""
-    @State private var results: [FoodRecord] = []
+    /// What the last search found. Its foods are the closest ones, not
+    /// matches, when no food had every word typed.
+    @State private var found = Self.nothingFound
     @State private var loadFailed = false
     /// True from a keystroke until its search has answered, so "No Results"
     /// (and its button) appears only once a search has really found nothing,
@@ -152,7 +163,7 @@ struct FoodSearchView: View {
         .sheet(item: $sheet, onDismiss: sheetDismissed) { sheet in
             switch sheet {
             case .byHand(let name):
-                FoodEntryEditorView(newNamed: name, mealType: mealType,
+                FoodEntryEditorView(newNamed: name, mealType: meal,
                                     preferredUnit: servingUnit) { loggedNewFood = true }
                     .liftAppearance()
             case .remembered(let code):
@@ -163,7 +174,7 @@ struct FoodSearchView: View {
                     .liftAppearance()
                 }
             case .byBarcode(let code):
-                FoodEntryEditorView(newNamed: "", mealType: mealType, preferredUnit: servingUnit,
+                FoodEntryEditorView(newNamed: "", mealType: meal, preferredUnit: servingUnit,
                                     barcode: code) { loggedNewFood = true }
                     .liftAppearance()
             }
@@ -368,13 +379,35 @@ struct FoodSearchView: View {
                 LiftButton("Add \u{201C}\(trimmedQuery)\u{201D} by hand") { addByHand(named: trimmedQuery) }
             }
         } else {
-            List(results) { record in
-                Button {
-                    selected = LoggableFood(record: record)
-                } label: {
-                    row(record)
+            List {
+                // The closest foods are not answers, so they say so, and the
+                // food can still be added under the name that was typed.
+                if !found.matchesEveryWord {
+                    Text("No food has every word you typed. These are the closest.")
+                        .font(Theme.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                        .listRowSeparator(.hidden)
                 }
-                .buttonStyle(.plain)
+                ForEach(results) { record in
+                    Button {
+                        selected = LoggableFood(record: record)
+                    } label: {
+                        row(record)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if !found.matchesEveryWord && !results.isEmpty {
+                    Button {
+                        addByHand(named: trimmedQuery)
+                    } label: {
+                        Label("Add \u{201C}\(trimmedQuery)\u{201D} by hand", systemImage: "square.and.pencil")
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.accentText)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .listStyle(.plain)
             .readableListMargins()
@@ -423,6 +456,10 @@ struct FoodSearchView: View {
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    private var results: [FoodRecord] { found.foods }
+
+    private static let nothingFound = FoodSearchResults(foods: [], matchesEveryWord: true)
+
     private func addByHand(named name: String = "") {
         loggedNewFood = false
         sheet = .byHand(name: name)
@@ -457,13 +494,13 @@ struct FoodSearchView: View {
             typedCode = nil
         } else {
             lookUpTypedCode()
-            results = []
+            found = Self.nothingFound
             loadFailed = false
             searching = false
             return
         }
         guard code != nil || trimmed.count >= 2 else {
-            results = []
+            found = Self.nothingFound
             loadFailed = false
             searching = false
             return
@@ -476,7 +513,7 @@ struct FoodSearchView: View {
         if code != nil {
             lookUpTypedCode()
             if typedCode != nil {
-                results = []
+                found = Self.nothingFound
                 loadFailed = false
                 searching = false
                 return
@@ -484,12 +521,12 @@ struct FoodSearchView: View {
         }
 
         do {
-            let found = try await ReferenceDatabase.shared.searchFoods(trimmed)
+            let answer = try await ReferenceDatabase.shared.findFoods(trimmed)
             guard !Task.isCancelled else { return }
-            results = found
+            found = answer
             loadFailed = false
         } catch {
-            results = []
+            found = Self.nothingFound
             loadFailed = true
         }
         searching = false
@@ -517,6 +554,21 @@ struct FoodSearchView: View {
                         rememberedLines(code: code)
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Meal")
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accentText)
+                    Picker("Meal", selection: $meal) {
+                        ForEach(MealType.allCases) { meal in
+                            Text(meal.displayName).tag(meal)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.cardPadding)
+                .liftCardBackground()
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Amount")
@@ -655,7 +707,7 @@ struct FoodSearchView: View {
             servingUnit: servingUnit.abbreviation,
             amountGrams: grams,
             nutrition: food.nutrition(grams: grams),
-            mealType: mealType
+            mealType: meal
         )
         context.insert(entry)
         try? context.save()

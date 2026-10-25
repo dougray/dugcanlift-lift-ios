@@ -68,8 +68,11 @@ struct LiftApp: App {
                     guard phase == .active else { return }
                     recipes.activated()
                     drainSharedPlans()
-                    if let drained = PendingRecipeImports.shared {
-                        recipes.enqueue(drained.takeAll())
+                    // Read, not emptied: a recipe's file goes only when its
+                    // review finishes, so iOS ending LIFT mid-review loses
+                    // nothing.
+                    if let inbox = PendingRecipeImports.shared {
+                        recipes.enqueue(inbox.forReview())
                     }
                     presentNextRecipe()
                 }
@@ -90,9 +93,9 @@ struct LiftApp: App {
                        onDismiss: afterRecipeReview) { queued in
                     RecipeImportView(item: queued.item)
                         .onAppear { recipes.markAppeared() }
-                        // Cancel and Save only: a swipe that ended the review
-                        // would drop a recipe that is already gone from the
-                        // App Group.
+                        // Cancel and Save only: a close is what deletes the
+                        // recipe from the App Group, so a swipe must not be
+                        // one.
                         .interactiveDismissDisabled()
                         .liftAppearance()
                 }
@@ -131,12 +134,16 @@ struct LiftApp: App {
 
     /// Opens the next waiting recipe, unless something is already on screen.
     private func presentNextRecipe() {
-        _ = recipes.next(canPresent: incomingPlan == nil && refusal == nil)
+        if let opened = recipes.next(canPresent: incomingPlan == nil && refusal == nil) {
+            PendingRecipeImports.shared?.markOpened(opened.item)
+        }
     }
 
-    /// A review ended: end it (idempotently), then `advance()`.
+    /// A review ended: end it (idempotently), delete what finished from the
+    /// App Group, then `advance()`.
     private func afterRecipeReview() {
         recipes.dismissed()
+        for item in recipes.takeFinished() { PendingRecipeImports.shared?.remove(item) }
         advance()
     }
 

@@ -1,8 +1,9 @@
 import XCTest
 @testable import Lift
 
-/// The rules that decide when a recipe Safari handed over may open. The file
-/// queue is emptied when it is drained, so a recipe this loses is gone.
+/// The rules that decide when a recipe Safari handed over may open, and when
+/// its review is finished -- the only time its file in the App Group is
+/// deleted.
 final class RecipeReviewQueueTests: XCTestCase {
 
     private typealias Queue = RecipeReviewQueue<String>
@@ -155,5 +156,47 @@ final class RecipeReviewQueueTests: XCTestCase {
         q.markAppeared()
         q.enqueue([item(1), item(3)])
         XCTAssertEqual(q.waiting.map(\.item), [item(2), item(3)], "a duplicate of the one under review")
+    }
+
+    /// Save or Cancel ends a review, and only then may RootView delete the
+    /// recipe's file. Reported once, however many times the close is heard.
+    func testAClosedReviewIsReportedFinishedOnce() {
+        var q = queue(2)
+        _ = q.next(canPresent: true)
+        q.markAppeared()
+        _ = q.dismissed()
+        _ = q.dismissed()
+        XCTAssertEqual(q.takeFinished(), [item(1)])
+        XCTAssertEqual(q.takeFinished(), [])
+    }
+
+    /// A sheet SwiftUI dropped never ran; its recipe is retried, not finished.
+    func testASheetThatNeverAppearedIsNotFinished() {
+        var q = queue(1)
+        _ = q.next(canPresent: true)
+        q.activated()
+        XCTAssertEqual(q.takeFinished(), [])
+        XCTAssertEqual(q.waiting.map(\.item), [item(1)])
+    }
+
+    /// LIFT reads the file again on every activation now, so a recipe under
+    /// review or waiting is read again too -- and must not queue twice.
+    func testReadingTheFileAgainMidReviewQueuesNothingNew() {
+        var q = queue(2)
+        _ = q.next(canPresent: true)
+        q.markAppeared()
+        q.enqueue([item(1), item(2)])
+        XCTAssertEqual(q.waiting.map(\.item), [item(2)])
+    }
+
+    /// A finished recipe still in the file (its delete has not run yet) must
+    /// not come back as a new review.
+    func testAFinishedRecipeReadAgainBeforeItsDeleteIsNotReopened() {
+        var q = queue(1)
+        _ = q.next(canPresent: true)
+        q.markAppeared()
+        _ = q.dismissed()
+        q.enqueue([item(1)])
+        XCTAssertNil(q.next(canPresent: true))
     }
 }

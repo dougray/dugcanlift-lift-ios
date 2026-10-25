@@ -18,12 +18,24 @@ struct PendingRecipeImports {
         var block: String
         /// The page's own address, as Safari reported it.
         var pageURL: String
+        /// How many times LIFT has opened this recipe's review without it
+        /// ending in Save or Cancel. The queue's count, not part of what the
+        /// recipe is: nil from the share extension and in files written
+        /// before the count existed, and left out of `==`.
+        var opened: Int? = nil
+
+        static func == (a: Item, b: Item) -> Bool {
+            a.block == b.block && a.pageURL == b.pageURL
+        }
     }
 
     static let appGroup = "group.com.dugcanlift.lift"
     static let folder = "PendingRecipeImports"
     /// The link queue's bound: a stuck queue cannot grow forever.
     static let limit = 20
+    /// Opens without a Save or Cancel before a recipe is given up: a page
+    /// whose review crashes LIFT must not open on every launch for ever.
+    static let mostOpens = 3
 
     let directory: URL
 
@@ -50,13 +62,38 @@ struct PendingRecipeImports {
         for file in queuedFiles().dropLast(Self.limit) { try? fm.removeItem(at: file.url) }
     }
 
-    /// Everything queued, oldest first, and empties the queue -- including any
-    /// file that no longer decodes, so it cannot repeat forever.
-    func takeAll() -> [Item] {
-        let files = sequenceFiles()
-        let items = files.compactMap { Self.decode($0) }
-        for url in files { try? FileManager.default.removeItem(at: url) }
+    /// Everything waiting for review, oldest first. Nothing is deleted for
+    /// being read: a recipe stays until its review ends (`remove`), so iOS
+    /// ending LIFT mid-review loses nothing. A file that no longer decodes,
+    /// or a recipe opened `mostOpens` times without finishing, is deleted
+    /// here, so neither can repeat for ever.
+    func forReview() -> [Item] {
+        var items: [Item] = []
+        for url in sequenceFiles() {
+            guard let item = Self.decode(url), (item.opened ?? 0) < Self.mostOpens else {
+                try? FileManager.default.removeItem(at: url)
+                continue
+            }
+            items.append(item)
+        }
         return items
+    }
+
+    /// A review of `item` has opened. Counted in its own file, so the count
+    /// survives LIFT being ended.
+    func markOpened(_ item: Item) {
+        for file in queuedFiles() where file.item == item {
+            var counted = file.item
+            counted.opened = (counted.opened ?? 0) + 1
+            try? JSONEncoder().encode(counted).write(to: file.url, options: .atomic)
+        }
+    }
+
+    /// The review of `item` ended in Save or Cancel: it is done with.
+    func remove(_ item: Item) {
+        for file in queuedFiles() where file.item == item {
+            try? FileManager.default.removeItem(at: file.url)
+        }
     }
 
     var pending: [Item] { queuedFiles().map(\.item) }

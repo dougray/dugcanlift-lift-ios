@@ -19,6 +19,9 @@
 	     - Send to Coach puts the log in the #fragment of a
 	       www.dugcanlift.com/coach/ link, which a browser never sends to the
 	       server, and the person sends it themselves to a coach they choose.
+	     - The camera is used only by the food barcode scanner, on the device
+	       (VisionKit). Only the digits it reads are kept, as a remembered
+	       food on the phone, and nothing it sees leaves the device.
 	     - A backup is a file the person saves where they choose.
 	     If any of that changes - an upload, analytics, a crash reporter - this
 	     array must list what is sent. -->

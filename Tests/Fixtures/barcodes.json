@@ -1,0 +1,35 @@
+{
+  "valid": [
+    { "raw": "4006381333931",  "normalised": "4006381333931", "note": "EAN-13, Wikipedia example" },
+    { "raw": "9780306406157",  "normalised": "9780306406157", "note": "ISBN-13 / EAN-13" },
+    { "raw": "5901234123457",  "normalised": "5901234123457", "note": "EAN-13, GS1 example" },
+    { "raw": "036000291452",   "normalised": "36000291452",   "note": "UPC-A, Wikipedia example" },
+    { "raw": "0036000291452",  "normalised": "36000291452",   "note": "same product as EAN-13" },
+    { "raw": "00036000291452", "normalised": "36000291452",   "note": "same product as GTIN-14" },
+    { "raw": "73513537",       "normalised": "73513537",      "note": "EAN-8, Wikipedia example" },
+    { "raw": "0360 0029 1452", "normalised": "36000291452",   "note": "spaces are ignored" },
+    { "raw": "0-36000-29145-2","normalised": "36000291452",   "note": "dashes are ignored" }
+  ],
+  "upce": [
+    { "raw": "01234565", "symbology": "upce", "expandsTo": "012345000065", "normalised": "12345000065", "note": "UPC-E, last digit 5-9 rule" },
+    { "raw": "04252614", "symbology": "upce", "expandsTo": "042100005264", "normalised": "42100005264", "note": "UPC-E, last digit 0-2 rule (1)" },
+    { "raw": "06543226", "symbology": "upce", "expandsTo": "065200004326", "normalised": "65200004326", "note": "UPC-E, last digit 0-2 rule (2)" },
+    { "raw": "01234531", "symbology": "upce", "expandsTo": "012300000451", "normalised": "12300000451", "note": "UPC-E, last digit 3 rule" },
+    { "raw": "15678932", "symbology": "upce", "expandsTo": "156700000892", "normalised": "156700000892", "note": "UPC-E, last digit 3 rule, number system 1" },
+    { "raw": "01234543", "symbology": "upce", "expandsTo": "012340000053", "normalised": "12340000053", "note": "UPC-E, last digit 4 rule" },
+    { "raw": "12345649", "symbology": "upce", "expandsTo": "123450000069", "normalised": "123450000069", "note": "UPC-E, last digit 4 rule, number system 1" }
+  ],
+  "invalid": [
+    { "raw": "036000291453",  "note": "UPC-A, last digit changed" },
+    { "raw": "4006381333932", "note": "EAN-13, last digit changed" },
+    { "raw": "73513538",      "note": "EAN-8, last digit changed" },
+    { "raw": "0000000000000", "note": "all zeros: passes the arithmetic, fails by rule" },
+    { "raw": "00000000",      "note": "all zeros, 8 digits" },
+    { "raw": "1234567",       "note": "7 digits is no retail length" },
+    { "raw": "123456789012345", "note": "15 digits is too long" },
+    { "raw": "",              "note": "nothing" },
+    { "raw": "12345678901A",  "note": "a letter is not a digit" },
+    { "raw": "+036000291452", "note": "a sign is not a digit" },
+    { "raw": "٠٣٦٠٠٠٢٩١٤٥٢", "note": "Arabic-Indic digits for 036000291452: only ASCII 0-9 count" }
+  ]
+}

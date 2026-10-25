@@ -37,8 +37,17 @@ import LiftReference
 /// amount step or the form appears, because SwiftUI drops a presentation
 /// started while another is still animating away.
 struct FoodSearchView: View {
-    let mealType: MealType
     var onLogged: () -> Void = {}
+
+    /// The meal this logs into. It starts as the guess from the time of day,
+    /// as LIFT web's meal chips do, and the amount step and the by-hand form
+    /// can change it: a late breakfast is still breakfast.
+    @State private var meal: MealType
+
+    init(mealType: MealType, onLogged: @escaping () -> Void = {}) {
+        self.onLogged = onLogged
+        _meal = State(initialValue: mealType)
+    }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -154,7 +163,7 @@ struct FoodSearchView: View {
         .sheet(item: $sheet, onDismiss: sheetDismissed) { sheet in
             switch sheet {
             case .byHand(let name):
-                FoodEntryEditorView(newNamed: name, mealType: mealType,
+                FoodEntryEditorView(newNamed: name, mealType: meal,
                                     preferredUnit: servingUnit) { loggedNewFood = true }
                     .liftAppearance()
             case .remembered(let code):
@@ -165,7 +174,7 @@ struct FoodSearchView: View {
                     .liftAppearance()
                 }
             case .byBarcode(let code):
-                FoodEntryEditorView(newNamed: "", mealType: mealType, preferredUnit: servingUnit,
+                FoodEntryEditorView(newNamed: "", mealType: meal, preferredUnit: servingUnit,
                                     barcode: code) { loggedNewFood = true }
                     .liftAppearance()
             }
@@ -547,6 +556,21 @@ struct FoodSearchView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("Meal")
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accentText)
+                    Picker("Meal", selection: $meal) {
+                        ForEach(MealType.allCases) { meal in
+                            Text(meal.displayName).tag(meal)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.cardPadding)
+                .liftCardBackground()
+
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Amount")
                         .font(Theme.sectionLabel)
                         .foregroundStyle(Theme.accentText)
@@ -683,7 +707,7 @@ struct FoodSearchView: View {
             servingUnit: servingUnit.abbreviation,
             amountGrams: grams,
             nutrition: food.nutrition(grams: grams),
-            mealType: mealType
+            mealType: meal
         )
         context.insert(entry)
         try? context.save()

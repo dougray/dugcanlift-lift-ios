@@ -352,4 +352,213 @@ final class ManualFoodEntryTests: XCTestCase {
         XCTAssertEqual(stored.foodRefID, "")
         XCTAssertEqual(stored.nutrition.calories, 250, accuracy: 1e-9)
     }
+
+    // MARK: - A barcode, and the food it remembers
+
+    func testPer100gIsWhatWasTypedWhateverTheAmount() {
+        var edit = FoodEntryEdit(newNamed: "Granola", mealType: .breakfast, preferredUnit: .grams)
+        edit.setText("450", for: .calories)
+        edit.setText("10", for: .protein)
+        edit.setText("60", for: .carbs)
+        edit.setText("18", for: .fat)
+        edit.amountText = "45"
+        XCTAssertEqual(edit.per100g?.calories, 450)
+        XCTAssertNil(edit.per100g?.fiberG, "blank stays blank")
+        XCTAssertEqual(edit.result?.nutrition.calories ?? 0, 202.5, accuracy: 0.001)
+    }
+
+    func testPer100gIsNilWhileARequiredMacroIsBlank() {
+        var edit = newEntry()
+        edit.setText("450", for: .calories)
+        XCTAssertNil(edit.per100g)
+    }
+
+    func testAnEntryWithABarcodeCarriesItsRef() {
+        var edit = FoodEntryEdit(newNamed: "Granola", mealType: .breakfast, preferredUnit: .grams)
+        edit.barcode = "36000291452"
+        for (m, v) in [(FoodEntryEdit.Macro.calories, "450"), (.protein, "10"), (.carbs, "60"), (.fat, "18")] {
+            edit.setText(v, for: m)
+        }
+        XCTAssertEqual(edit.makeEntry()?.foodRefID, "barcode:36000291452")
+    }
+
+    func testAnEntryWithoutABarcodeIsStillManual() {
+        var edit = FoodEntryEdit(newNamed: "Granola", mealType: .breakfast, preferredUnit: .grams)
+        for (m, v) in [(FoodEntryEdit.Macro.calories, "450"), (.protein, "10"), (.carbs, "60"), (.fat, "18")] {
+            edit.setText(v, for: m)
+        }
+        XCTAssertEqual(edit.makeEntry()?.foodRefID, "")
+        XCTAssertFalse(edit.editsRememberedFoodOnly)
+    }
+
+    @MainActor
+    func testEditingARememberedFoodPrefillsPer100gAndNeedsNoAmount() {
+        let food = RememberedFood(code: "36000291452", name: "Corn flakes",
+                                  per100g: NutritionFacts(calories: 357, proteinG: 7, carbsG: 84, fatG: 0.4))
+        let edit = FoodEntryEdit(remembering: food, preferredUnit: .grams)
+        XCTAssertTrue(edit.editsRememberedFoodOnly)
+        XCTAssertEqual(edit.name, "Corn flakes")
+        XCTAssertEqual(edit.per100g?.calories, 357)
+        XCTAssertNil(edit.problem, "no amount is asked for when only the remembered food is edited")
+    }
+
+    /// Per 100 g, as typed: the fields read what was remembered, an unknown
+    /// optional is blank rather than 0, and the labels say per 100 g.
+    @MainActor
+    func testARememberedFoodsFieldsArePer100gAndBlankStaysBlank() throws {
+        let food = RememberedFood(code: "36000291452", name: "Corn flakes",
+                                  per100g: NutritionFacts(calories: 357, proteinG: 7, carbsG: 84, fatG: 0.4,
+                                                          sodiumMg: 729))
+        var edit = FoodEntryEdit(remembering: food, preferredUnit: .ounces)
+        XCTAssertEqual(edit.text(for: .calories), "357")
+        XCTAssertEqual(edit.text(for: .fat), "0.4")
+        XCTAssertEqual(edit.text(for: .sodium), "729")
+        XCTAssertEqual(edit.text(for: .fiber), "")
+        XCTAssertEqual(edit.text(for: .sugar), "")
+        XCTAssertEqual(edit.fieldLabel(for: .protein), "Protein (g/100g)")
+        XCTAssertTrue(edit.canEditMacros)
+
+        edit.setText("360", for: .calories)
+        edit.setText("3", for: .fiber)
+        let per100g = try XCTUnwrap(edit.per100g)
+        XCTAssertEqual(per100g.calories, 360)
+        XCTAssertEqual(per100g.fiberG, 3)
+        XCTAssertEqual(per100g.sodiumMg, 729)
+        XCTAssertNil(per100g.sugarG)
+    }
+
+    /// The existing messages, unchanged, and never one about an amount.
+    @MainActor
+    func testARememberedFoodStillNeedsANameAndTheFourMacros() {
+        let food = RememberedFood(code: "36000291452", name: "Corn flakes",
+                                  per100g: NutritionFacts(calories: 357, proteinG: 7, carbsG: 84, fatG: 0.4))
+        var edit = FoodEntryEdit(remembering: food, preferredUnit: .grams)
+        edit.name = "  "
+        XCTAssertEqual(edit.problem, "Give the food a name.")
+        edit.name = "Corn flakes"
+        edit.setText("", for: .protein)
+        XCTAssertEqual(edit.problem, "Enter protein. Everything else can be left blank.")
+        XCTAssertNil(edit.per100g)
+    }
+
+    /// Editing what LIFT remembers never logs anything.
+    @MainActor
+    func testEditingARememberedFoodNeverMakesAnEntry() {
+        let food = RememberedFood(code: "36000291452", name: "Corn flakes",
+                                  per100g: NutritionFacts(calories: 357, proteinG: 7, carbsG: 84, fatG: 0.4))
+        let edit = FoodEntryEdit(remembering: food, preferredUnit: .grams)
+        XCTAssertFalse(edit.isNew)
+        XCTAssertNil(edit.makeEntry())
+    }
+
+    /// Task 6 asks the same question on the amount step, from these strings.
+    func testTheForgetConfirmationSaysWhatHappensToTheLog() {
+        XCTAssertEqual(RememberedFoodWords.forgetButton, "Forget this barcode")
+        XCTAssertEqual(RememberedFoodWords.forgetTitle, "Forget this barcode?")
+        XCTAssertEqual(RememberedFoodWords.forgetMessage, "Foods you've already logged stay in your log.")
+        XCTAssertEqual(RememberedFoodWords.forgetConfirm, "Forget")
+        XCTAssertEqual(RememberedFoodWords.editTitle, "Edit remembered food")
+    }
+
+    /// What the editor's two save paths do to the store, through the same calls.
+    @MainActor
+    func testSavingWithABarcodeLogsAndRemembersPer100g() throws {
+        let context = ModelContext(LiftStore.makeContainer(inMemory: true))
+        var edit = FoodEntryEdit(newNamed: " Granola ", mealType: .breakfast, preferredUnit: .grams)
+        edit.barcode = "36000291452"
+        for (m, v) in [(FoodEntryEdit.Macro.calories, "450"), (.protein, "10"), (.carbs, "60"), (.fat, "18")] {
+            edit.setText(v, for: m)
+        }
+        edit.amountText = "45"
+        context.insert(try XCTUnwrap(edit.makeEntry()))
+        RememberedFoods.remember(code: try XCTUnwrap(edit.barcode), name: "Granola",
+                                 per100g: try XCTUnwrap(edit.per100g), in: context)
+
+        let logged = try XCTUnwrap(try context.fetch(FetchDescriptor<FoodEntry>()).first)
+        XCTAssertEqual(logged.foodRefID, "barcode:36000291452")
+        XCTAssertEqual(logged.nutrition.calories, 202.5, accuracy: 1e-9)
+        let remembered = try XCTUnwrap(RememberedFoods.find(code: "36000291452", in: context))
+        XCTAssertEqual(remembered.per100g.calories, 450, "remembered per 100 g, not per the amount eaten")
+        XCTAssertNil(remembered.per100g.fiberG)
+    }
+
+    // MARK: - A logged barcode entry, reopened
+
+    /// Logs a food against a barcode the way the editor does, and remembers it.
+    @MainActor
+    private func loggedAgainstABarcode(in context: ModelContext,
+                                       rememberedAt: Date) throws -> FoodEntry {
+        var edit = FoodEntryEdit(newNamed: "Granola", mealType: .breakfast, preferredUnit: .grams)
+        edit.barcode = "36000291452"
+        for (m, v) in [(FoodEntryEdit.Macro.calories, "450"), (.protein, "10"), (.carbs, "60"), (.fat, "18")] {
+            edit.setText(v, for: m)
+        }
+        edit.amountText = "45"
+        let entry = try XCTUnwrap(edit.makeEntry())
+        context.insert(entry)
+        RememberedFoods.remember(code: "36000291452", name: "Granola",
+                                 per100g: try XCTUnwrap(edit.per100g), in: context, now: rememberedAt)
+        try context.save()
+        return entry
+    }
+
+    /// The person typed those numbers, so a `barcode:` entry is corrected like
+    /// any food added by hand: name and macros editable, as totals at its
+    /// amount, and none of the "from the food's own data" wording.
+    @MainActor
+    func testALoggedBarcodeEntryReopensEditableLikeOneAddedByHand() throws {
+        let context = ModelContext(LiftStore.makeContainer(inMemory: true))
+        let entry = try loggedAgainstABarcode(in: context, rememberedAt: .now)
+        XCTAssertEqual(entry.foodRefID, "barcode:36000291452")
+
+        let reopened = FoodEntryEdit(entry: entry, preferredUnit: .grams)
+        XCTAssertTrue(reopened.isManual)
+        XCTAssertFalse(reopened.isNew)
+        XCTAssertFalse(reopened.editsRememberedFoodOnly)
+        XCTAssertTrue(reopened.canEditMacros)
+        XCTAssertEqual(reopened.fieldLabel(for: .protein), "Protein (g)", "totals at the amount, not per 100 g")
+        XCTAssertEqual(reopened.text(for: .calories), "202.5")
+        XCTAssertEqual(reopened.macrosHint,
+                       "Totals for the amount above. Fibre can be left blank \u{2014} blank stays unknown, not zero.")
+        XCTAssertEqual(reopened.detailsHint,
+                       "Saturated fat, sugar and sodium, as totals for the amount above. No goals \u{2014} blank stays unknown, not zero.")
+    }
+
+    /// Correcting what was logged changes that entry only: the remembered
+    /// food, and so the next scan, is untouched.
+    @MainActor
+    func testCorrectingALoggedBarcodeEntryLeavesTheRememberedFoodAlone() throws {
+        let context = ModelContext(LiftStore.makeContainer(inMemory: true))
+        let when = Date(timeIntervalSince1970: 1_000)
+        let entry = try loggedAgainstABarcode(in: context, rememberedAt: when)
+
+        var reopened = FoodEntryEdit(entry: entry, preferredUnit: .grams)
+        reopened.name = "Honey granola"
+        reopened.setText("300", for: .calories)
+        XCTAssertTrue(reopened.apply(to: entry))
+        try context.save()
+
+        XCTAssertEqual(entry.name, "Honey granola")
+        XCTAssertEqual(entry.nutrition.calories, 300, accuracy: 1e-9)
+        XCTAssertEqual(entry.nutrition.proteinG, 4.5, accuracy: 1e-9)
+        XCTAssertEqual(entry.foodRefID, "barcode:36000291452")
+        let remembered = try XCTUnwrap(RememberedFoods.find(code: "36000291452", in: context))
+        XCTAssertEqual(remembered.name, "Granola")
+        XCTAssertEqual(remembered.per100g.calories, 450, accuracy: 1e-9)
+        XCTAssertEqual(remembered.updatedAt, when)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<RememberedFood>()), 1)
+    }
+
+    /// A food with a source still reads from it: only an empty or `barcode:`
+    /// ref is the person's own.
+    func testAReferenceFoodStillReadsFromItsSource() {
+        let facts = NutritionFacts(calories: 300, proteinG: 10, carbsG: 30, fatG: 5)
+        for ref in ["12345", "recipe:ABC", "barcodes"] {
+            let edit = FoodEntryEdit(name: "Yoghurt", foodRefID: ref, mealType: .snack, quantity: 150,
+                                     servingUnit: "g", amountGrams: 150, nutrition: facts,
+                                     preferredUnit: .grams)
+            XCTAssertFalse(edit.isManual, ref)
+            XCTAssertEqual(edit.macrosHint, "From the food's own data, scaled to the amount above.", ref)
+        }
+    }
 }

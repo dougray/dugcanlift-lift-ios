@@ -11,6 +11,7 @@ Work out a daily calorie and macro goal from your sex, age, weight, height, acti
 FOOD
 - Search a bundled food database (USDA FoodData Central and Open Food Facts) with no connection needed
 - Log by weight, in grams or ounces
+- Scan a food's barcode, or type it in. The first time, enter the food once; LIFT remembers it on your phone, so the next scan finds it with no connection needed
 - Entries grouped by breakfast, lunch, dinner and snack, with calories for each meal
 - Tap an entry to change its amount or meal
 - Re-log anything you've eaten recently in one tap

@@ -245,8 +245,10 @@ watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
 companion move.
 
 **A struct a model stores is part of the schema.** SwiftData flattens
-`NutritionFacts` into one column per field on FoodEntry, Recipe and
-PlannedMeal, so a new field in LiftKit is a schema change here. LiftKit 1.9.0's
+`NutritionFacts` into one column per field on FoodEntry, Recipe, PlannedMeal
+and `RememberedFood.per100g`, so a new field in LiftKit is a schema change
+here, and the version that adds it must freeze `RememberedFood`'s V10 shape
+alongside the others. LiftKit 1.9.0's
 `saturatedFatG` needed `LiftSchemaV7` and a frozen seven-field copy; without it
 every existing install failed to open its store (134504). Verify any schema
 change by installing over a store the previous build wrote, not only in tests —
@@ -398,6 +400,91 @@ as readily as a recording from ten seconds ago.
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.
+
+## Barcodes
+
+The food search can scan a barcode (`BarcodeScannerView`, VisionKit's
+`DataScannerViewController`: EAN-13, EAN-8 and UPC-E, read **on the device**).
+The camera is used for nothing else, and what it sees never leaves the phone:
+only the digits are kept, and only when the person enters a food against them.
+Food search puts the search field first, then "Scan a barcode" (shown only
+where scanning is supported), then "Add food by hand". A typed barcode takes
+the same road as a scanned one (`BarcodeQuery`). `ScanAvailability` has a
+`.needsPermission` case that asks for camera access (`AVCaptureDevice
+.requestAccess`) on the first tap rather than at launch, and a refusal says
+"LIFT can't use the camera right now. You can allow it in Settings."
+
+**`Barcode` is the one rule for what a code is.** `Sources/Shared/Barcode.swift`,
+in the code's order: anything but digits (spaces and hyphens aside) is refused;
+the GS1 check digit is verified on 8, 12, 13 or 14 digits; then leading zeros
+are stripped so UPC-A, EAN-13 and GTIN-14 spellings meet; all zeros fails. With
+no symbology an 8-digit code is EAN-8 only; UPC-E is expanded only when the
+scanner says it read UPC-E, because the same eight digits can be either and
+guessing would file a food under another product's code.
+What the form shows is `printed`: the digits as given, except that a scanned
+EAN-13 of thirteen digits starting "0" shows its last twelve
+(`Barcode.printedDigits`), because Vision reports a UPC-A that way and the packet
+prints twelve. Display only; `normalised` is the same either way.
+`Tests/Fixtures/barcodes.json` is hand-written and shared with the other
+builds. Never regenerate it from Swift: a fixture the code wrote proves only
+that the code agrees with itself.
+
+**A remembered food is the person's own entry, stored per 100 g.**
+`RememberedFood` (`.unique` on `code`) is schema V10, a lightweight migration
+(`v9ToV10`). **`RememberedFoods` (`Sources/App/RememberedFoods.swift`) is the one
+read and write path**: `find`, `remember`, `forget`. The scanner, the form,
+Edit and Forget and `FoodRefResolver` all go through it, so they cannot
+disagree. `remember` upserts in place and keeps `rememberedAt`; a correction
+moves `updatedAt`, which is what a backup's newest-wins merge compares.
+**Backups are the one deliberate exception.** `BackupStore` reads and writes
+`RememberedFood` directly: `remember()` stamps `updatedAt` with now, which would
+defeat the newest-wins merge, and `BackupStore` lives in `Sources/Shared` (the
+widget compiles it) and cannot see `Sources/App`. Don't route backups through
+`remember()`.
+`BarcodeLookup.look` asks remembered foods first. **The barcode bundle (project
+2) slots in behind that same call, after them**, so a food the person entered
+always wins over a bundled one.
+
+**Logged entries stand alone.** An entry snapshots its own name and nutrition
+(the first rule under "Conventions"), so forgetting a remembered food leaves
+every entry already logged exactly as it was. The ref a barcode-found entry
+carries is `barcode:<normalised code>`. `FoodRefResolver` resolves it through
+`RememberedFoods`, and a **forgotten code resolves to nothing**. Recent and the
+watch's list are built from entries, so a forgotten food can still be offered
+there: the watch's food-logged path falls back to the newest entry's own stored
+values for a `barcode:` ref only (`FoodRefResolver.storedNutrition`). A deleted
+recipe or an unknown id stays a food this phone declines.
+A `barcode:` entry is corrected like any food you typed, and correcting it never
+changes the remembered food.
+
+**The wording is shared by three builds.** These strings are the same on iPhone,
+Android and web, so they change in all three or in none:
+"That barcode didn't scan cleanly. Try again.", "LIFT doesn't know this barcode
+yet. Enter it once and LIFT will remember it.", "A food you entered." and
+the camera usage string in `project.yml`. "LIFT can't use the camera right now.
+You can allow it in Settings." is this build's own wording, not one of them.
+Edit and Forget (with its confirmation) read from `RememberedFoodWords`, so the
+two places they appear cannot drift.
+
+**In a backup** it is `data.rememberedBarcodes` (BACKUP-FORMAT.md), merged **by
+code, newest wins**, comparing `updatedAt` in whole milliseconds. Restoring never
+deletes a remembered food, the library rule, not the roster's. Codes are stored
+normalised, so they have lost their leading zeros (an 11-digit UPC-A, a 7-digit
+EAN-8), and `Barcode.read` would refuse that as a length. `backupCode` pads a
+code to 14 digits before validating, which restores a valid length without
+changing the check sum. A date that cannot be read is treated as absent rather
+than crashing the restore. `droppedHeldSections` names the held foreign copies a
+restore removes rather than carries (only `rememberedBarcodes` today), so an
+older build's copy of the section is never written back in place of this
+phone's own.
+
+**A remembered food never goes to a coach.** `CoachShare` reads names and
+nutrition off entries and never `foodRefID`, so the share carries the food by
+name like any other and no code. `CoachShareRememberedFoodTests` pins it on an
+itemised share, the one that lists each food, where a leaked ref would show. If
+the share ever starts to carry a ref, remove it for `barcode:` refs. A
+remembered food is the person's own library, and a barcode is a fact about a
+product on their shelf, not something a coach asked for.
 
 ## The coach's week, beside your own log
 

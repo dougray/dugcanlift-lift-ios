@@ -249,9 +249,18 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
             return true
         }
         guard let payload = envelope.foodLog,
-              let resolved = await FoodRefResolver.nutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context),
               let mealType = MealType(rawValue: payload.meal.lowercased())
         else { return false }
+        // A remembered food whose barcode was forgotten no longer resolves,
+        // but the entries already logged against it still hold its name and
+        // nutrition, and the watch's list is built from exactly those. Only
+        // a barcode ref falls back: a deleted recipe or an unknown id stays
+        // a food this phone declines (and the watch keeps).
+        var resolved = await FoodRefResolver.nutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context)
+        if resolved == nil, payload.foodRefID.hasPrefix("barcode:") {
+            resolved = FoodRefResolver.storedNutrition(for: payload.foodRefID, grams: payload.amountGrams, context: context)
+        }
+        guard let resolved else { return false }
 
         // Asked again after the await: a second copy of this food (the
         // message and its queued fallback, arriving together) can have been
@@ -329,8 +338,8 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// not `private`, so `WatchSyncReceiverTests` can call it directly.
     static func makeSnapshot(from entries: [FoodEntry], generatedAt: Date = .now) -> RecentFoodsSnapshot {
         // A Road Food item has a stable id but nothing the watch can resolve
-        // to grams and nutrition (`FoodRefResolver` knows reference foods and
-        // recipes), so offering it there would be a tap that logs nothing.
+        // to grams and nutrition (`FoodRefResolver` knows reference foods,
+        // recipes and remembered foods), so offering it there would be a tap that logs nothing.
         let items = entries
             .filter { !$0.foodRefID.isEmpty && !$0.foodRefID.hasPrefix(RoadFoodRanking.foodRefPrefix) }
             .map {

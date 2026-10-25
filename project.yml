@@ -47,7 +47,7 @@ packages:
   # this line, never something that happens on a `swift package update`.
   LiftKit:
     url: https://github.com/dougray/dugcanlift-kit
-    exactVersion: 1.14.0
+    exactVersion: 1.15.0
   # The watch app's own domain package, in this repo (Watch/LiftWatchKit).
   # Its package is named LiftWatchKit, not LiftKit, so Xcode does not take it
   # for a local override of dugcanlift-kit above, whose package is also named
@@ -176,7 +176,14 @@ targets:
           Lift saves your strength workouts, and your runs, walks and hikes
           with their route and distance, to Health.
 
-        # No camera usage string: nothing in the app uses the camera.
+        # The camera is used only by food search's barcode scanner (Apple's
+        # on-device VisionKit DataScannerViewController, BarcodeScannerView).
+        # Nothing it sees leaves the phone and no frame is kept: only the
+        # digits it read are, and only when the person saves a food against
+        # them.
+        NSCameraUsageDescription: >-
+          LIFT reads food barcodes with the camera. What the camera sees stays
+          on your iPhone.
 
         # When In Use only. A recording is always started from the open
         # recording screen, and a session started in the foreground keeps

@@ -13,9 +13,9 @@
 	     party can access it. In this app:
 	     - The log, Health data and routes live in SwiftData in the App Group
 	       container and in HealthKit. There is no backend and no account.
-	     - The app's one network request fetches a public recipe page the
-	       person pastes (RecipeImportView) and sends nothing of theirs. No
-	       analytics or crash-reporting SDK is linked.
+	     - The app makes no network request. A recipe arrives through Safari's
+	       share sheet and routes are drawn on the device. No analytics or
+	       crash-reporting SDK is linked.
 	     - Send to Coach puts the log in the #fragment of a
 	       www.dugcanlift.com/coach/ link, which a browser never sends to the
 	       server, and the person sends it themselves to a coach they choose.

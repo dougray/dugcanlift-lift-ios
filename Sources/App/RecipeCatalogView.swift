@@ -5,8 +5,9 @@ import LiftReference
 
 /// Browse the bundled recipe catalogue and copy one into your own library.
 ///
-/// The third way into COOK, beside writing a recipe and importing a link. This
-/// one needs no network and no typing: 622 recipes ship in `recipes.db`.
+/// The third way into COOK, beside writing a recipe, Safari and pasted text.
+/// None of the four needs a network; this one needs no typing either: 622
+/// recipes ship in `recipes.db`.
 ///
 /// Nothing here is in the library until **Add** is tapped. A catalogue recipe
 /// is reference data, the same as a food or an exercise, and browsing it must

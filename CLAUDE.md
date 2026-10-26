@@ -697,7 +697,7 @@ here from `dugcanlift-lift-watch` (history kept, by `git subtree`) in 2026-09;
 that repo is Wear OS only now. `Watch/README.md` has the detail.
 
 - **Layout.** `Watch/LiftWatch` is the watchOS target `LiftWatch` (scheme
-  `LiftWatch`, product `LIFT.app`). `Watch/LiftWatchKit` is its Swift package,
+  `LiftWatch`, product `LiftWatch.app`, shown as LIFT). `Watch/LiftWatchKit` is its Swift package,
   named `LiftWatchKit` because dugcanlift-kit's package is already `LiftKit` and
   Xcode takes a local package with a remote one's name for an override of it.
   Its products are `LiftKit` (the watch's domain; the module name the watch
@@ -713,7 +713,7 @@ that repo is Wear OS only now. `Watch/README.md` has the detail.
   both directions; update the schema in the same change.
 - **Bundle ids.** `com.dugcanlift.lift.watchkitapp`, companion of
   `com.dugcanlift.lift` (`WKCompanionAppBundleIdentifier`), embedded at
-  `Lift.app/Watch/LIFT.app`. `WKRunsIndependentlyOfCompanionApp` keeps it
+  `Lift.app/Watch/LiftWatch.app`. `WKRunsIndependentlyOfCompanionApp` keeps it
   usable with no phone. Being the companion is what makes the two `WCSession`
   peers; the old `WKWatchOnly` `com.dugcanlift.watch` never was, and nothing
   either side sent it arrived.

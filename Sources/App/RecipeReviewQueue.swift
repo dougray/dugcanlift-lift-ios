@@ -58,15 +58,25 @@ struct RecipeReviewQueue<Report> {
         return queued
     }
 
-    /// The review sheet's content came on screen.
-    mutating func markAppeared() {
-        if reviewing != nil { reviewingAppeared = true }
+    /// The review sheet's content came on screen. With an `id`, only if it is
+    /// the review under way: an old sheet's late `onAppear` is not the retry
+    /// appearing.
+    mutating func markAppeared(_ id: UUID? = nil) {
+        guard let current = reviewing, id == nil || id == current.id else { return }
+        reviewingAppeared = true
     }
 
     /// The app became active. A review that never appeared was dropped by
     /// SwiftUI and will never report its own dismissal: retry it first, as a
     /// new `QueuedRecipe` so the sheet's item changes identity.
     mutating func activated() {
+        dropped()
+    }
+
+    /// The review under way never came on screen, so SwiftUI dropped it:
+    /// it goes back to the front, as a new `QueuedRecipe`. Nothing if it
+    /// appeared.
+    mutating func dropped() {
         guard let stuck = reviewing, !reviewingAppeared else { return }
         waiting.insert(QueuedRecipe(item: stuck.item), at: 0)
         reviewing = nil

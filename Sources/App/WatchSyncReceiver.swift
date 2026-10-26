@@ -161,7 +161,7 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     }
 
     /// The watch app is this app's companion (`Watch/`, embedded at
-    /// `Lift.app/Watch/LIFT.app`), which is what makes the two `WCSession`
+    /// `Lift.app/Watch/LiftWatch.app`), which is what makes the two `WCSession`
     /// peers. It was a separate `WKWatchOnly` app until 2026-09, and on a
     /// paired simulator pair this side then reported
     /// `isWatchAppInstalled == false` and nothing it sent arrived; as a

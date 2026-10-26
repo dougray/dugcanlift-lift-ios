@@ -2,7 +2,7 @@
 
 The watch app is LIFT for iPhone's companion. It is built by this repo's
 `project.yml` as the `LiftWatch` target and ships inside the iPhone app, at
-`Lift.app/Watch/LIFT.app`, under the iPhone app's version. It lived in
+`Lift.app/Watch/LiftWatch.app`, under the iPhone app's version. It lived in
 `dugcanlift-lift-watch` as a standalone `WKWatchOnly` app (`com.dugcanlift.watch`)
 until 2026-09 and moved here with its history (`git blame` on a file here
 follows it back through the subtree merge).
@@ -48,13 +48,15 @@ make watch-device   # install that embedded watch app on the real paired watch
 make signing        # which entitlements each target signs with on the free team
 ```
 
-The product is `LIFT.app`, not `LiftWatch.app`: the scheme and the bundle name
-differ, which is worth knowing before hand-writing an install path.
+The product is `LiftWatch.app`, named after its target, and the watch shows
+LIFT (`CFBundleDisplayName`). It was `LIFT.app` until the first App Store
+archive, which failed because `LIFT.app.dSYM` and `Lift.app.dSYM` are one name
+on a case-insensitive disk.
 
 **The simulator does not install an embedded watch app by itself.** A real
 iPhone's Watch app installs it on the paired watch (automatically, or from
 "Available Apps"); the simulator does not, so `make watch-run` does what Xcode
-does and runs `simctl install <watch> Lift.app/Watch/LIFT.app`. The watch
+does and runs `simctl install <watch> Lift.app/Watch/LiftWatch.app`. The watch
 simulator is the one paired with `$(SIM)`: `WCSession` only connects a pair.
 
 ## Identity, signing and versions

@@ -24,12 +24,15 @@ final class RecipeReviewQueueTests: XCTestCase {
         XCTAssertNil(q.next(canPresent: true), "one is under review")
         q.markAppeared()
         XCTAssertTrue(q.dismissed())
+        q.closed()
         XCTAssertEqual(q.next(canPresent: true)?.item, item(2))
         q.markAppeared()
         _ = q.dismissed()
+        q.closed()
         XCTAssertEqual(q.next(canPresent: true)?.item, item(3))
         q.markAppeared()
         _ = q.dismissed()
+        q.closed()
         XCTAssertNil(q.next(canPresent: true))
     }
 
@@ -86,6 +89,7 @@ final class RecipeReviewQueueTests: XCTestCase {
         XCTAssertNil(q.report("Log imported"), "held, not shown over the sheet")
         XCTAssertEqual(q.heldReports, ["Log imported"])
         XCTAssertTrue(q.dismissed())
+        q.closed()
         XCTAssertEqual(q.takeHeldReport(), "Log imported")
         XCTAssertNil(q.takeHeldReport(), "promoted once")
         // The caller shows the report, so the recipe is told it cannot present
@@ -101,6 +105,7 @@ final class RecipeReviewQueueTests: XCTestCase {
         XCTAssertNil(q.report("Couldn't import"))
         XCTAssertNil(q.report("Log imported"))
         q.dismissed()
+        q.closed()
         XCTAssertEqual(q.takeHeldReport(), "Couldn't import", "the first is never replaced by a later one")
         // A report arriving while the held ones are still being shown waits its turn.
         XCTAssertNil(q.report("Some links didn't import"))
@@ -122,6 +127,7 @@ final class RecipeReviewQueueTests: XCTestCase {
         q.markAppeared()
         XCTAssertTrue(q.dismissed())
         XCTAssertFalse(q.dismissed(), "a second dismissal is not a second advance")
+        q.closed()
         XCTAssertEqual(q.next(canPresent: true)?.item, item(2))
         XCTAssertNil(q.next(canPresent: true))
     }
@@ -130,6 +136,7 @@ final class RecipeReviewQueueTests: XCTestCase {
         var q = queue(1)
         _ = q.next(canPresent: true)
         XCTAssertTrue(q.dismissed())
+        q.closed()
         XCTAssertFalse(q.reviewingAppeared)
     }
 
@@ -141,6 +148,7 @@ final class RecipeReviewQueueTests: XCTestCase {
         q.activated()
         XCTAssertEqual(q.waiting.map(\.item), [item(2)])
         _ = q.dismissed()
+        q.closed()
         XCTAssertEqual(q.next(canPresent: true)?.item, item(2))
     }
 
@@ -166,6 +174,7 @@ final class RecipeReviewQueueTests: XCTestCase {
         q.markAppeared()
         _ = q.dismissed()
         _ = q.dismissed()
+        q.closed()
         XCTAssertEqual(q.takeFinished(), [item(1)])
         XCTAssertEqual(q.takeFinished(), [])
     }
@@ -196,7 +205,20 @@ final class RecipeReviewQueueTests: XCTestCase {
         _ = q.next(canPresent: true)
         q.markAppeared()
         _ = q.dismissed()
+        q.closed()
         q.enqueue([item(1)])
         XCTAssertNil(q.next(canPresent: true))
+    }
+
+    /// Between the binding's close and the sheet's `onDismiss` nothing opens:
+    /// a review opened then was ended by the old sheet's `onDismiss`.
+    func testNothingOpensUntilTheClosingSheetHasGone() {
+        var q = queue(2)
+        _ = q.next(canPresent: true)
+        q.markAppeared()
+        _ = q.dismissed()
+        XCTAssertNil(q.next(canPresent: true))
+        q.closed()
+        XCTAssertEqual(q.next(canPresent: true)?.item, item(2))
     }
 }

@@ -64,13 +64,15 @@ struct PendingRecipeImports {
 
     /// Everything waiting for review, oldest first. Nothing is deleted for
     /// being read: a recipe stays until its review ends (`remove`), so iOS
-    /// ending LIFT mid-review loses nothing. A file that no longer decodes,
-    /// or a recipe opened `mostOpens` times without finishing, is deleted
-    /// here, so neither can repeat for ever.
-    func forReview() -> [Item] {
+    /// ending LIFT mid-review loses nothing. A file that no longer decodes is
+    /// deleted here, and so -- when `givingUp`, which is a launch's read -- is
+    /// a recipe opened `mostOpens` times without finishing, so neither can
+    /// repeat for ever. A read after the first in a process holds the give-up
+    /// off: the third review may be on screen, which is not a third crash.
+    func forReview(givingUp: Bool = true) -> [Item] {
         var items: [Item] = []
         for url in sequenceFiles() {
-            guard let item = Self.decode(url), (item.opened ?? 0) < Self.mostOpens else {
+            guard let item = Self.decode(url), !givingUp || (item.opened ?? 0) < Self.mostOpens else {
                 try? FileManager.default.removeItem(at: url)
                 continue
             }
@@ -85,6 +87,16 @@ struct PendingRecipeImports {
         for file in queuedFiles() where file.item == item {
             var counted = file.item
             counted.opened = (counted.opened ?? 0) + 1
+            try? JSONEncoder().encode(counted).write(to: file.url, options: .atomic)
+        }
+    }
+
+    /// A review of `item` was offered but never came on screen: SwiftUI
+    /// dropped it, so it cannot have ended LIFT. The try is given back.
+    func unmarkOpened(_ item: Item) {
+        for file in queuedFiles() where file.item == item && (file.item.opened ?? 0) > 0 {
+            var counted = file.item
+            counted.opened = (counted.opened ?? 0) - 1
             try? JSONEncoder().encode(counted).write(to: file.url, options: .atomic)
         }
     }

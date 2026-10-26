@@ -27,11 +27,12 @@ struct LiftApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var incomingPlan: IdentifiablePlan?
     @State private var refusal: PlanLinkIntake.Refusal?
-    /// Recipes Safari handed over, and the rules for when each may open. Its
+    /// Recipes Safari handed over, the rules for when each may open, and the
+    /// App Group files kept in step with them (`RecipeIntake`). Its
     /// held "reports" are plan outcomes: a plan sheet or a refusal alert that
     /// arrives while a recipe is under review would be dropped by SwiftUI,
     /// which presents one thing at a time on this view, so it waits here.
-    @State private var recipes = RecipeReviewQueue<PlanLinkIntake.Outcome>()
+    @State private var recipes = RecipeIntake<PlanLinkIntake.Outcome>(inbox: PendingRecipeImports.shared)
 
     // `WatchSyncReceiver` doesn't drive any UI, so it isn't `@State` — it
     // just needs to exist for the app's lifetime so its `WCSessionDelegate`
@@ -66,14 +67,11 @@ struct LiftApp: App {
                 // Plans first, then recipes, the order the extension decides in.
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     guard phase == .active else { return }
+                    // Reads the recipe files without emptying them: one goes
+                    // only when its review finishes, so iOS ending LIFT
+                    // mid-review loses nothing.
                     recipes.activated()
                     drainSharedPlans()
-                    // Read, not emptied: a recipe's file goes only when its
-                    // review finishes, so iOS ending LIFT mid-review loses
-                    // nothing.
-                    if let inbox = PendingRecipeImports.shared {
-                        recipes.enqueue(inbox.forReview())
-                    }
                     presentNextRecipe()
                 }
                 // One presentation at a time on this view: a recipe waits for
@@ -89,10 +87,10 @@ struct LiftApp: App {
                     PlanPreviewView(plan: identifiablePlan.plan)
                 }
                 .sheet(item: Binding(get: { recipes.reviewing },
-                                     set: { if $0 == nil { recipes.dismissed() } }),
+                                     set: { if $0 == nil { recipes.closing() } }),
                        onDismiss: afterRecipeReview) { queued in
                     RecipeImportView(item: queued.item)
-                        .onAppear { recipes.markAppeared() }
+                        .onAppear { recipes.appeared() }
                         // Cancel and Save only: a close is what deletes the
                         // recipe from the App Group, so a swipe must not be
                         // one.
@@ -134,16 +132,12 @@ struct LiftApp: App {
 
     /// Opens the next waiting recipe, unless something is already on screen.
     private func presentNextRecipe() {
-        if let opened = recipes.next(canPresent: incomingPlan == nil && refusal == nil) {
-            PendingRecipeImports.shared?.markOpened(opened.item)
-        }
+        _ = recipes.next(canPresent: incomingPlan == nil && refusal == nil)
     }
 
-    /// A review ended: end it (idempotently), delete what finished from the
-    /// App Group, then `advance()`.
+    /// A review's sheet has gone: the next may open (`advance()`).
     private func afterRecipeReview() {
-        recipes.dismissed()
-        for item in recipes.takeFinished() { PendingRecipeImports.shared?.remove(item) }
+        recipes.closed()
         advance()
     }
 

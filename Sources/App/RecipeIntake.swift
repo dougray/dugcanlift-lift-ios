@@ -24,7 +24,10 @@ extension PendingRecipeImports: RecipeInbox {}
 ///   dropped, found on the next activation, gives its try back: it never ran,
 ///   so it cannot have ended the app.
 /// - Save or Cancel deletes the file as the sheet starts to close
-///   (`closing`), and nothing opens until it has gone (`closed`).
+///   (`closing`), and nothing opens until it has gone (`closed`). Only a
+///   review that came on screen -- its own sheet, by identity -- can finish:
+///   Save and Cancel need it there. A close for one that never showed is a
+///   dropped sheet, retried, and deletes nothing.
 struct RecipeIntake<Report> {
     private(set) var queue = RecipeReviewQueue<Report>()
     private let inbox: (any RecipeInbox)?
@@ -56,20 +59,31 @@ struct RecipeIntake<Report> {
         return opened
     }
 
-    /// The review's content came on screen.
-    mutating func appeared() {
-        queue.markAppeared()
+    /// The review with this identity came on screen.
+    mutating func appeared(_ id: UUID) {
+        queue.markAppeared(id)
     }
 
-    /// The sheet's binding was cleared: Save or Cancel. The file goes now.
+    /// The sheet's binding was cleared. For a review on screen that is Save
+    /// or Cancel, and its file goes now; for one that never showed it is a
+    /// drop, and the review is retried with its try given back.
     mutating func closing() {
-        guard queue.dismissed() else { return }
+        guard let current = queue.reviewing else { return }
+        guard queue.reviewingAppeared else {
+            inbox?.unmarkOpened(current.item)
+            queue.dropped()
+            return
+        }
+        queue.dismissed()
         for item in queue.takeFinished() { inbox?.remove(item) }
     }
 
-    /// The sheet's `onDismiss`: it has gone, and the next may open.
+    /// The sheet's `onDismiss`: it has gone, and the next may open. It
+    /// finishes a review only if one on screen is still under way (its
+    /// binding was never cleared); a dismissal of a sheet that never showed
+    /// ends nothing.
     mutating func closed() {
-        closing()
+        if queue.reviewing != nil, queue.reviewingAppeared { closing() }
         queue.closed()
     }
 

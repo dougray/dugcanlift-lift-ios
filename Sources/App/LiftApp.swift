@@ -90,7 +90,7 @@ struct LiftApp: App {
                                      set: { if $0 == nil { recipes.closing() } }),
                        onDismiss: afterRecipeReview) { queued in
                     RecipeImportView(item: queued.item)
-                        .onAppear { recipes.appeared() }
+                        .onAppear { recipes.appeared(queued.id) }
                         // Cancel and Save only: a close is what deletes the
                         // recipe from the App Group, so a swipe must not be
                         // one.

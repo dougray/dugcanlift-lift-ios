@@ -24,7 +24,7 @@ final class RecipeIntakeTests: XCTestCase {
         var intake = Intake(inbox: files)
         intake.activated()
         _ = intake.next(canPresent: true)
-        intake.appeared()
+        intake.appeared(intake.reviewing!.id)
     }
 
     func testARecipeEndedMidReviewComesBack() throws {
@@ -44,7 +44,7 @@ final class RecipeIntakeTests: XCTestCase {
         var intake = Intake(inbox: files)
         intake.activated()
         _ = intake.next(canPresent: true)
-        intake.appeared()
+        intake.appeared(intake.reviewing!.id)
         intake.closing()
         XCTAssertEqual(files.pending, [item(2)])
         intake.closed()
@@ -60,7 +60,7 @@ final class RecipeIntakeTests: XCTestCase {
         var intake = Intake(inbox: files)
         intake.activated()
         _ = intake.next(canPresent: true)
-        intake.appeared()
+        intake.appeared(intake.reviewing!.id)
         intake.closing()
         intake.activated()
         XCTAssertNil(intake.next(canPresent: true))
@@ -106,7 +106,7 @@ final class RecipeIntakeTests: XCTestCase {
         var intake = Intake(inbox: files)
         intake.activated()
         XCTAssertEqual(intake.next(canPresent: true)?.item, item(1))
-        intake.appeared()
+        intake.appeared(intake.reviewing!.id)
         intake.activated()
         XCTAssertEqual(files.pending, [item(1)])
         XCTAssertEqual(intake.reviewing?.item, item(1))
@@ -120,7 +120,7 @@ final class RecipeIntakeTests: XCTestCase {
         var intake = Intake(inbox: files)
         intake.activated()
         _ = intake.next(canPresent: true)
-        intake.appeared()
+        intake.appeared(intake.reviewing!.id)
         intake.activated()
         intake.activated()
         XCTAssertEqual(intake.waiting.map(\.item), [item(2)])
@@ -132,5 +132,58 @@ final class RecipeIntakeTests: XCTestCase {
         var intake = Intake(inbox: nil)
         intake.activated()
         XCTAssertNil(intake.next(canPresent: true))
+    }
+
+    // MARK: Only what came on screen can finish
+
+    /// A sheet's `onDismiss` can arrive for a sheet that never showed -- one
+    /// SwiftUI replaced when the review was retried. It must not end the
+    /// retry or delete a recipe nobody saw.
+    func testADismissForASheetThatNeverShowedDeletesNothing() throws {
+        let files = try folder()
+        try files.add(item(1))
+        var intake = Intake(inbox: files)
+        intake.activated()
+        _ = intake.next(canPresent: true)
+        intake.activated()
+        let retry = try XCTUnwrap(intake.next(canPresent: true))
+        intake.closed()
+        XCTAssertEqual(files.pending, [item(1)])
+        XCTAssertEqual(intake.reviewing?.id, retry.id)
+    }
+
+    /// The binding cleared for a review that never came on screen is a
+    /// dropped sheet, not a Save: retried, its try given back, and nothing
+    /// left waiting on a close that will never come.
+    func testClearingAReviewThatNeverShowedIsADrop() throws {
+        let files = try folder()
+        try files.add(item(1))
+        var intake = Intake(inbox: files)
+        intake.activated()
+        _ = intake.next(canPresent: true)
+        intake.closing()
+        XCTAssertEqual(files.pending, [item(1)])
+        XCTAssertEqual(intake.next(canPresent: true)?.item, item(1), "not stuck closing")
+        for _ in 0..<(PendingRecipeImports.mostOpens + 1) {
+            intake.closing()
+            _ = intake.next(canPresent: true)
+        }
+        var relaunched = Intake(inbox: files)
+        relaunched.activated()
+        XCTAssertEqual(relaunched.next(canPresent: true)?.item, item(1), "drops are not tries")
+    }
+
+    /// An old sheet's late `onAppear` does not count as the retry appearing.
+    func testAppearingCountsOnlyForTheSheetOnScreen() throws {
+        let files = try folder()
+        try files.add(item(1))
+        var intake = Intake(inbox: files)
+        intake.activated()
+        let first = try XCTUnwrap(intake.next(canPresent: true))
+        intake.activated()
+        _ = intake.next(canPresent: true)
+        intake.appeared(first.id)
+        intake.closing()
+        XCTAssertEqual(files.pending, [item(1)], "the retry had not appeared, so nothing finished")
     }
 }

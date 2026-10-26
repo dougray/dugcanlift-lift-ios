@@ -43,6 +43,27 @@ final class PendingRecipeImportsTests: XCTestCase {
         XCTAssertEqual(q.pending, [item(2)], "its file is gone, not just skipped")
     }
 
+    /// Mid-process reads keep a recipe at the limit: the give-up is a launch's.
+    func testTheGiveUpCanBeHeldOff() throws {
+        let q = try inbox()
+        try q.add(item(1))
+        for _ in 0..<PendingRecipeImports.mostOpens { q.markOpened(item(1)) }
+        XCTAssertEqual(q.forReview(givingUp: false), [item(1)])
+        XCTAssertEqual(q.forReview(), [])
+    }
+
+    /// An open that never came on screen is given back, and never below none.
+    func testAnOpenCanBeGivenBack() throws {
+        let q = try inbox()
+        try q.add(item(1))
+        q.unmarkOpened(item(1))
+        for _ in 0..<PendingRecipeImports.mostOpens { q.markOpened(item(1)) }
+        q.unmarkOpened(item(1))
+        XCTAssertEqual(q.forReview(), [item(1)])
+        q.markOpened(item(1))
+        XCTAssertEqual(q.forReview(), [])
+    }
+
     func testOpeningIsCountedPerRecipe() throws {
         let q = try inbox()
         try q.add(item(1)); try q.add(item(2))

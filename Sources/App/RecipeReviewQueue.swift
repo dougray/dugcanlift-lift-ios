@@ -34,6 +34,9 @@ struct RecipeReviewQueue<Report> {
     private(set) var heldReports: [Report] = []
     /// Reviews that ended in Save or Cancel, whose files are now to be deleted.
     private(set) var finished: [PendingRecipeImports.Item] = []
+    /// A review's sheet is animating away. Nothing opens until `closed()`:
+    /// a review opened now would be ended by the old sheet's `onDismiss`.
+    private(set) var closing = false
 
     /// Adds what the share extension queued, skipping a recipe already waiting,
     /// under review, or finished and not yet deleted: the same page shared
@@ -48,7 +51,7 @@ struct RecipeReviewQueue<Report> {
     /// Starts the next review, only when nothing is under review and the
     /// caller has nothing else on screen.
     mutating func next(canPresent: Bool) -> QueuedRecipe? {
-        guard canPresent, reviewing == nil, !waiting.isEmpty else { return nil }
+        guard canPresent, !closing, reviewing == nil, !waiting.isEmpty else { return nil }
         let queued = waiting.removeFirst()
         reviewing = queued
         reviewingAppeared = false
@@ -79,9 +82,15 @@ struct RecipeReviewQueue<Report> {
     mutating func dismissed() -> Bool {
         guard let ended = reviewing else { return false }
         finished.append(ended.item)
+        closing = true
         reviewing = nil
         reviewingAppeared = false
         return true
+    }
+
+    /// The closing sheet has gone (its `onDismiss`): the next may open.
+    mutating func closed() {
+        closing = false
     }
 
     /// The recipes whose reviews finished since the last call, for the caller

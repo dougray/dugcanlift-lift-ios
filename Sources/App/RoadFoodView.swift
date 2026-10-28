@@ -249,6 +249,9 @@ struct RoadFoodPlaceView: View {
     @State private var meal = MealType.forHour(Calendar.current.component(.hour, from: .now))
     @State private var category: String?
     @State private var note: String?
+    /// Items put together before ordering (`RoadFoodMeal`). Not kept: it is
+    /// the order in front of you, and a new place is a new order.
+    @State private var plate = RoadFoodMeal()
 
     init(catalog: RoadFoodCatalog, source: RoadFoodSource, place: RoadFoodPlace) {
         self.catalog = catalog
@@ -349,6 +352,8 @@ struct RoadFoodPlaceView: View {
         // Pinned to the bottom rather than placed in the page, so it is seen
         // wherever the row that was logged had been scrolled to.
         .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+            if !plate.isEmpty { plateTray(remaining: remaining) }
             if let note {
                 Text(note)
                     .font(Theme.body)
@@ -362,8 +367,10 @@ struct RoadFoodPlaceView: View {
                     .accessibilityAddTraits(.isStaticText)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            }
         }
         .animation(.easeOut(duration: 0.2), value: note)
+        .animation(.easeOut(duration: 0.2), value: plate)
         .navigationTitle(chain?.name ?? "Gas station")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -573,6 +580,7 @@ struct RoadFoodPlaceView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if RoadFoodRanking.cannotLogReason(item) == nil {
+                plateButtons(item)
                 Button { log(item) } label: {
                     Text("Log it")
                         .scaledFont(size: 14, weight: .semibold)
@@ -606,6 +614,82 @@ struct RoadFoodPlaceView: View {
         }
         if let serving = item.serving { parts.append(serving) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    // MARK: Build a meal
+
+    /// "+" adds one to the meal being put together; once there is one, the
+    /// count and "−" show beside it.
+    private func plateButtons(_ item: RoadFoodItem) -> some View {
+        let count = plate.count(of: item.id)
+        return HStack(spacing: 6) {
+            if count > 0 {
+                Button { plate.remove(item) } label: { Image(systemName: "minus.circle") }
+                    .accessibilityLabel("One less \(item.displayName) in the meal")
+                Text("\(count)")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.textPrimary)
+            }
+            Button { plate.add(item) } label: { Image(systemName: "plus.circle") }
+                .accessibilityLabel("Add \(item.displayName) to the meal")
+        }
+        .font(.system(size: 22))
+        .foregroundStyle(Theme.accentText)
+        .buttonStyle(.plain)
+        .frame(minHeight: 36)
+    }
+
+    private func plateTray(remaining: RemainingMacros?) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Your meal")
+                    .font(Theme.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                Text(plate.line(from: items, remaining: remaining))
+                    .font(Theme.body)
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button("Clear") { plate.clear() }
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundStyle(Theme.accentText)
+            Button { logPlate() } label: {
+                Text("Log meal")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Theme.onAccent)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Theme.accent))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: AdaptiveLayout.readableWidth, alignment: .leading)
+        .padding(Theme.cardPadding)
+        .liftCardBackground()
+        .padding(.horizontal, AdaptiveLayout.pageGutter)
+        .padding(.bottom, 8)
+    }
+
+    /// Each item as its own entry, as "Log it" would write it.
+    private func logPlate() {
+        let chosen = plate.items(from: items)
+        let entries = chosen.compactMap { RoadFoodRanking.entry(for: $0, chainName: chain?.name, mealType: meal) }
+        guard !entries.isEmpty else { return }
+        let before = todaysFood.totalNutrition
+        entries.forEach(context.insert)
+        try? context.save()
+        WidgetCenter.shared.reloadAllTimelines()
+        WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
+        var text = "Logged \(entries.count == 1 ? "1 item" : "\(entries.count) items") to \(meal.displayName)."
+        let eaten = entries.reduce(before) { $0 + $1.nutrition }
+        if let left = RemainingMacros.forDay(goalIsSet: goalIsSet, goalCalories: goalCalories,
+                                             goalProteinG: goalProtein, eaten: eaten) {
+            text += " \(left.calorieHeadline) today."
+        }
+        plate.clear()
+        note = text
     }
 
     // MARK: Log it

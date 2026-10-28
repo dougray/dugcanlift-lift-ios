@@ -65,6 +65,11 @@ enum PlanLinkIntake {
         /// `rf`, normalised. Empty when the key was absent, which
         /// PLAN-FORMAT calls silence about picks rather than a retraction.
         let roadPickIDs: [String]
+        /// `g`, each workout's groups exercise by exercise (PLAN-FORMAT.md
+        /// "Set types"), read app-side by `PlanGroupLink` for the reason `rf`
+        /// is. Empty when nothing is grouped, which is every plan written
+        /// before set types.
+        var exerciseGroups: [[Int?]] = []
     }
 
     /// A URL handed to `onOpenURL`: LIFT's own `dugcanliftlift://plan#...`
@@ -110,7 +115,8 @@ enum PlanLinkIntake {
             // lenient by design and would answer "no picks" for anything,
             // including a fragment that is not a plan at all.
             return .plan(IncomingPlan(payload: payload,
-                                      roadPickIDs: RoadPickLink.ids(inFragment: fragment)))
+                                      roadPickIDs: RoadPickLink.ids(inFragment: fragment),
+                                      exerciseGroups: PlanGroupLink.groups(inFragment: fragment)))
         } catch let error as PlanLinkError {
             return .refused(.link(error))
         } catch {

@@ -108,12 +108,26 @@ enum PlanImporter {
     ///   An empty list writes no key at all, so every plan without picks
     ///   hashes exactly as it did before road picks existed --
     ///   `PlanRoadPicksTests` pins that against a value recorded on main.
-    static func hash(of payload: PlanPayload, roadPickIDs: [String] = []) throws -> String {
+    /// - Parameter exerciseGroups: `g`, read app-side like `rf` and in the
+    ///   hash for the same reason: a coach resending the same week with two
+    ///   exercises made a superset must not be refused as already imported.
+    ///   (A set's kind is in its tuple, which the payload already hashes.) No
+    ///   groups writes no key, so a plan without them hashes as it always did.
+    static func hash(of payload: PlanPayload, roadPickIDs: [String] = [],
+                     exerciseGroups: [[Int?]] = []) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(HashableMirror(of: payload, roadPickIDs: roadPickIDs))
+        let data = try encoder.encode(HashableMirror(of: payload, roadPickIDs: roadPickIDs,
+                                                     exerciseGroups: exerciseGroups))
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The hash of what came in through a door, picks and groups included --
+    /// the one a view should use, so it cannot hash the payload alone.
+    static func hash(of plan: PlanLinkIntake.IncomingPlan) throws -> String {
+        try hash(of: plan.payload, roadPickIDs: plan.roadPickIDs,
+                 exerciseGroups: plan.exerciseGroups)
     }
 
     static func isAlreadyImported(_ hash: String, in context: ModelContext) -> Bool {
@@ -131,11 +145,15 @@ enum PlanImporter {
     ///   does not have is skipped where the list is drawn, so a later release
     ///   that has the item again shows the pick rather than having thrown it
     ///   away on arrival.
-    /// - Parameter defaults: where the plan's sides, the per-side logging
-    ///   choice and the road picks are kept (`PlanSides`, `PerSideLogging`,
-    ///   `RoadPicks`). Written only once the store has saved, so a failed
-    ///   accept leaves none of them behind.
-    static func accept(_ payload: PlanPayload, roadPickIDs: [String] = [], hash: String,
+    /// - Parameter exerciseGroups: `g` for each workout's exercises, as sent
+    ///   (`PlanGroupLink`). Stored renumbered by adjacency, so a lone `g` or
+    ///   one its neighbours do not share is not a group.
+    /// - Parameter defaults: where the plan's sides, set types, the per-side
+    ///   logging choice and the road picks are kept (`PlanSides`,
+    ///   `RoutineSetTypes`, `PerSideLogging`, `RoadPicks`). Written only once
+    ///   the store has saved, so a failed accept leaves none of them behind.
+    static func accept(_ payload: PlanPayload, roadPickIDs: [String] = [],
+                       exerciseGroups: [[Int?]] = [], hash: String,
                        in context: ModelContext,
                        defaults: UserDefaults = .standard) throws {
         guard !isAlreadyImported(hash, in: context) else { return }
@@ -225,9 +243,19 @@ enum PlanImporter {
         var sides = PlanSides.load(from: defaults)
         var sidesChanged = false
         var eachSideLifts: [String] = []
+        // PLAN-FORMAT "Set types": `g` (read app-side) and bits 3-4 of a set's
+        // sixth position. Beside the routine too -- see `RoutineSetTypes`.
+        var setTypes = RoutineSetTypes.load(from: defaults)
+        var setTypesChanged = false
 
-        for planWorkout in payload.w ?? [] {
+        for (workoutIndex, planWorkout) in (payload.w ?? []).enumerated() {
             let routine = Routine(name: planWorkout.n)
+            // Adjacency makes the group, not the number: runs of two or more
+            // neighbours sharing a `g`, renumbered 1, 2, 3.
+            let sentGroups = workoutIndex < exerciseGroups.count ? exerciseGroups[workoutIndex] : []
+            let groups = ExerciseGrouping.runs(planWorkout.e.indices.map {
+                $0 < sentGroups.count ? sentGroups[$0] : nil
+            })
             routine.exercises = planWorkout.e.enumerated().map { exerciseIndex, planExercise in
                 let exercise = RoutineExercise(
                     name: planExercise.n,
@@ -250,7 +278,17 @@ enum PlanImporter {
                         sides.sides[set.id] = side
                         sidesChanged = true
                     }
+                    // Masked too, and never on an exercise's first set: there
+                    // is nothing before it to drop from or pause after.
+                    if let kind = SetKind.at(setIndex, SetKind(planTuple: tuple)) {
+                        setTypes.kinds[set.id] = kind
+                        setTypesChanged = true
+                    }
                     return set
+                }
+                if let group = groups[exerciseIndex] {
+                    setTypes.groups[exercise.id] = group
+                    setTypesChanged = true
                 }
                 if planExercise.isEachSide {
                     sides.eachSide.insert(exercise.id)
@@ -294,6 +332,7 @@ enum PlanImporter {
         }
 
         if sidesChanged { sides.save(to: defaults) }
+        if setTypesChanged { setTypes.save(to: defaults) }
         // After the save, like the sides and the picks: a failed accept rolled
         // its meals back, so it must leave no marker claiming a coach booked one.
         if planMealsChanged { planMeals.save(to: defaults) }
@@ -313,7 +352,8 @@ enum PlanImporter {
     static func accept(_ plan: PlanLinkIntake.IncomingPlan, hash: String,
                        in context: ModelContext,
                        defaults: UserDefaults = .standard) throws {
-        try accept(plan.payload, roadPickIDs: plan.roadPickIDs, hash: hash, in: context,
+        try accept(plan.payload, roadPickIDs: plan.roadPickIDs,
+                   exerciseGroups: plan.exerciseGroups, hash: hash, in: context,
                    defaults: defaults)
     }
 
@@ -351,10 +391,14 @@ private struct HashableMirror: Encodable {
     /// for a plan without picks are the bytes main hashed.
     let rf: [String]?
 
-    init(of payload: PlanPayload, roadPickIDs: [String] = []) {
+    /// `g`, nil when nothing is grouped, for the same reason as `rf`.
+    let g: [[Int?]]?
+
+    init(of payload: PlanPayload, roadPickIDs: [String] = [], exerciseGroups: [[Int?]] = []) {
         v = payload.v; t = payload.t; l = payload.l; n = payload.n
         r = payload.r; m = payload.m; w = payload.w; k = payload.k
         rf = roadPickIDs.isEmpty ? nil : roadPickIDs
+        g = exerciseGroups.contains { $0.contains { $0 != nil } } ? exerciseGroups : nil
     }
 }
 

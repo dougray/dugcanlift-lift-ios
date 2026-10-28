@@ -9,6 +9,9 @@ struct RoutinesView: View {
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
     @Query(RoutineRotation.recentDays) private var recentDays: [WorkoutDay]
     @State private var isCreatingRoutine = false
+    /// The routine whose exercises are open (`RoutineDetailView`).
+    @State private var opened: Routine?
+    @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
     /// Read so that a change of interface style invalidates this body, which
     /// is what re-applies the navigation bar's colours. See the note on
     /// `.toolbarColorScheme` below.
@@ -52,12 +55,17 @@ struct RoutinesView: View {
     var body: some View {
         let upNext = upNext
         let firstRotation = firstRotation(upNext)
+        let setTypes = RoutineSetTypes.decode(setTypesData)
         NavigationStack {
             List {
                 ForEach(groupedByFolder, id: \.folder) { group in
                     Section {
                         ForEach(group.routines) { routine in
-                            RoutineRow(routine: routine, isUpNext: upNext.contains(routine.id))
+                            RoutineRow(routine: routine, isUpNext: upNext.contains(routine.id),
+                                       groups: ExerciseGrouping.summary(
+                                           setTypes.storedGroups(routine.orderedExercises))) {
+                                opened = routine
+                            }
                         }
                     } header: {
                         Text(group.folder)
@@ -116,6 +124,12 @@ struct RoutinesView: View {
                     Button("New", systemImage: "plus") { isCreatingRoutine = true }
                 }
             }
+            // A button in the row opens it rather than a `NavigationLink`
+            // row: a link would make the whole row one tap target, over the
+            // row's own Start, Send and Delete.
+            .navigationDestination(item: $opened) { routine in
+                RoutineDetailView(routine: routine)
+            }
             .sheet(isPresented: $isCreatingRoutine) {
                 NewRoutineView()
                     .liftAppearance()
@@ -140,6 +154,9 @@ private struct RoutineRow: View {
     @Environment(\.modelContext) private var context
     let routine: Routine
     var isUpNext = false
+    /// "Superset A · Circuit B", or empty when nothing is grouped.
+    var groups = ""
+    let onOpen: () -> Void
     @State private var didSendToWatch = false
     @State private var confirmingDelete = false
     @State private var summary = RoutineRemoval.Summary()
@@ -147,7 +164,19 @@ private struct RoutineRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text(routine.name).font(.headline)
+                // The name opens the routine's exercises, sets and set types.
+                Button(action: onOpen) {
+                    HStack(spacing: 4) {
+                        Text(routine.name).font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .accessibilityHint("Shows its exercises and sets, and their supersets and drop sets")
                 if isUpNext {
                     Text("Up next")
                         .font(.caption.weight(.semibold))
@@ -157,7 +186,13 @@ private struct RoutineRow: View {
             Text("\(routine.orderedExercises.count) exercise\(routine.orderedExercises.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if !groups.isEmpty {
+                Text(groups)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             HStack(spacing: 16) {
+
                 Button("Start Today") {
                     routine.startSession(on: .now, in: context)
                 }

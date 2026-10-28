@@ -283,6 +283,9 @@ private struct DayEditor: View {
     @Binding var showingPicker: Bool
 
     @Query private var days: [WorkoutDay]
+    /// Supersets, drop sets and rest-pause on the day's logged rows, copied
+    /// there when a routine was started (`RoutineSetTypes`).
+    @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
 
     init(date: Date, unit: WeightUnit, showingPicker: Binding<Bool>) {
         self.date = date
@@ -313,9 +316,14 @@ private struct DayEditor: View {
                 }
 
                 if let day {
-                    ForEach(day.orderedExercises) { exercise in
+                    let exercises = day.orderedExercises
+                    let labels = RoutineSetTypes.decode(setTypesData).loggedLabels(exercises)
+                    ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
                         ExerciseBlock(exercise: exercise, unit: unit,
-                                      focus: day.focus, isLive: day.isLive)
+                                      focus: day.focus, isLive: day.isLive,
+                                      groupLabel: labels[index]) { set in
+                            ticked(set, of: exercise, in: day)
+                        }
                         Divider().overlay(Theme.hairline)
                     }
                 }
@@ -331,6 +339,17 @@ private struct DayEditor: View {
                 liveSessionControl
             }
         }
+    }
+
+    /// A set ticked done: the rest it starts, read off the whole day, because
+    /// inside a superset the next set is another exercise's (`SessionRest`).
+    private func ticked(_ set: SetEntry, of exercise: ExerciseEntry, in day: WorkoutDay) {
+        let after = SessionRest.after(
+            ticking: set.id,
+            in: SessionRest.exercises(day.orderedExercises,
+                                      setTypes: RoutineSetTypes.decode(setTypesData)),
+            restSeconds: WatchPlanSettings.resolvedRestSeconds())
+        RestTimer.shared.setDone(set.id, after: after, exerciseName: exercise.displayName)
     }
 
     private var nameBinding: Binding<String> {
@@ -379,12 +398,17 @@ private struct ExerciseBlock: View {
     @Environment(\.modelContext) private var context
     @AppStorage(PerSideLogging.storageKey) private var perSideRaw = "{}"
     @AppStorage(PlanSides.storageKey) private var planSidesData = Data()
+    @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
     let focus: TrainingFocus
     /// During a live session each set can be ticked done, which starts the
     /// rest before the next one.
     var isLive: Bool = false
+    /// "Superset A · A1" when the routine it was started from grouped it.
+    var groupLabel: GroupLabel? = nil
+    /// A set ticked done during a live session; the day decides the rest.
+    var onTicked: (SetEntry) -> Void = { _ in }
 
     @State private var confirmingRemove = false
 
@@ -432,6 +456,11 @@ private struct ExerciseBlock: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
+                    if let groupLabel {
+                        Text(groupLabel.text)
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                     // The name opens the lift's own progression — two lines
                     // and the gap between them when it is logged per side.
                     NavigationLink {
@@ -501,10 +530,13 @@ private struct ExerciseBlock: View {
             .accessibilityValue(perSide ? "On" : "Off")
             .accessibilityAddTraits(.isToggle)
 
+            let setTypes = RoutineSetTypes.decode(setTypesData)
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
                        showsSide: showsSide, bar: bar,
-                       restsBefore: isLive ? exercise.displayName : nil) {
+                       kind: setTypes.loggedKind(of: set, at: index),
+                       restsBefore: isLive ? exercise.displayName : nil,
+                       onTicked: { onTicked(set) }) {
                     delete(set, number: index + 1)
                 }
             }
@@ -536,7 +568,7 @@ private struct ExerciseBlock: View {
         let side: SetSide? = showsSide
             ? (prescription?.nextSide(after: logged) ?? exercise.nextSide) : nil
         if let asked = prescription?.setFor(side: side, after: logged) {
-            exercise.sets.append(SetEntry(
+            let set = SetEntry(
                 orderIndex: exercise.sets.count,
                 weightKg: asked.weightKg ?? 0,
                 reps: asked.reps ?? 0,
@@ -544,7 +576,14 @@ private struct ExerciseBlock: View {
                 durationSec: asked.durationSec,
                 distanceMeters: asked.distanceMeters,
                 side: side
-            ))
+            )
+            exercise.sets.append(set)
+            // A sided set from the coach keeps its kind: "30 x 12 L drop".
+            if let kind = asked.kind {
+                var setTypes = RoutineSetTypes.decode(setTypesData)
+                setTypes.loggedKinds[set.id] = kind
+                if let data = setTypes.encoded() { setTypesData = data }
+            }
         } else {
             let previous = exercise.orderedSets.last
             exercise.sets.append(SetEntry(
@@ -636,9 +675,15 @@ private struct SetRow: View {
     var showsSide: Bool = false
     /// The bar the lift is loaded on; the editor shows its plates.
     var bar: BarKind? = nil
+    /// Drop or rest-pause, from the routine it was started from. Said after
+    /// the side, as Coach and LIFT web say it: "30 x 12 L drop".
+    var kind: SetKind? = nil
     /// Set during a live session: the row gets a done tick, and ticking it
     /// starts a rest before this exercise's next set. Nil otherwise.
     var restsBefore: String? = nil
+    /// Ticked done: the day works out the rest (`SessionRest`). Nil, the tick
+    /// starts the Settings rest itself, as it always did.
+    var onTicked: (() -> Void)? = nil
     let onDelete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -677,12 +722,19 @@ private struct SetRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Set \(index), \(set.display(unit: unit))\(set.isWarmup ? ", warmup" : "")")
+                .accessibilityLabel("Set \(index), \(set.display(unit: unit))\(set.isWarmup ? ", warmup" : "")\(kind.map { ", \($0.label)" } ?? "")")
                 .accessibilityHint(isEditing ? "Closes the editor" : "Edits this set")
 
                 if set.isWarmup {
                     Text("warmup")
                         .scaledFont(size: 12)
+                        .foregroundStyle(Theme.textSecondary)
+                        .accessibilityHidden(true)
+                }
+
+                if let kind {
+                    Text(kind.label)
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundStyle(Theme.textSecondary)
                         .accessibilityHidden(true)
                 }
@@ -708,8 +760,12 @@ private struct SetRow: View {
         Button {
             if set.completedAt == nil {
                 set.completedAt = .now
-                RestTimer.shared.setDone(set.id, exerciseName: restsBefore,
-                                         restSeconds: WatchPlanSettings.resolvedRestSeconds())
+                if let onTicked {
+                    onTicked()
+                } else {
+                    RestTimer.shared.setDone(set.id, exerciseName: restsBefore,
+                                             restSeconds: WatchPlanSettings.resolvedRestSeconds())
+                }
             } else {
                 set.completedAt = nil
                 RestTimer.shared.setUndone(set.id)

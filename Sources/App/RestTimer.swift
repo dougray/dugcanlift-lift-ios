@@ -36,6 +36,17 @@ final class RestTimer {
 
     private(set) var current: RestCountdown?
 
+    /// What the banner says when a tick starts no rest: "Next: Seated Cable
+    /// Rows" inside a superset round, "Drop set next" before a drop set
+    /// (`SessionRest`). Never at the same time as a rest. Not kept across a
+    /// relaunch: it has no end time, and the next tick says it again.
+    struct Cue: Equatable {
+        var setID: UUID
+        var text: String
+    }
+
+    private(set) var cue: Cue?
+
     @ObservationIgnored private let outlets: RestOutlets
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -48,6 +59,7 @@ final class RestTimer {
 
     /// `restSeconds` nil is the watch setting's "no rest": nothing starts.
     func setDone(_ setID: UUID, exerciseName: String?, restSeconds: Int?, now: Date = .now) {
+        cue = nil
         guard let restSeconds, restSeconds > 0 else { return }
         let rest = RestCountdown(seconds: TimeInterval(restSeconds), setID: setID,
                                  exerciseName: exerciseName, now: now)
@@ -55,7 +67,29 @@ final class RestTimer {
         outlets.restStarted(rest)
     }
 
+    /// A tick that starts no rest. A rest still running is over -- the next
+    /// set has begun -- and the banner says what comes next instead.
+    func setDone(_ setID: UUID, noRest text: String) {
+        if current != nil { clear() }
+        cue = Cue(setID: setID, text: text)
+    }
+
+    /// What `SessionRest` decided, carried out. Everything that is not a set
+    /// type's case goes through `setDone(_:exerciseName:restSeconds:)` as it
+    /// always did.
+    func setDone(_ setID: UUID, after: SessionRest.After, exerciseName: String?, now: Date = .now) {
+        switch after {
+        case let .rest(seconds, before):
+            setDone(setID, exerciseName: before ?? exerciseName, restSeconds: seconds, now: now)
+        case let .noRest(text):
+            setDone(setID, noRest: text)
+        case .nothing:
+            setDone(setID, exerciseName: exerciseName, restSeconds: nil, now: now)
+        }
+    }
+
     func setUndone(_ setID: UUID) {
+        if cue?.setID == setID { cue = nil }
         guard current?.setID == setID else { return }
         clear()
     }
@@ -67,6 +101,7 @@ final class RestTimer {
     }
 
     func skip() {
+        cue = nil
         guard current != nil else { return }
         clear()
     }

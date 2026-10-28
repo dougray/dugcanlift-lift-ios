@@ -408,6 +408,17 @@ blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
 missing one of the four core macros is not logged at all, because
 `NutritionFacts` would store it as zero. No location, ever.
 
+**A meal can be put together before it is ordered** (`RoadFoodMeal`, build
+plan item 3). The "+" on a row adds that item to a tray pinned to the bottom of
+the screen. The tray reads "2 items · 520 kcal · 40 g protein · fits, 380 kcal
+to spare" against Home's number, and "Log meal" logs each item as its own
+entry, exactly as "Log it" would.
+- Only items that can be logged can be added, so a total is never a partial
+  sum passed off as a whole.
+- The tray isn't kept: a new place is a new order.
+- It needs no course field in the data. It is a LIFT-only feature, and nothing
+  goes on the wire.
+
 **The copy is pinned to the kit's bytes.** `Resources/road-food.sha256` is the
 kit's checksum of `road-food.json`, copied across with it, and
 `RoadFoodDataTests` hashes **what the app bundle actually holds** and asserts it

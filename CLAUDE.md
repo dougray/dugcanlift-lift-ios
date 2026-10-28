@@ -329,6 +329,52 @@ plan (as two-sided sets, weights intact) against Coach web's fixture
 watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
 companion move.
 
+**A coach's plan can carry set types** (PLAN-FORMAT.md "Set types"; the LIFT
+superproject's `2026-10-28-set-types-design.md`): `g`, a positive integer on
+adjacent exercises done round by round (two a superset, three or more a
+circuit), and bits 3-4 of a set tuple's sixth position, `1` drop and `2`
+rest-pause. **`g` is read app-side** by `PlanGroupLink`, off the same fragment,
+for the reason `rf` is -- `PlanWorkoutExercise` is LiftKit's and has no `g` --
+and rides in `PlanLinkIntake.IncomingPlan.exerciseGroups`; it is in
+`PlanImporter.hash` and an ungrouped plan writes no key, so it hashes as before.
+The kind needs no reader: `SetKind(planTuple:)` masks the tuple `PlanPayload`
+already decodes, and `PlanSetFlags.sideBits` still reads a left drop set (10) as
+left. **Only a JSON positive integer is a group, adjacency makes the group, a
+group of one is none, and an exercise's first set is always straight**
+(`SetKind.at`). The rules are `ExerciseGrouping`, Coach web's `prescriptions.js`
+and Coach iPhone's `PrescriptionTypes.swift` rule for rule: storage is
+renumbered 1, 2, 3; "Superset with next" joining onto a group takes the whole
+group, splitting keeps what is before the split; labels "Superset A" / "Circuit
+A" with members A1, A2; a set reads side then kind ("30 x 12 L drop").
+
+**Kept in `RoutineSetTypes`, a `UserDefaults` side-car** like `PlanSides` and for
+its reason: groups by `RoutineExercise.id`, kinds by `RoutinePrescribedSet.id`.
+`startSession` copies them onto the day by `ExerciseEntry.id` / `SetEntry.id`,
+offsetting a second routine's group numbers so two supersets started on one day
+never merge into a circuit by being neighbours; a sided set, logged by Add set
+rather than pre-filled, takes its kind from `CoachPrescribedSet.kind` in
+`PlanSides.logged`. `RoutineRemoval` sweeps the routine's entries and leaves the
+logged copies. The routine's exercises open from its name on Routines
+(`RoutineDetailView`): the set types are editable there, the numbers are not --
+this build has never had a routine editor for them. **Not in the backup**: this
+build writes no `routines[]` at all (a file's `routines` section is held and
+written back untouched, `group` and `kind` included), so there is nowhere for
+BACKUP-FORMAT's two fields to go until it does.
+
+**The rest follows the round** (`SessionRest`, a value type with tests; Train's
+day decides, because the next set may be another exercise's). The order is
+round by round across a group, skipping a member that has run out. Ticking a set
+while another set of its round is not ticked starts no rest and the banner says
+"Next: Seated Cable Rows"; the round's last tick starts the Settings rest.
+Otherwise the next not-ticked set decides: a drop set is no rest and "Drop set
+next", rest-pause is 15 seconds (fixed, not a setting). A tick with no rest ends
+a rest still running. Rest turned off in Settings is still nothing at all.
+`RestTimer.cue` is the no-rest line: not persisted, not on the lock screen. The
+watch's `WorkoutPlan` carries no set types yet, as it carries no sides. Nothing
+here reaches a coach: SHARE-FORMAT has no set type, so a drop set goes to them as
+an ordinary set. `Tests/Fixtures/web-plan-set-types.txt` is Coach web's own;
+never regenerate it from Swift.
+
 **A struct a model stores is part of the schema.** SwiftData flattens
 `NutritionFacts` into one column per field on FoodEntry, Recipe, PlannedMeal
 and `RememberedFood.per100g`, so a new field in LiftKit is a schema change
@@ -361,6 +407,31 @@ inside `#if DEBUG`) and a release build hides Road Food entirely. Blank stays
 blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
 missing one of the four core macros is not logged at all, because
 `NutritionFacts` would store it as zero. No location, ever.
+
+**A meal can be put together before it is ordered** (`RoadFoodMeal`, build
+plan item 3). The "+" on a row adds that item to a tray pinned to the bottom of
+the screen. The tray reads "2 items · 520 kcal · 40 g protein · fits, 380 kcal
+to spare" against Home's number, and "Log meal" logs each item as its own
+entry, exactly as "Log it" would.
+- Only items that can be logged can be added, so a total is never a partial
+  sum passed off as a whole.
+- The tray isn't kept: a new place is a new order.
+- It needs no course field in the data. It is a LIFT-only feature, and nothing
+  goes on the wire.
+
+**Avoiding allergens is one-sided on purpose** (`RoadFoodAllergens`, build
+plan item 2). The data is what each chain's own allergen chart says an item
+**contains**, and a chain's `allergensCovered` is set only where the chart
+says what it covers.
+- An item containing something avoided is hidden and counted.
+- An item the chart is silent on, or a chart that doesn't cover the allergen,
+  stays on screen with "Milk not stated". A list that hid only what it knew
+  about would read as safe when it isn't.
+- Nothing says "safe".
+- The Avoid row says the chart is the chain's own and that cross-contact isn't
+  covered.
+- The avoid list is `roadFoodAvoid` in `UserDefaults`, shared by every place;
+  avoiding nothing removes the key.
 
 **The copy is pinned to the kit's bytes.** `Resources/road-food.sha256` is the
 kit's checksum of `road-food.json`, copied across with it, and

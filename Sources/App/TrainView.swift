@@ -74,6 +74,7 @@ struct TrainView: View {
                 .adaptivePageWidth()
             }
             .liftScreen()
+            .safeAreaInset(edge: .bottom) { RestBanner() }
             // Number pads have no return key: Done above the keyboard, and a
             // drag on the page puts it away.
             .keyboardDoneButton()
@@ -269,7 +270,7 @@ private struct DayEditor: View {
                 if let day {
                     ForEach(day.orderedExercises) { exercise in
                         ExerciseBlock(exercise: exercise, unit: unit,
-                                      focus: day.focus)
+                                      focus: day.focus, isLive: day.isLive)
                         Divider().overlay(Theme.hairline)
                     }
                 }
@@ -309,6 +310,7 @@ private struct DayEditor: View {
                 Button("End") {
                     day.liveEndedAt = .now
                     try? context.save()
+                    RestTimer.shared.sessionEnded()
                     Task { await HealthKitManager.shared.syncPending(context: context) }
                 }
                 .foregroundStyle(Theme.accentText)
@@ -335,6 +337,9 @@ private struct ExerciseBlock: View {
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
     let focus: TrainingFocus
+    /// During a live session each set can be ticked done, which starts the
+    /// rest before the next one.
+    var isLive: Bool = false
 
     @State private var confirmingRemove = false
 
@@ -451,7 +456,8 @@ private struct ExerciseBlock: View {
 
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
-                       showsSide: showsSide, bar: bar) {
+                       showsSide: showsSide, bar: bar,
+                       restsBefore: isLive ? exercise.displayName : nil) {
                     delete(set, number: index + 1)
                 }
             }
@@ -581,6 +587,9 @@ private struct SetRow: View {
     var showsSide: Bool = false
     /// The bar the lift is loaded on; the editor shows its plates.
     var bar: BarKind? = nil
+    /// Set during a live session: the row gets a done tick, and ticking it
+    /// starts a rest before this exercise's next set. Nil otherwise.
+    var restsBefore: String? = nil
     let onDelete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -631,6 +640,8 @@ private struct SetRow: View {
 
                 Spacer()
 
+                if restsBefore != nil { doneTick }
+
                 DeleteGlyphButton(accessibilityName: "set \(index)", action: onDelete)
                     .padding(.trailing, -12)
             }
@@ -639,6 +650,34 @@ private struct SetRow: View {
                 editor
             }
         }
+    }
+
+    /// Done, during a live session. `completedAt` is the set's own field, and
+    /// it already travels in backups. Ticking starts the rest from Settings;
+    /// unticking takes back the rest this set started, and only that one.
+    private var doneTick: some View {
+        Button {
+            if set.completedAt == nil {
+                set.completedAt = .now
+                RestTimer.shared.setDone(set.id, exerciseName: restsBefore,
+                                         restSeconds: WatchPlanSettings.resolvedRestSeconds())
+            } else {
+                set.completedAt = nil
+                RestTimer.shared.setUndone(set.id)
+            }
+            save()
+        } label: {
+            Image(systemName: set.completedAt == nil ? "circle" : "checkmark.circle.fill")
+                .scaledFont(size: 22)
+                .foregroundStyle(set.completedAt == nil ? Theme.textSecondary : Theme.accentText)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Set \(index) done")
+        .accessibilityValue(set.completedAt == nil ? "Not done" : "Done")
+        .accessibilityHint(set.completedAt == nil ? "Starts your rest" : "")
+        .accessibilityAddTraits(.isToggle)
     }
 
     /// Two buttons rather than a `Picker`: a segmented picker cannot express

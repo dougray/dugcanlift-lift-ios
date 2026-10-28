@@ -587,6 +587,42 @@ own: no schema change, nothing in LiftKit, nothing on the wire.
   for a lift logged a side at a time, a bodyweight lift, or a lift with no
   earlier session.
 
+## Progress: the year, muscles, body weight, photos
+
+LIFT superproject `docs/superpowers/plans/2026-10-28-build-plan.md`, items
+9-12. The rules are `ProgressRules.swift` and are pinned by
+`ProgressRulesTests`. **Counting, never grading**: an empty week is a column
+of empty squares, and "No sets yet" lists muscles with nothing said about
+them.
+
+- **Your year** (Train) shows every day of the last 53 weeks as a square.
+  - The square's level comes from that day's working sets in fixed steps:
+    1-9, 10-19, 20 or more. Fixed steps, not quartiles, so a day reads the same
+    next month.
+  - Days after today draw as nothing, never as rest days.
+- **Muscles this week** (Train) counts working sets per primary muscle.
+  - A muscle comes from the logged exercise first, then from `exercises.db` by
+    name and equipment, then by name alone. A routine-started exercise is
+    logged with no muscle, which is why the fallbacks exist.
+  - An exercise that can't be placed is counted as unplaced and said in words,
+    never guessed.
+  - It is a list with bars, not a body drawing: a drawing needs artwork LIFT
+    can license.
+- **Body weight** (Home) is `BodyMeasurement` rows, the ones backups and Send to
+  Coach already carry.
+  - One weigh-in a day: logging again replaces today's entry.
+  - The chart covers the last 90 days.
+  - The goal is `bodyWeightGoalKg` in `UserDefaults`, drawn as a dashed line;
+    0 means no goal.
+- **Progress photos** (Home → Body weight → Photos) are files in Application
+  Support/ProgressPhotos. **Never rows, never in a backup, never sent.**
+  - A photo is megabytes and the store is copied whole into every backup.
+  - They are picked with `PhotosPicker`, which needs no photo-library
+    permission.
+  - Each is re-encoded to at most 2048 px, which also drops location metadata,
+    and written with complete file protection.
+  - The screen says in its own words that photos stay on the phone.
+
 ## Barcodes
 
 The food search can scan a barcode (`BarcodeScannerView`, VisionKit's

@@ -163,6 +163,11 @@ targets:
         # encryption beyond what iOS itself provides.
         ITSAppUsesNonExemptEncryption: false
 
+        # The rest between sets on the lock screen and in the Dynamic Island
+        # (RestTimer, Sources/Widgets/RestActivityWidget). Started only from
+        # the app, updated only from the app: no push token is ever asked for.
+        NSSupportsLiveActivities: true
+
         # HealthKit — both strings are required or the app is rejected. Each
         # must say exactly what HealthKitManager requests: App Review rejects
         # a purpose string that claims more (or less) than the code does.

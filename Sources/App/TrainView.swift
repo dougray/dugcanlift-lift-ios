@@ -74,6 +74,7 @@ struct TrainView: View {
                 .adaptivePageWidth()
             }
             .liftScreen()
+            .safeAreaInset(edge: .bottom) { RestBanner() }
             // Number pads have no return key: Done above the keyboard, and a
             // drag on the page puts it away.
             .keyboardDoneButton()
@@ -269,7 +270,7 @@ private struct DayEditor: View {
                 if let day {
                     ForEach(day.orderedExercises) { exercise in
                         ExerciseBlock(exercise: exercise, unit: unit,
-                                      focus: day.focus)
+                                      focus: day.focus, isLive: day.isLive)
                         Divider().overlay(Theme.hairline)
                     }
                 }
@@ -309,6 +310,7 @@ private struct DayEditor: View {
                 Button("End") {
                     day.liveEndedAt = .now
                     try? context.save()
+                    RestTimer.shared.sessionEnded()
                     Task { await HealthKitManager.shared.syncPending(context: context) }
                 }
                 .foregroundStyle(Theme.accentText)
@@ -335,6 +337,9 @@ private struct ExerciseBlock: View {
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
     let focus: TrainingFocus
+    /// During a live session each set can be ticked done, which starts the
+    /// rest before the next one.
+    var isLive: Bool = false
 
     @State private var confirmingRemove = false
 
@@ -365,6 +370,11 @@ private struct ExerciseBlock: View {
     }
 
     private var showsSide: Bool { perSide || pendingNamedSide }
+
+    /// The bar this lift is loaded on, if it is, for the set editor's plates.
+    private var bar: BarKind? {
+        BarKind.of(name: exercise.name, equipment: exercise.equipment)
+    }
 
     /// "L 1/3 · R 0/3" against a prescription with sides in it, "L 4/3" when
     /// over; otherwise the plain "L 3 · R 3" whenever sides are showing.
@@ -446,7 +456,8 @@ private struct ExerciseBlock: View {
 
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
-                       showsSide: showsSide) {
+                       showsSide: showsSide, bar: bar,
+                       restsBefore: isLive ? exercise.displayName : nil) {
                     delete(set, number: index + 1)
                 }
             }
@@ -504,6 +515,7 @@ private struct ExerciseBlock: View {
     /// original `id`, `orderIndex` and side, so it lands back in the same place.
     private func delete(_ set: SetEntry, number: Int) {
         let snapshot = SetEntrySnapshot(set)
+        RestTimer.shared.setUndone(set.id)
         exercise.sets.removeAll { $0.id == set.id }
         context.delete(set)
         save()
@@ -517,6 +529,7 @@ private struct ExerciseBlock: View {
     }
 
     private func remove() {
+        exercise.sets.forEach { RestTimer.shared.setUndone($0.id) }
         exercise.day?.exercises.removeAll { $0.id == exercise.id }
         context.delete(exercise)
         save()
@@ -574,6 +587,11 @@ private struct SetRow: View {
     /// Whether this lift is logged a limb at a time. Off, this row is exactly
     /// what it has always been — no control, no side in the text.
     var showsSide: Bool = false
+    /// The bar the lift is loaded on; the editor shows its plates.
+    var bar: BarKind? = nil
+    /// Set during a live session: the row gets a done tick, and ticking it
+    /// starts a rest before this exercise's next set. Nil otherwise.
+    var restsBefore: String? = nil
     let onDelete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -624,6 +642,8 @@ private struct SetRow: View {
 
                 Spacer()
 
+                if restsBefore != nil { doneTick }
+
                 DeleteGlyphButton(accessibilityName: "set \(index)", action: onDelete)
                     .padding(.trailing, -12)
             }
@@ -632,6 +652,34 @@ private struct SetRow: View {
                 editor
             }
         }
+    }
+
+    /// Done, during a live session. `completedAt` is the set's own field, and
+    /// it already travels in backups. Ticking starts the rest from Settings;
+    /// unticking takes back the rest this set started, and only that one.
+    private var doneTick: some View {
+        Button {
+            if set.completedAt == nil {
+                set.completedAt = .now
+                RestTimer.shared.setDone(set.id, exerciseName: restsBefore,
+                                         restSeconds: WatchPlanSettings.resolvedRestSeconds())
+            } else {
+                set.completedAt = nil
+                RestTimer.shared.setUndone(set.id)
+            }
+            save()
+        } label: {
+            Image(systemName: set.completedAt == nil ? "circle" : "checkmark.circle.fill")
+                .scaledFont(size: 22)
+                .foregroundStyle(set.completedAt == nil ? Theme.textSecondary : Theme.accentText)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Set \(index) done")
+        .accessibilityValue(set.completedAt == nil ? "Not done" : "Done")
+        .accessibilityHint(set.completedAt == nil ? "Starts your rest" : "")
+        .accessibilityAddTraits(.isToggle)
     }
 
     /// Two buttons rather than a `Picker`: a segmented picker cannot express
@@ -686,6 +734,10 @@ private struct SetRow: View {
                     HStack(alignment: .bottom, spacing: 8) { loadFields }
                     warmupToggle
                 }
+            }
+
+            if let bar, focus.showsWeight {
+                PlateLine(weightKg: set.weightKg, bar: bar, unit: unit)
             }
 
             if focus.showsTime || focus.showsDistance {

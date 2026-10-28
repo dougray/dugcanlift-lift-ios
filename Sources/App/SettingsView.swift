@@ -75,10 +75,13 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Keep the screen on", isOn: $keepsScreenOn)
+                    NavigationLink("Plates and bars") {
+                        PlateSettingsView()
+                    }
                 } header: {
-                    Text("Live session")
+                    Text("Training")
                 } footer: {
-                    Text("While a live session is running, the screen doesn't lock between sets.")
+                    Text("While a live session is running, the screen doesn't lock between sets. Plates and bars work out what to load for a set on a bar.")
                 }
 
                 Section {

@@ -68,6 +68,10 @@ struct TrainView: View {
                             OutdoorDaySection(date: selectedDate)
 
                             OutdoorHighlights()
+
+                            MusclesThisWeekCard()
+
+                            TrainingYearCard()
                         }
                     }
                 }

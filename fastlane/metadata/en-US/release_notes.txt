@@ -1,0 +1,9 @@
+- Rest timer: tick a set done in a live session and your rest counts down on the lock screen and in the Dynamic Island
+- Plate math, and the screen stays on while you train
+- Supersets, circuits, drop sets and rest-pause sets, with rest that follows the round
+- Routine folders run as a rotation, with the next one shown on Train
+- A suggested next weight for your own routines, with the reason
+- My equipment: exercise search leaves out what you can't use
+- Progress: your training year, sets per muscle this week, a body weight chart, and progress photos that stay on your phone
+- Import your training history from Strong, Hevy or FitNotes, and export yours as CSV
+- Road Food: six more chains, newer charts, allergens to avoid, and a meal you can put together before you order

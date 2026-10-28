@@ -373,6 +373,20 @@ entry, exactly as "Log it" would.
 - It needs no course field in the data. It is a LIFT-only feature, and nothing
   goes on the wire.
 
+**Avoiding allergens is one-sided on purpose** (`RoadFoodAllergens`, build
+plan item 2). The data is what each chain's own allergen chart says an item
+**contains**, and a chain's `allergensCovered` is set only where the chart
+says what it covers.
+- An item containing something avoided is hidden and counted.
+- An item the chart is silent on, or a chart that doesn't cover the allergen,
+  stays on screen with "Milk not stated". A list that hid only what it knew
+  about would read as safe when it isn't.
+- Nothing says "safe".
+- The Avoid row says the chart is the chain's own and that cross-contact isn't
+  covered.
+- The avoid list is `roadFoodAvoid` in `UserDefaults`, shared by every place;
+  avoiding nothing removes the key.
+
 **The copy is pinned to the kit's bytes.** `Resources/road-food.sha256` is the
 kit's checksum of `road-food.json`, copied across with it, and
 `RoadFoodDataTests` hashes **what the app bundle actually holds** and asserts it

@@ -249,6 +249,8 @@ struct RoadFoodPlaceView: View {
     @State private var meal = MealType.forHour(Calendar.current.component(.hour, from: .now))
     @State private var category: String?
     @State private var note: String?
+    /// Allergens avoided, kept across places (`RoadFoodAllergens`).
+    @State private var avoiding = RoadFoodAllergens.load()
     /// Items put together before ordering (`RoadFoodMeal`). Not kept: it is
     /// the order in front of you, and a new place is a new order.
     @State private var plate = RoadFoodMeal()
@@ -271,6 +273,13 @@ struct RoadFoodPlaceView: View {
     private var items: [RoadFoodItem] {
         if let chain { return chain.items }
         return catalog.snacks.filter { category == nil || $0.category == category }
+    }
+
+    private var covered: [String] { chain?.allergensCovered ?? [] }
+
+    /// What is left on screen once avoided allergens are hidden.
+    private var allergenFiltered: RoadFoodAllergens.Filtered {
+        RoadFoodAllergens.filter(items, covered: covered, avoiding: avoiding)
     }
 
     /// Home's number, from the same type Home reads it from.
@@ -312,7 +321,8 @@ struct RoadFoodPlaceView: View {
         // same order among themselves, and the same ones are left out.
         let picks = RoadPicks.decode(picksData)
         let ranked = RoadFoodRanking.withPicks(
-            RoadFoodRanking.rank(items, remainingCalories: remaining.map { Double($0.wholeCalories) }),
+            RoadFoodRanking.rank(allergenFiltered.shown,
+                                 remainingCalories: remaining.map { Double($0.wholeCalories) }),
             ids: picks?.ids ?? [])
 
         RoadFoodPage { contentWidth in
@@ -322,6 +332,8 @@ struct RoadFoodPlaceView: View {
                 if source == .developmentSample { RoadFoodSampleNotice() }
 
                 if isGasStation, catalog.snackCategories.count > 1 { categoryChips }
+
+                avoidChips
 
                 fitCard(remaining: remaining, ranked: ranked, picks: picks)
 
@@ -431,6 +443,38 @@ struct RoadFoodPlaceView: View {
                         category = c
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: Allergens
+
+    private var avoidChips: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Avoid")
+                .font(Theme.sectionLabel)
+                .foregroundStyle(Theme.textSecondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(RoadFoodAllergens.all, id: \.self) { allergen in
+                        LiftChip(label: RoadFoodAllergens.label(allergen), isSelected: avoiding.contains(allergen)) {
+                            if avoiding.contains(allergen) { avoiding.remove(allergen) } else { avoiding.insert(allergen) }
+                            RoadFoodAllergens.save(avoiding)
+                        }
+                    }
+                }
+            }
+            if !avoiding.isEmpty {
+                let hidden = allergenFiltered.hiddenCount
+                Text((hidden == 0 ? "Nothing here is listed as containing what you avoid. "
+                      : hidden == 1 ? "1 item is hidden because its chart says it contains something you avoid. "
+                      : "\(hidden) items are hidden because their chart says they contain something you avoid. ")
+                     + (covered.isEmpty
+                        ? "This place publishes no allergen chart LIFT can read, so nothing is marked either way."
+                        : "From \(chain?.name ?? "the chain")'s own allergen chart, which doesn't cover cross-contact. Check with the restaurant."))
+                    .font(Theme.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -569,6 +613,13 @@ struct RoadFoodPlaceView: View {
                 }
                 if let modification = item.modification {
                     Text(modification).font(Theme.detail).foregroundStyle(Theme.textSecondary)
+                }
+                if let contains = RoadFoodAllergens.containsLine(item) {
+                    Text(contains).font(Theme.detail).foregroundStyle(Theme.textSecondary)
+                }
+                if let unknown = RoadFoodAllergens.notStatedLine(
+                    RoadFoodAllergens.verdict(item, covered: covered, avoiding: avoiding)) {
+                    Text(unknown).font(Theme.detail).foregroundStyle(Theme.textPrimary)
                 }
                 if let barcode = item.barcode {
                     Text("Barcode \(barcode)").font(Theme.detail).foregroundStyle(Theme.textSecondary)

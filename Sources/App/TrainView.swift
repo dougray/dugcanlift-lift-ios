@@ -366,6 +366,11 @@ private struct ExerciseBlock: View {
 
     private var showsSide: Bool { perSide || pendingNamedSide }
 
+    /// The bar this lift is loaded on, if it is, for the set editor's plates.
+    private var bar: BarKind? {
+        BarKind.of(name: exercise.name, equipment: exercise.equipment)
+    }
+
     /// "L 1/3 · R 0/3" against a prescription with sides in it, "L 4/3" when
     /// over; otherwise the plain "L 3 · R 3" whenever sides are showing.
     private var countLabel: String? {
@@ -446,7 +451,7 @@ private struct ExerciseBlock: View {
 
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
-                       showsSide: showsSide) {
+                       showsSide: showsSide, bar: bar) {
                     delete(set, number: index + 1)
                 }
             }
@@ -574,6 +579,8 @@ private struct SetRow: View {
     /// Whether this lift is logged a limb at a time. Off, this row is exactly
     /// what it has always been — no control, no side in the text.
     var showsSide: Bool = false
+    /// The bar the lift is loaded on; the editor shows its plates.
+    var bar: BarKind? = nil
     let onDelete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -686,6 +693,10 @@ private struct SetRow: View {
                     HStack(alignment: .bottom, spacing: 8) { loadFields }
                     warmupToggle
                 }
+            }
+
+            if let bar, focus.showsWeight {
+                PlateLine(weightKg: set.weightKg, bar: bar, unit: unit)
             }
 
             if focus.showsTime || focus.showsDistance {

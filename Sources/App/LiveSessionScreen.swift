@@ -24,10 +24,10 @@ enum LiveSessionScreen {
         }
     }
 
-    /// Never set means on: the Settings toggle's `@AppStorage` default only
-    /// reaches disk once someone moves it.
-    static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: enabledKey) == nil ? defaultEnabled : defaults.bool(forKey: enabledKey)
+    /// When the answer next changes on its own: the earliest moment a session
+    /// still holding the screen passes `longestHold`. Nil when none is.
+    static func nextCutoff(liveSince: [Date], now: Date) -> Date? {
+        liveSince.map { $0.addingTimeInterval(longestHold) }.filter { $0 > now }.min()
     }
 }
 
@@ -47,10 +47,17 @@ private struct KeepsScreenOnDuringLiveSession: ViewModifier {
         content
             .onChange(of: starts, initial: true) { apply() }
             .onChange(of: enabled) { apply() }
-            // The eight-hour limit is checked again whenever the app comes
-            // back, which is when a forgotten session would matter.
             .onChange(of: scenePhase) { apply() }
-            .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+            // A phone held awake never changes scene phase, so the eight-hour
+            // limit is applied by waiting for it: without this a session left
+            // running on the nightstand, with LIFT open, kept the screen on
+            // until the battery ran out.
+            .task(id: starts) {
+                guard let cutoff = LiveSessionScreen.nextCutoff(liveSince: starts, now: .now) else { return }
+                try? await Task.sleep(for: .seconds(cutoff.timeIntervalSinceNow))
+                guard !Task.isCancelled else { return }
+                apply()
+            }
     }
 
     private func apply() {

@@ -15,6 +15,14 @@ struct RestBanner: View {
             .padding(.bottom, 8)
             .frame(maxWidth: AdaptiveLayout.readableWidth)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+            // "Rest over" goes by itself a while after, as it does when the
+            // app comes back from the background.
+            .task(id: rest.endsAt) {
+                let wait = rest.endsAt.timeIntervalSinceNow + RestTimer.keepsOverFor + 1
+                try? await Task.sleep(for: .seconds(max(0, wait)))
+                guard !Task.isCancelled else { return }
+                timer.restore()
+            }
         }
     }
 

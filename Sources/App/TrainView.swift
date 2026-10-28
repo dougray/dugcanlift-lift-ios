@@ -515,6 +515,7 @@ private struct ExerciseBlock: View {
     /// original `id`, `orderIndex` and side, so it lands back in the same place.
     private func delete(_ set: SetEntry, number: Int) {
         let snapshot = SetEntrySnapshot(set)
+        RestTimer.shared.setUndone(set.id)
         exercise.sets.removeAll { $0.id == set.id }
         context.delete(set)
         save()
@@ -528,6 +529,7 @@ private struct ExerciseBlock: View {
     }
 
     private func remove() {
+        exercise.sets.forEach { RestTimer.shared.setUndone($0.id) }
         exercise.day?.exercises.removeAll { $0.id == exercise.id }
         context.delete(exercise)
         save()

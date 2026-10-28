@@ -3,6 +3,10 @@ import LiftCore
 
 /// The rest under Train while one is running: the time left, fifteen seconds
 /// either way, and Skip. Once it is over it says so, and the phone taps.
+///
+/// A tick that starts no rest -- inside a superset round, or before a drop set
+/// -- shows what comes next here instead ("Next: Seated Cable Rows", "Drop set
+/// next"), until the next tick or Done.
 struct RestBanner: View {
     private var timer = RestTimer.shared
 
@@ -23,7 +27,37 @@ struct RestBanner: View {
                 guard !Task.isCancelled else { return }
                 timer.restore()
             }
+        } else if let cue = timer.cue {
+            cueContent(cue)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+                .frame(maxWidth: AdaptiveLayout.readableWidth)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+
+    private func cueContent(_ cue: RestTimer.Cue) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No rest")
+                    .font(Theme.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                // A `String`, not a literal: an exercise name is someone's
+                // text, and a literal would be read as Markdown.
+                Text(cue.text)
+                    .scaledFont(size: 17, weight: .bold)
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+            }
+            .accessibilityElement(children: .combine)
+
+            Spacer(minLength: 0)
+
+            button("Done", label: "Done") { timer.skip() }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .liftCardBackground()
     }
 
     private func content(_ rest: RestCountdown, now: Date) -> some View {

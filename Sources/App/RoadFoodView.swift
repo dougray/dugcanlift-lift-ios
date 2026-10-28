@@ -277,6 +277,11 @@ struct RoadFoodPlaceView: View {
 
     private var covered: [String] { chain?.allergensCovered ?? [] }
 
+    /// Every item at this place, whatever category is on screen: the meal
+    /// tray totals against this, so switching category never drops an item
+    /// that is already in it.
+    private var placeItems: [RoadFoodItem] { chain?.items ?? catalog.snacks }
+
     /// What is left on screen once avoided allergens are hidden.
     private var allergenFiltered: RoadFoodAllergens.Filtered {
         RoadFoodAllergens.filter(items, covered: covered, avoiding: avoiding)
@@ -469,9 +474,8 @@ struct RoadFoodPlaceView: View {
                 Text((hidden == 0 ? "Nothing here is listed as containing what you avoid. "
                       : hidden == 1 ? "1 item is hidden because its chart says it contains something you avoid. "
                       : "\(hidden) items are hidden because their chart says they contain something you avoid. ")
-                     + (covered.isEmpty
-                        ? "This place publishes no allergen chart LIFT can read, so nothing is marked either way."
-                        : "From \(chain?.name ?? "the chain")'s own allergen chart, which doesn't cover cross-contact. Check with the restaurant."))
+                     + RoadFoodAllergens.sourceNote(chainName: chain?.name, hasChart: chain?.allergenSource != nil,
+                                                    statesCoverage: !covered.isEmpty))
                     .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -697,7 +701,7 @@ struct RoadFoodPlaceView: View {
                 Text("Your meal")
                     .font(Theme.detail)
                     .foregroundStyle(Theme.textSecondary)
-                Text(plate.line(from: items, remaining: remaining))
+                Text(plate.line(from: placeItems, remaining: remaining))
                     .font(Theme.body)
                     .foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -725,7 +729,7 @@ struct RoadFoodPlaceView: View {
 
     /// Each item as its own entry, as "Log it" would write it.
     private func logPlate() {
-        let chosen = plate.items(from: items)
+        let chosen = plate.items(from: placeItems)
         let entries = chosen.compactMap { RoadFoodRanking.entry(for: $0, chainName: chain?.name, mealType: meal) }
         guard !entries.isEmpty else { return }
         let before = todaysFood.totalNutrition

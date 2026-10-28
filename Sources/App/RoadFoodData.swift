@@ -98,11 +98,19 @@ struct RoadFoodChain: Decodable, Equatable, Identifiable, Hashable {
     let checkedOn: String?
     let source: String?
     let items: [RoadFoodItem]
+    /// Which of the nine major allergens the chain's own allergen chart has a
+    /// column for (`RoadFoodAllergens`). Empty where the chain states none we
+    /// could read: every item's allergens are then "not stated".
+    let allergensCovered: [String]
 
-    enum CodingKeys: String, CodingKey { case id, name, kind, publishedOn, checkedOn, source, items }
+    enum CodingKeys: String, CodingKey {
+        case id, name, kind, publishedOn, checkedOn, source, items, allergensCovered
+    }
 
     init(id: String, name: String, kind: String? = nil, publishedOn: String? = nil,
-         checkedOn: String? = nil, source: String? = nil, items: [RoadFoodItem]) {
+         checkedOn: String? = nil, source: String? = nil, items: [RoadFoodItem],
+         allergensCovered: [String] = []) {
+        self.allergensCovered = allergensCovered
         self.id = id
         self.name = name
         self.kind = kind
@@ -124,6 +132,7 @@ struct RoadFoodChain: Decodable, Equatable, Identifiable, Hashable {
         checkedOn = try? c.decodeIfPresent(String.self, forKey: .checkedOn)
         source = try? c.decodeIfPresent(String.self, forKey: .source)
         items = try c.decode([Lenient<RoadFoodItem>].self, forKey: .items).compactMap(\.value)
+        allergensCovered = RoadFoodAllergens.known((try? c.decodeIfPresent([String].self, forKey: .allergensCovered)) ?? [])
     }
 }
 
@@ -149,17 +158,22 @@ struct RoadFoodItem: Decodable, Equatable, Identifiable, Hashable {
     let barcode: String?
     let checkedOn: String?
     let source: String?
+    /// What the chain's allergen chart says this item contains. Nil is "not
+    /// stated"; empty is "listed, and none of the ones the chart covers".
+    let allergens: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id, name, serving, kcal, proteinG, fatG, carbsG, fiberG, saturatedFatG, sugarG, sodiumMg,
-             modification, category, brand, barcode, checkedOn, source
+             modification, category, brand, barcode, checkedOn, source, allergens
     }
 
     init(id: String, name: String, serving: String? = nil,
          kcal: Double? = nil, proteinG: Double? = nil, fatG: Double? = nil, carbsG: Double? = nil,
          fiberG: Double? = nil, saturatedFatG: Double? = nil, sugarG: Double? = nil, sodiumMg: Double? = nil,
          modification: String? = nil, category: String? = nil, brand: String? = nil,
-         barcode: String? = nil, checkedOn: String? = nil, source: String? = nil) {
+         barcode: String? = nil, checkedOn: String? = nil, source: String? = nil,
+         allergens: [String]? = nil) {
+        self.allergens = allergens
         self.id = id
         self.name = name
         self.serving = serving
@@ -208,6 +222,8 @@ struct RoadFoodItem: Decodable, Equatable, Identifiable, Hashable {
         barcode = text(.barcode)
         checkedOn = text(.checkedOn)
         source = text(.source)
+        allergens = (try? c.decodeIfPresent([String].self, forKey: .allergens)).flatMap { $0 }
+            .map(RoadFoodAllergens.known)
     }
 
     /// Brand and name for a product ("Jack Link's Original Beef Jerky"); the

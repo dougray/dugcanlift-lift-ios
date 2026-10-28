@@ -86,15 +86,22 @@ struct CoachPrescribedSet: Codable, Equatable {
     var durationSec: Int?
     var distanceMeters: Double?
     var side: SetSide?
+    /// Drop or rest-pause (`RoutineSetTypes`), nil straight. Carried here so a
+    /// sided set, which is logged by Add set rather than pre-filled, still
+    /// lands with its kind. Optional, so a value stored before set types
+    /// reads as straight.
+    var kind: SetKind?
 
     init(weightKg: Double? = nil, reps: Int? = nil, rpe: Double? = nil,
-         durationSec: Int? = nil, distanceMeters: Double? = nil, side: SetSide? = nil) {
+         durationSec: Int? = nil, distanceMeters: Double? = nil, side: SetSide? = nil,
+         kind: SetKind? = nil) {
         self.weightKg = weightKg
         self.reps = reps
         self.rpe = rpe
         self.durationSec = durationSec
         self.distanceMeters = distanceMeters
         self.side = side
+        self.kind = kind
     }
 
     init(_ set: RoutinePrescribedSet, side: SetSide?) {

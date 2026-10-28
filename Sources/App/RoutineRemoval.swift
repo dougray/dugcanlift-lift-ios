@@ -25,7 +25,8 @@ import LiftCore
 ///    push that silently falls through to whatever is scheduled instead.
 /// 3. This routine's entries in `PlanSides.eachSide` and `PlanSides.sides`,
 ///    which are keyed by `RoutineExercise.id` and `RoutinePrescribedSet.id` —
-///    ids that stop existing with the rows.
+///    ids that stop existing with the rows — and in `RoutineSetTypes.groups`
+///    and `.kinds`, keyed the same way.
 ///
 /// **What stays, and this is the important half.** Every workout already
 /// logged from it. `WorkoutDay`, `ExerciseEntry` and `SetEntry` copy the name
@@ -34,7 +35,8 @@ import LiftCore
 /// a relationship — so history is untouched by tidying a template away, which
 /// is the whole point of snapshotting it. `PlanSides.logged` stays with it:
 /// that map is deliberately "a copy, not a link back to the routine, so the
-/// targets survive the routine being edited or deleted".
+/// targets survive the routine being edited or deleted", and so do
+/// `RoutineSetTypes.loggedGroups` / `.loggedKinds`, for the same reason.
 ///
 /// Deleting a routine also hands back its ready-made twin, with no work here:
 /// `StarterSplits.isAlreadySaved` matches on the saved routines, so the split
@@ -102,6 +104,7 @@ enum RoutineRemoval {
             WatchPlanPin.clear(from: defaults)
         }
         sweepSides(exerciseIDs: exerciseIDs, setIDs: setIDs, in: defaults)
+        sweepSetTypes(exerciseIDs: exerciseIDs, setIDs: setIDs, in: defaults)
         return true
     }
 
@@ -125,5 +128,17 @@ enum RoutineRemoval {
         for id in setIDs { sides.sides.removeValue(forKey: id) }
         guard sides != before else { return }
         sides.save(to: defaults)
+    }
+
+    /// Drops this routine's groups and kinds. The logged copies stay with the
+    /// sessions that happened.
+    private static func sweepSetTypes(exerciseIDs: Set<UUID>, setIDs: Set<UUID>,
+                                      in defaults: UserDefaults) {
+        guard !exerciseIDs.isEmpty || !setIDs.isEmpty else { return }
+        var setTypes = RoutineSetTypes.load(from: defaults)
+        let before = setTypes
+        setTypes.sweep(exerciseIDs: exerciseIDs, setIDs: setIDs)
+        guard setTypes != before else { return }
+        setTypes.save(to: defaults)
     }
 }

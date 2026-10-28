@@ -377,6 +377,8 @@ targets:
       # RoadPicks.swift, which writes them, is deliberately NOT here -- the
       # extension still imports nothing.
       - path: Sources/Shared/RoadPickLink.swift
+      # `g`, read off the same fragment for the same reason (set types).
+      - path: Sources/Shared/PlanGroupLink.swift
       - path: Sources/Shared/PendingPlanLinks.swift
       - path: Sources/Shared/PendingRecipeImports.swift
       - path: Sources/Shared/RecipePageShare.swift

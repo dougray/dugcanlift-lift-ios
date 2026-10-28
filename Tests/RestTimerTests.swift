@@ -162,6 +162,61 @@ final class RestTimerTests: XCTestCase {
         XCTAssertEqual(outlets.events, ["start 60", "clear", "session ended"])
     }
 
+    // MARK: - Set types (`SessionRest`)
+
+    /// Inside a superset round, a tick starts no rest and ends the one still
+    /// running: the next set has begun. The banner says what it is instead.
+    func testATickWithNoRestEndsTheRunningRestAndSaysWhatIsNext() {
+        let outlets = Outlets()
+        let timer = timer(outlets)
+        timer.setDone(UUID(), exerciseName: "Bench", restSeconds: 90, now: now)
+        let a1 = UUID()
+        timer.setDone(a1, after: .noRest(cue: "Next: Seated Cable Rows"), exerciseName: "Bench", now: now)
+        XCTAssertNil(timer.current)
+        XCTAssertEqual(timer.cue, RestTimer.Cue(setID: a1, text: "Next: Seated Cable Rows"))
+        XCTAssertEqual(outlets.events, ["start 90", "clear"])
+
+        // The round's last tick starts the full rest, and the cue goes.
+        let b1 = UUID()
+        timer.setDone(b1, after: .rest(seconds: 90, before: "Bench (Dumbbell)"), exerciseName: "Rows", now: now)
+        XCTAssertNil(timer.cue)
+        XCTAssertEqual(timer.current?.exerciseName, "Bench (Dumbbell)")
+        XCTAssertEqual(outlets.events, ["start 90", "clear", "start 90"])
+    }
+
+    func testUntickingTheSetTakesItsCueBackAndDoneDismissesOne() {
+        let outlets = Outlets()
+        let timer = timer(outlets)
+        let set = UUID()
+        timer.setDone(set, noRest: "Drop set next")
+        timer.setUndone(UUID())
+        XCTAssertNotNil(timer.cue)
+        timer.setUndone(set)
+        XCTAssertNil(timer.cue)
+        timer.setDone(set, noRest: "Drop set next")
+        timer.skip()
+        XCTAssertNil(timer.cue)
+        XCTAssertEqual(outlets.events, [], "a cue is not a rest: nothing on the lock screen")
+    }
+
+    func testRestPauseIsAFifteenSecondRest() {
+        let outlets = Outlets()
+        let timer = timer(outlets)
+        timer.setDone(UUID(), after: .rest(seconds: SessionRest.restPauseSeconds, before: nil),
+                      exerciseName: "Barbell Curl", now: now)
+        XCTAssertEqual(timer.current?.remaining(at: now), 15)
+        XCTAssertEqual(timer.current?.exerciseName, "Barbell Curl")
+        timer.setDone(UUID(), after: .nothing, exerciseName: "Barbell Curl", now: now)
+        XCTAssertEqual(outlets.events, ["start 15"], "rest turned off starts nothing, as before")
+    }
+
+    func testEndingTheSessionTakesTheCueToo() {
+        let timer = timer(Outlets())
+        timer.setDone(UUID(), noRest: "Next: Rows")
+        timer.sessionEnded()
+        XCTAssertNil(timer.cue)
+    }
+
     /// With no rest running, ending the session still clears the lock screen:
     /// an activity can outlive the run of LIFT that started it.
     func testEndingTheSessionWithNoRestStillTellsTheOutlets() {

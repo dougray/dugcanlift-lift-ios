@@ -20,6 +20,10 @@ struct ExercisePickerView: View {
     @State private var query = ""
     @State private var results: [ExerciseRecord] = []
     @State private var loadFailed = false
+    @State private var notOwned = MyEquipment.load()
+    /// "Show all" for this search, without changing Settings.
+    @State private var showsEverything = false
+    @State private var leftOut = 0
 
     /// Reference IDs in most-recently-used order, de-duplicated.
     private var recentRefIDs: [String] {
@@ -43,10 +47,21 @@ struct ExercisePickerView: View {
                         systemImage: "exclamationmark.triangle",
                         description: Text("exercises.db is missing from the app bundle.")
                     )
+                } else if results.isEmpty && leftOut > 0 {
+                    ContentUnavailableView {
+                        Label("Nothing with your equipment", systemImage: "dumbbell")
+                    } description: {
+                        Text(leftOutText)
+                    } actions: {
+                        Button("Show all") { showsEverything = true }
+                    }
                 } else if results.isEmpty && !query.isEmpty {
                     ContentUnavailableView.search(text: query)
                 } else {
                     List {
+                        if !notOwned.isEmpty {
+                            equipmentRow
+                        }
                         ForEach(results) { record in
                             Button {
                                 onSelect(record)
@@ -71,7 +86,7 @@ struct ExercisePickerView: View {
             }
             // Re-runs whenever query changes; the sleep debounces keystrokes,
             // and SwiftUI cancels the previous task automatically.
-            .task(id: query) {
+            .task(id: SearchKey(query: query, showsEverything: showsEverything)) {
                 await search()
             }
         }
@@ -105,6 +120,33 @@ struct ExercisePickerView: View {
         .contentShape(Rectangle())
     }
 
+    private struct SearchKey: Equatable {
+        let query: String
+        let showsEverything: Bool
+    }
+
+    private var filtering: Bool { !notOwned.isEmpty && !showsEverything }
+
+    private var leftOutText: String {
+        leftOut == 1 ? "1 exercise needs equipment you don't have."
+            : "\(leftOut) exercises need equipment you don't have."
+    }
+
+    /// Says the list is narrowed, and by how much, with the way out.
+    private var equipmentRow: some View {
+        HStack {
+            Text(filtering
+                 ? (leftOut > 0 ? "Your equipment · \(leftOut) left out" : "Your equipment")
+                 : "All equipment")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button(filtering ? "Show all" : "Only mine") { showsEverything.toggle() }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.accentText)
+        }
+    }
+
     private func search() async {
         if !query.isEmpty {
             try? await Task.sleep(for: .milliseconds(200))
@@ -112,11 +154,18 @@ struct ExercisePickerView: View {
         }
 
         do {
+            // Filtering throws matches away, so it searches deeper first: the
+            // first 30 matches for "row" could all be cable rows.
+            let limit = query.isEmpty ? 200 : 30
+            let depth = filtering ? 1000 : limit
             let found = query.isEmpty
-                ? try await ReferenceDatabase.shared.allExercises(limit: 200)
-                : try await ReferenceDatabase.shared.searchExercises(query)
+                ? try await ReferenceDatabase.shared.allExercises(limit: depth)
+                : try await ReferenceDatabase.shared.searchExercises(query, limit: depth)
             guard !Task.isCancelled else { return }
-            results = rankByHistory(found)
+            let narrowed = MyEquipment.filter(found, notOwned: filtering ? notOwned : [],
+                                              equipment: \.equipment)
+            results = Array(rankByHistory(narrowed.shown).prefix(limit))
+            leftOut = narrowed.leftOut
             loadFailed = false
         } catch {
             results = []

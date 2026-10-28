@@ -47,6 +47,8 @@ struct TrainView: View {
 
                             ScheduledSessionBanner(date: selectedDate)
 
+                            UpNextBanner(date: selectedDate)
+
                             // The coach's week, under the coach's own card for
                             // the day and above the day's own log -- the day's
                             // action first, the week as the context under it,
@@ -227,6 +229,49 @@ private struct ScheduledSessionBanner: View {
         )
         guard let routine = try? context.fetch(descriptor).first else { return }
         routine.startSession(on: date, in: context)
+    }
+}
+
+/// "Up next: Pull · Push/Pull/Legs", on today's page while nothing has been
+/// logged on it and no coach has booked it: the next routine of the rotation
+/// most recently trained (`RoutineRotation`). A suggestion, started by a tap
+/// the way any routine is. Only today, because a rotation's next step is
+/// about now: on a day gone by it would be a guess about what came after.
+private struct UpNextBanner: View {
+    let date: Date
+    @Environment(\.modelContext) private var context
+
+    @Query private var routines: [Routine]
+    @Query(RoutineRotation.recentDays) private var recentDays: [WorkoutDay]
+    @Query private var scheduled: [ScheduledSession]
+
+    init(date: Date) {
+        self.date = date
+        let key = DayKey.make(from: date)
+        _scheduled = Query(filter: #Predicate<ScheduledSession> { $0.dayKey == key })
+    }
+
+    private var suggestion: (routine: Routine, folder: String)? {
+        guard Calendar.current.isDateInToday(date), scheduled.isEmpty else { return nil }
+        let key = DayKey.make(from: date)
+        if let today = recentDays.first(where: { DayKey.make(from: $0.date) == key }),
+           !today.exercises.isEmpty { return nil }
+        guard let current = RoutineRotation.current(RoutineRotation.folders(routines),
+                                                    days: recentDays.map(RoutineRotation.day)),
+              let routine = routines.first(where: { $0.id == current.upNext.routineID })
+        else { return nil }
+        return (routine, current.folder)
+    }
+
+    var body: some View {
+        if let suggestion {
+            Button {
+                suggestion.routine.startSession(on: date, in: context)
+            } label: {
+                Label("Up next: \(suggestion.routine.name) · \(suggestion.folder)",
+                      systemImage: "arrow.triangle.2.circlepath")
+            }
+        }
     }
 }
 
@@ -433,6 +478,8 @@ private struct ExerciseBlock: View {
                              : "Its \(count) set\(count == 1 ? "" : "s") will be deleted too. This can't be undone.")
                     }
             }
+
+            ProgressionHint(exercise: exercise, unit: unit, bar: bar, perSide: showsSide)
 
             Button {
                 perSideRaw = PerSideLogging.setting(

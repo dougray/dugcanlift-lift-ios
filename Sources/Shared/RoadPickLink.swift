@@ -26,22 +26,25 @@ enum RoadPickLink {
     /// Empty when there is no `rf`, which PLAN-FORMAT calls silence about
     /// picks rather than a retraction.
     static func ids(inFragment fragment: String) -> [String] {
-        guard fragment.count >= 2 else { return [] }
+        payloadJSON(inFragment: fragment).map(ids(inJSON:)) ?? []
+    }
+
+    /// The payload's JSON, unpacked from a plan fragment the way
+    /// `PlanLinkCodec` unpacks it, or nil. Shared with `PlanGroupLink`, which
+    /// reads `g` off the same bytes for the same reason this reads `rf`.
+    static func payloadJSON(inFragment fragment: String) -> Data? {
+        guard fragment.count >= 2 else { return nil }
         let codec = fragment[fragment.index(after: fragment.startIndex)]
         // As `PlanLinkCodec` does: the payload is base64url, so the first
         // character outside that alphabet marks where it ends.
         let body = String(fragment.dropFirst(2).prefix { c in
             c.isASCII && (c.isLetter || c.isNumber || c == "-" || c == "_")
         })
-        guard let raw = CompactEncoding.base64URLDecode(body) else { return [] }
+        guard let raw = CompactEncoding.base64URLDecode(body) else { return nil }
         switch codec {
-        case "z":
-            guard let inflated = CompactEncoding.inflateRaw(raw) else { return [] }
-            return ids(inJSON: inflated)
-        case "u":
-            return ids(inJSON: raw)
-        default:
-            return []
+        case "z": return CompactEncoding.inflateRaw(raw)
+        case "u": return raw
+        default: return nil
         }
     }
 

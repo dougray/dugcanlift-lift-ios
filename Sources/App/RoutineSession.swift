@@ -19,6 +19,10 @@ extension Routine {
         let day = WorkoutQueries.fetchOrCreate(date, in: context)
         var planSides = PlanSides.load(from: defaults)
         var loggedChanged = false
+        // Supersets, drop sets and rest-pause go with the session as a copy
+        // keyed by the logged rows, so the live session can train them.
+        var setTypes = RoutineSetTypes.load(from: defaults)
+        var setTypesChanged = false
 
         // Guard against duplicate invocation: nothing marks a
         // ScheduledSession as consumed once started (TrainView's
@@ -37,7 +41,14 @@ extension Routine {
             day.name = name
         }
 
-        for exercise in orderedExercises {
+        // This routine's groups as the wire numbers them, moved past any group
+        // already on the day, so a second routine started beside the first
+        // never joins its superset to the other's by being next to it.
+        let exercises = orderedExercises
+        let groups = ExerciseGrouping.runs(setTypes.storedGroups(exercises))
+        let groupOffset = setTypes.nextLoggedGroupOffset(day.exercises)
+
+        for (exerciseIndex, exercise) in exercises.enumerated() {
             let refID = "routine:\(exercise.id.uuidString)"
             guard !existingRefIDs.contains(refID) else { continue }
             let entry = ExerciseEntry(
@@ -57,36 +68,53 @@ extension Routine {
             // done, rather than pre-filled: a pre-filled left set is a claim
             // nobody made yet. Two-sided sets of an exercise that is not each
             // side are copied in as they always were.
-            let prescription = planSides.prescription(for: exercise)
-            if let prescription {
-                planSides.logged[entry.id] = prescription
+            let kinds = setTypes.kinds(of: exercise)
+            var prescription = planSides.prescription(for: exercise)
+            if var sided = prescription {
+                // A sided set is logged by Add set, so its kind rides with
+                // the prescription it is logged from.
+                for index in sided.sets.indices where index < kinds.count {
+                    sided.sets[index].kind = kinds[index]
+                }
+                prescription = sided
+                planSides.logged[entry.id] = sided
                 loggedChanged = true
             }
-            entry.sets = exercise.orderedSets
-                .filter { set in
+            if let group = groups[exerciseIndex] {
+                setTypes.loggedGroups[entry.id] = groupOffset + group
+                setTypesChanged = true
+            }
+            let copied = zip(exercise.orderedSets, kinds)
+                .filter { set, _ in
                     guard let prescription else { return true }
                     return !prescription.eachSide && planSides.side(of: set) == nil
                 }
-                .filter {
-                    $0.targetWeightKg != nil || $0.targetReps != nil
-                        || $0.targetDurationSec != nil || $0.targetDistanceMeters != nil
+                .filter { set, _ in
+                    set.targetWeightKg != nil || set.targetReps != nil
+                        || set.targetDurationSec != nil || set.targetDistanceMeters != nil
                 }
-                .enumerated()
-                .map { index, prescribed in
-                    SetEntry(
-                        orderIndex: index,
-                        weightKg: prescribed.targetWeightKg ?? 0,
-                        reps: prescribed.targetReps ?? 0,
-                        rpe: prescribed.targetRPE,
-                        durationSec: prescribed.targetDurationSec,
-                        distanceMeters: prescribed.targetDistanceMeters
-                    )
+            entry.sets = copied.enumerated().map { index, pair in
+                let (prescribed, kind) = pair
+                let set = SetEntry(
+                    orderIndex: index,
+                    weightKg: prescribed.targetWeightKg ?? 0,
+                    reps: prescribed.targetReps ?? 0,
+                    rpe: prescribed.targetRPE,
+                    durationSec: prescribed.targetDurationSec,
+                    distanceMeters: prescribed.targetDistanceMeters
+                )
+                if let kind {
+                    setTypes.loggedKinds[set.id] = kind
+                    setTypesChanged = true
                 }
+                return set
+            }
             day.exercises.append(entry)
         }
 
         try? context.save()
         if loggedChanged { planSides.save(to: defaults) }
+        if setTypesChanged { setTypes.save(to: defaults) }
         return day
     }
 }

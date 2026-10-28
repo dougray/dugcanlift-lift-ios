@@ -42,6 +42,9 @@ struct LiftApp: App {
     // SwiftUI itself, which `LiftStore.shared.mainContext` needs.
     init() {
         WatchSyncReceiver.activate(context: LiftStore.shared.mainContext)
+        // Built now so it is the notification delegate before anything is
+        // delivered, and picks up a Live Activity left from a previous run.
+        _ = RestTimer.shared
         // The share extension has its own defaults and cannot read this id,
         // which it needs before `PlanLinkCodec` will hand it a payload at all.
         // Written once; a no-op on every launch after the first.
@@ -67,6 +70,7 @@ struct LiftApp: App {
                 // Plans first, then recipes, the order the extension decides in.
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     guard phase == .active else { return }
+                    RestTimer.shared.restore()
                     // Reads the recipe files without emptying them: one goes
                     // only when its review finishes, so iOS ending LIFT
                     // mid-review loses nothing.

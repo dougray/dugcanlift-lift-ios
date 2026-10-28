@@ -74,6 +74,12 @@ struct SettingsView: View {
                 .onChange(of: distanceUnitRaw) { WatchSyncReceiver.shared?.pushRecentFoodsSnapshot() }
 
                 Section {
+                    Stepper(value: $watchRestSeconds,
+                            in: WatchPlanSettings.restSecondsRange,
+                            step: WatchPlanSettings.restSecondsStep) {
+                        LabeledContent("Rest between sets",
+                                       value: SetMetrics.clock(watchRestSeconds))
+                    }
                     Toggle("Keep the screen on", isOn: $keepsScreenOn)
                     NavigationLink("Plates and bars") {
                         PlateSettingsView()
@@ -81,20 +87,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Training")
                 } footer: {
-                    Text("While a live session is running, the screen doesn't lock between sets. Plates and bars work out what to load for a set on a bar.")
-                }
-
-                Section {
-                    Stepper(value: $watchRestSeconds,
-                            in: WatchPlanSettings.restSecondsRange,
-                            step: WatchPlanSettings.restSecondsStep) {
-                        LabeledContent("Rest between sets",
-                                       value: SetMetrics.clock(watchRestSeconds))
-                    }
-                } header: {
-                    Text("Apple Watch")
-                } footer: {
-                    Text("Sent with every prescribed set, so the watch starts resting on its own when you log one. A routine itself carries no rest time.")
+                    Text("In a live session, tick a set done to start your rest; LIFT tells you when it's over, even with your phone locked. Your Apple Watch rests for the same time. While a live session is running, the screen doesn't lock. Plates and bars work out what to load for a set on a bar.")
                 }
 
                 CoachSection()

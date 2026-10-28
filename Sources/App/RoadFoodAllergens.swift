@@ -88,6 +88,20 @@ enum RoadFoodAllergens {
         return names.prefix(1).uppercased() + names.dropFirst() + " not stated"
     }
 
+    /// The note under the Avoid row, after the hidden count: where the
+    /// allergens come from, and what that chart cannot say. `chainName` nil
+    /// is the gas station, whose snacks carry no allergen chart.
+    static func sourceNote(chainName: String?, hasChart: Bool, statesCoverage: Bool) -> String {
+        guard let chainName, hasChart else {
+            return "This place publishes no allergen chart LIFT can read, so nothing is marked either way."
+        }
+        if statesCoverage {
+            return "From the allergen chart \(chainName) publishes, which doesn't cover cross-contact. Check with the restaurant."
+        }
+        return "From the allergen chart \(chainName) publishes. It says what items contain, not which allergens it covers, "
+            + "so nothing is marked free of anything. It doesn't cover cross-contact either. Check with the restaurant."
+    }
+
     static func load(from defaults: UserDefaults = .standard) -> Set<String> {
         Set(known(defaults.stringArray(forKey: storageKey) ?? []))
     }

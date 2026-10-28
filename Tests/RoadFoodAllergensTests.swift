@@ -79,4 +79,17 @@ final class RoadFoodAllergensTests: XCTestCase {
         XCTAssertEqual(chain.items[0].allergens, ["wheat"])
         XCTAssertNil(chain.items[1].allergens)
     }
+
+    /// Three different things to say, and never "Wendy's's".
+    func testTheSourceNoteSaysWhatTheChartCanAndCannotSay() {
+        XCTAssertEqual(RoadFoodAllergens.sourceNote(chainName: nil, hasChart: false, statesCoverage: false),
+                       "This place publishes no allergen chart LIFT can read, so nothing is marked either way.")
+        XCTAssertEqual(RoadFoodAllergens.sourceNote(chainName: "Taco Bell", hasChart: false, statesCoverage: false),
+                       "This place publishes no allergen chart LIFT can read, so nothing is marked either way.")
+        XCTAssertEqual(RoadFoodAllergens.sourceNote(chainName: "Wendy's", hasChart: true, statesCoverage: true),
+                       "From the allergen chart Wendy's publishes, which doesn't cover cross-contact. Check with the restaurant.")
+        XCTAssertEqual(RoadFoodAllergens.sourceNote(chainName: "Starbucks", hasChart: true, statesCoverage: false),
+                       "From the allergen chart Starbucks publishes. It says what items contain, not which allergens it covers, "
+                       + "so nothing is marked free of anything. It doesn't cover cross-contact either. Check with the restaurant.")
+    }
 }

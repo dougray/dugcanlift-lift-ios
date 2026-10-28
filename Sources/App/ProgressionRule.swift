@@ -11,6 +11,12 @@ import LiftCore
 /// - Short at the same weight two sessions running: **back off** about 10%,
 ///   rounded down to a step, and build up again.
 ///
+/// A working set is a straight one. Drop and rest-pause sets (`SetKind`) are
+/// done after a set and normally lighter or shorter by design, so they are
+/// neither what the routine asks for nor what a session is judged on: a
+/// routine of two straight sets and two drop sets asks for two sets, and the
+/// day's drops are left out of what was lifted.
+///
 /// It says why, every time, in the line it gives. It is a suggestion shown
 /// beside the sets, never written into them unless "Use" is tapped, and it
 /// only touches sets not ticked done.
@@ -126,20 +132,60 @@ extension ProgressionRule {
 
     /// The working sets of this lift on each earlier day, newest first. A
     /// day this lift was logged a side at a time is left out: its sides are
-    /// two lifts, and one number for both would be wrong for each.
+    /// two lifts, and one number for both would be wrong for each. A set the
+    /// day carries as a drop or rest-pause set (`RoutineSetTypes.loggedKinds`,
+    /// read at its place in its exercise, so a first set is always straight)
+    /// is not a working set.
     static func sessions(of exercise: ExerciseEntry, in days: [WorkoutDay],
-                         unit: WeightUnit) -> [Session] {
+                         unit: WeightUnit, setTypes: RoutineSetTypes) -> [Session] {
         let key = ExerciseKey.make(name: exercise.name, equipment: exercise.equipment)
         return days.compactMap { day in
             let entries = day.exercises.filter {
                 $0.id != exercise.id && ExerciseKey.make(name: $0.name, equipment: $0.equipment) == key
             }
-            let sets = entries.flatMap(\.orderedSets)
-            guard !sets.contains(where: { $0.side != nil }) else { return nil }
-            let working = sets
-                .filter { !$0.isWarmup && $0.weightKg > 0 && $0.reps > 0 }
-                .map { LoggedSet(weight: rounded(unit.fromKilograms($0.weightKg), to: 0.25), reps: $0.reps) }
+            guard !entries.flatMap(\.orderedSets).contains(where: { $0.side != nil }) else { return nil }
+            let working = entries.flatMap { entry in
+                entry.orderedSets.enumerated()
+                    .filter { setTypes.loggedKind(of: $0.element, at: $0.offset) == nil }
+                    .map(\.element)
+            }
+            .filter { !$0.isWarmup && $0.weightKg > 0 && $0.reps > 0 }
+            .map { LoggedSet(weight: rounded(unit.fromKilograms($0.weightKg), to: 0.25), reps: $0.reps) }
             return working.isEmpty ? nil : Session(date: day.date, sets: working)
         }
+    }
+
+    /// What a routine asks of a lift: the most reps any of its straight sets
+    /// asks for, and how many straight sets ask for reps.
+    struct Target: Equatable {
+        var reps: Int
+        var sets: Int
+    }
+
+    /// The routine's straight sets only. A drop set's twelve is not the
+    /// lift's target, and two drop sets after two straight ones do not make a
+    /// routine of four. An exercise's first set is always straight
+    /// (`SetKind.at`), so a top set followed only by drops asks for one set,
+    /// as a one-set routine always has. None when no straight set has a rep
+    /// target: a drop set's reps are no measure of the straight weight.
+    static func target(of prescribed: RoutineExercise, setTypes: RoutineSetTypes) -> Target? {
+        let reps = zip(prescribed.orderedSets, setTypes.kinds(of: prescribed))
+            .filter { $0.1 == nil }
+            .compactMap(\.0.targetReps)
+        guard let most = reps.max() else { return nil }
+        return Target(reps: most, sets: reps.count)
+    }
+
+    /// The sets "Use" fills: straight working sets not ticked done whose
+    /// weight is not already the one. A drop or rest-pause set keeps its own
+    /// weight, and a warm-up is never one.
+    static func setsToFill(in exercise: ExerciseEntry, weight: Double, unit: WeightUnit,
+                           setTypes: RoutineSetTypes) -> [SetEntry] {
+        let kg = unit.toKilograms(weight)
+        return exercise.orderedSets.enumerated().filter { index, set in
+            !set.isWarmup && set.completedAt == nil && abs(set.weightKg - kg) > 0.001
+                && setTypes.loggedKind(of: set, at: index) == nil
+        }
+        .map(\.element)
     }
 }

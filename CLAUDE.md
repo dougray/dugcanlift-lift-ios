@@ -486,6 +486,36 @@ as readily as a recording from ten seconds ago.
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.
 
+## Programming: equipment, rotations, the next weight
+
+From openGym's list (LIFT superproject,
+`docs/superpowers/plans/2026-10-28-build-plan.md`). All three are this app's
+own: no schema change, nothing in LiftKit, nothing on the wire.
+
+- **My equipment** (`MyEquipment`, Settings → Training) is stored as what the
+  lifter does *not* have, so an untouched phone hides nothing, and owning
+  everything removes the key. An exercise with no equipment listed is never
+  hidden. Search says how many it left out and offers "Show all". It searches
+  deeper when filtering, or the first 30 matches could all be ones it then
+  throws away. `MyEquipmentTests` fails if `exercises.db` gains an equipment
+  value with no switch.
+- **A folder is a rotation** (`RoutineRotation`). Up next is the routine after
+  the last one started from that folder, by the `routine:<exercise id>` refs
+  `startSession` writes; its order is the order routines were added, names
+  breaking a tie, and Routines lists a named folder in that order. The default folder is not a rotation and stays newest first. Train offers today's
+  up next only while today is empty and no coach booked it, and only from a
+  rotation someone has started.
+- **The next weight** (`ProgressionRule`, shown by `ProgressionHint`) is double
+  progression: every working set at last session's top weight reached the
+  routine's reps, as many sets as it asks for, is up one step; short is the
+  same again; short at the same weight two sessions running backs off about
+  10%. It works in the lifter's unit, so a step is a real plate pair (two of the
+  smallest plate owned for a bar, otherwise 5 lb or 2.5 kg). It is a line with
+  its reason and a "Use" button that fills only sets not ticked done. **None
+  for a routine a coach scheduled**: the coach programmes those numbers. None
+  for a lift logged a side at a time, a bodyweight lift, or a lift with no
+  earlier session.
+
 ## Barcodes
 
 The food search can scan a barcode (`BarcodeScannerView`, VisionKit's

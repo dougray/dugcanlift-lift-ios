@@ -11,6 +11,9 @@ protocol RestOutlets: AnyObject {
     func restStarted(_ rest: RestCountdown)
     func restChanged(_ rest: RestCountdown)
     func restCleared()
+    /// The session is over: anything still on the lock screen goes, even an
+    /// activity left from a run of LIFT that iOS ended.
+    func sessionEnded()
 }
 
 /// The iPhone's rest between sets, during a live session.
@@ -68,7 +71,10 @@ final class RestTimer {
         clear()
     }
 
-    func sessionEnded() { skip() }
+    func sessionEnded() {
+        skip()
+        outlets.sessionEnded()
+    }
 
     /// On the way back into the app: a rest over for a while is done with.
     func restore(now: Date = .now) {
@@ -99,13 +105,30 @@ final class RestTimer {
 final class SystemRestOutlets: NSObject, RestOutlets, UNUserNotificationCenterDelegate {
     static let notificationID = "lift.rest.over"
 
-    private var activity: Activity<RestActivityAttributes>?
+    private var activityStorage: Activity<RestActivityAttributes>?
+    /// The end time of the rest a notification is wanted for, or nil. Checked
+    /// again once permission has been answered, which takes a round trip: a
+    /// rest skipped or moved in the meantime must not get the old alert.
+    private var scheduledFor: Date?
+    private var askedForNotifications = false
 
     override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self
         // One left over from a run of LIFT that iOS ended.
-        activity = Activity<RestActivityAttributes>.activities.first
+        activityStorage = Activity<RestActivityAttributes>.activities.first(where: Self.isLive)
+    }
+
+    /// The activity, while iOS still shows it. One swiped off the lock screen
+    /// or ended by iOS is gone for good: updating it does nothing, so the next
+    /// rest has to ask for a new one.
+    private var activity: Activity<RestActivityAttributes>? {
+        guard let activityStorage, Self.isLive(activityStorage) else { return nil }
+        return activityStorage
+    }
+
+    private static func isLive(_ activity: Activity<RestActivityAttributes>) -> Bool {
+        activity.activityState == .active || activity.activityState == .stale
     }
 
     func restStarted(_ rest: RestCountdown) {
@@ -113,7 +136,7 @@ final class SystemRestOutlets: NSObject, RestOutlets, UNUserNotificationCenterDe
         if let activity {
             update(activity, to: rest)
         } else if ActivityAuthorizationInfo().areActivitiesEnabled {
-            activity = try? Activity.request(
+            activityStorage = try? Activity.request(
                 attributes: RestActivityAttributes(),
                 content: ActivityContent(state: rest, staleDate: rest.endsAt))
         }
@@ -125,37 +148,59 @@ final class SystemRestOutlets: NSObject, RestOutlets, UNUserNotificationCenterDe
     }
 
     func restCleared() {
+        scheduledFor = nil
         UNUserNotificationCenter.current().removePendingNotificationRequests(
             withIdentifiers: [Self.notificationID])
-        guard let activity else { return }
-        self.activity = nil
+        guard let activity = activityStorage else { return }
+        activityStorage = nil
         Task { await activity.end(nil, dismissalPolicy: .immediate) }
+    }
+
+    func sessionEnded() {
+        restCleared()
+        for leftover in Activity<RestActivityAttributes>.activities {
+            Task { await leftover.end(nil, dismissalPolicy: .immediate) }
+        }
     }
 
     private func update(_ activity: Activity<RestActivityAttributes>, to rest: RestCountdown) {
         Task { await activity.update(ActivityContent(state: rest, staleDate: rest.endsAt)) }
     }
 
-    /// Asked the first time a rest starts, which is the first time it means
-    /// anything. Refused, the timer still runs on screen and on the lock
-    /// screen; only the alert at the end is missing.
+    /// Permission is asked the first time a rest starts, which is the first
+    /// time it means anything. Refused, the timer still runs on screen and on
+    /// the lock screen; only the alert at the end is missing.
+    ///
+    /// Everything here is on the main actor and in order. The time left is
+    /// worked out after permission is answered, so a first rest's alert is
+    /// not late by however long the prompt was up, and only if this is still
+    /// the rest wanted.
     private func schedule(_ rest: RestCountdown) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [Self.notificationID])
-        let seconds = rest.remaining(at: .now)
-        guard seconds > 0 else { return }
+        scheduledFor = rest.endsAt
+        Task { @MainActor in
+            if !askedForNotifications {
+                _ = try? await center.requestAuthorization(options: [.alert, .sound])
+                askedForNotifications = true
+            }
+            guard scheduledFor == rest.endsAt,
+                  await center.notificationSettings().authorizationStatus == .authorized,
+                  scheduledFor == rest.endsAt else { return }
+            let seconds = rest.remaining(at: .now)
+            guard seconds > 0 else { return }
 
-        let content = UNMutableNotificationContent()
-        content.title = "Rest over"
-        content.body = rest.exerciseName.map { "Back to \($0)." } ?? "Time for your next set."
-        content.sound = .default
-        let request = UNNotificationRequest(
-            identifier: Self.notificationID, content: content,
-            trigger: UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false))
-
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
-            center.add(request)
+            let content = UNMutableNotificationContent()
+            content.title = "Rest over"
+            content.body = rest.exerciseName.map { "Back to \($0)." } ?? "Time for your next set."
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(
+                identifier: Self.notificationID, content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)))
+            // Skipped or moved while that was being added: take it back.
+            if scheduledFor != rest.endsAt {
+                center.removePendingNotificationRequests(withIdentifiers: [Self.notificationID])
+            }
         }
     }
 

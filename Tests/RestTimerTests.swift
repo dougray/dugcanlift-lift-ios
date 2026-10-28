@@ -60,6 +60,7 @@ final class RestTimerTests: XCTestCase {
         func restStarted(_ rest: RestCountdown) { events.append("start \(Int(rest.remaining(at: rest.startedAt)))") }
         func restChanged(_ rest: RestCountdown) { events.append("change \(Int(rest.endsAt.timeIntervalSince(rest.startedAt)))") }
         func restCleared() { events.append("clear") }
+        func sessionEnded() { events.append("session ended") }
     }
 
     private func timer(_ outlets: Outlets, function: String = #function) -> RestTimer {
@@ -158,6 +159,15 @@ final class RestTimerTests: XCTestCase {
         timer.setDone(UUID(), exerciseName: nil, restSeconds: 60, now: now)
         timer.sessionEnded()
         XCTAssertNil(timer.current)
-        XCTAssertEqual(outlets.events, ["start 60", "clear"])
+        XCTAssertEqual(outlets.events, ["start 60", "clear", "session ended"])
+    }
+
+    /// With no rest running, ending the session still clears the lock screen:
+    /// an activity can outlive the run of LIFT that started it.
+    func testEndingTheSessionWithNoRestStillTellsTheOutlets() {
+        let outlets = Outlets()
+        let timer = timer(outlets)
+        timer.sessionEnded()
+        XCTAssertEqual(outlets.events, ["session ended"])
     }
 }

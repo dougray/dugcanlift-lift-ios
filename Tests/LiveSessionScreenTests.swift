@@ -43,11 +43,18 @@ final class LiveSessionScreenTests: XCTestCase {
     }
 
     func testItIsOnUnlessSomeoneTurnsItOff() {
-        let defaults = UserDefaults(suiteName: #function)!
-        defaults.removePersistentDomain(forName: #function)
-        addTeardownBlock { defaults.removePersistentDomain(forName: #function) }
-        XCTAssertTrue(LiveSessionScreen.isEnabled(in: defaults))
-        defaults.set(false, forKey: LiveSessionScreen.enabledKey)
-        XCTAssertFalse(LiveSessionScreen.isEnabled(in: defaults))
+        XCTAssertTrue(LiveSessionScreen.defaultEnabled)
+    }
+
+    /// The screen is held awake, so nothing else would ask again at the
+    /// eight-hour mark: the modifier waits for this moment.
+    func testTheNextCutoffIsTheEarliestStillAhead() {
+        let older = now.addingTimeInterval(-7 * 3600)
+        let newer = now.addingTimeInterval(-3600)
+        XCTAssertEqual(LiveSessionScreen.nextCutoff(liveSince: [newer, older], now: now),
+                       older.addingTimeInterval(8 * 3600))
+        XCTAssertNil(LiveSessionScreen.nextCutoff(
+            liveSince: [now.addingTimeInterval(-9 * 3600)], now: now))
+        XCTAssertNil(LiveSessionScreen.nextCutoff(liveSince: [], now: now))
     }
 }

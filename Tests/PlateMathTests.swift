@@ -28,6 +28,16 @@ final class PlateMathTests: XCTestCase {
         // One end in the floor: half the bar is not on anyone's shoulders, and
         // "per side" means nothing.
         XCTAssertNil(BarKind.of(name: "Landmine 180's", equipment: "barbell"))
+        XCTAssertNil(BarKind.of(name: "T-Bar Row with Handle", equipment: "barbell"))
+        XCTAssertNil(BarKind.of(name: "Bent Over One-Arm Long Bar Row", equipment: "barbell"))
+        XCTAssertNil(BarKind.of(name: "Single-Arm Linear Jammer", equipment: "barbell"))
+    }
+
+    func testEZBarSpellings() {
+        XCTAssertEqual(BarKind.of(name: "EZBar Curl", equipment: "barbell"), .ezBar)
+        XCTAssertEqual(BarKind.of(name: "Reverse EZ Curl", equipment: "barbell"), .ezBar)
+        // "Blacksmith" is not a Smith machine.
+        XCTAssertEqual(BarKind.of(name: "Blacksmith Squat", equipment: "barbell"), .barbell)
     }
 
     // MARK: - Loading
@@ -49,8 +59,8 @@ final class PlateMathTests: XCTestCase {
         XCTAssertEqual(load, .plates(perSide: [25, 15, 1.25], total: 102.5, shortBy: 0))
     }
 
-    /// Fewest plates, not the first greedy answer: with 35s on the rack, 70 a
-    /// side is two plates rather than 45 + 25.
+    /// Fewest plates, then heavier plates first: 70 a side is 45 + 25, and
+    /// 35 + 35 only when there are no 25s.
     func testFewestPlatesWins() {
         let load = PlateMath.load(total: 185, bar: .barbell, setup: gymPounds)
         XCTAssertEqual(load.perSide.count, 2)
@@ -60,9 +70,8 @@ final class PlateMathTests: XCTestCase {
                        .plates(perSide: [35, 35], total: 185, shortBy: 0))
     }
 
-    /// A home gym with two 45s and nothing else cannot make 225 -- and greedy
-    /// would not find 315 - 45 either. The answer is the heaviest load at or
-    /// under the target, and how far short it is.
+    /// A home gym with one pair of 45s and one of 25s cannot make 225. The
+    /// answer is the heaviest load at or under the target, and how far short.
     func testWhatYouOwnLimitsTheLoad() {
         var home = PlateSetup.standard(for: .pounds)
         for plate in home.plates { home.set(pairs: 0, of: plate.weight) }
@@ -85,6 +94,22 @@ final class PlateMathTests: XCTestCase {
     func testAWeightThatNeedsHalfAPlateIsRoundedDownAndSaysSo() {
         XCTAssertEqual(PlateMath.load(total: 227, bar: .barbell, setup: gymPounds),
                        .plates(perSide: [45, 45], total: 225, shortBy: 2))
+    }
+
+    /// Heavier than the bar by less than the smallest plate owned: the bar,
+    /// and how far short it is, never "just the bar" as if that were the set.
+    func testLessThanTheSmallestPlateOverTheBar() {
+        let load = PlateMath.load(total: 47.5, bar: .barbell, setup: gymPounds)
+        XCTAssertEqual(load, .plates(perSide: [], total: 45, shortBy: 2.5))
+        XCTAssertEqual(load.line(unit: .pounds), "Your plates make 45 lb, 2.5 short. Just the bar")
+    }
+
+    func testAnAbsurdWeightIsBoundedByTheRack() {
+        let load = PlateMath.load(total: 100_000_000, bar: .barbell, setup: gymPounds)
+        guard case let .plates(perSide, total, shortBy) = load else { return XCTFail("\(load)") }
+        XCTAssertEqual(perSide.count, 60)
+        XCTAssertEqual(total, 45 + 2 * 1225)
+        XCTAssertGreaterThan(shortBy, 0)
     }
 
     func testTheBarAloneAndLessThanTheBar() {

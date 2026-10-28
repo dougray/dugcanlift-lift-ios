@@ -21,13 +21,15 @@ enum BarKind: String, CaseIterable, Codable, Identifiable {
     }
 
     /// Nil for anything that is not loaded with plates on both ends of a bar.
-    /// A landmine is: one end sits in the floor, so "per side" means nothing.
+    /// A landmine, a T-bar row, a long-bar row and a linear jammer are filed
+    /// under "barbell" but have one end anchored, so "per side" means nothing.
     static func of(name: String, equipment: String?) -> BarKind? {
         let words = Self.normalised(name + " " + (equipment ?? ""))
-        if words.contains(" landmine ") { return nil }
+        let oneEnded = [" landmine ", " t bar ", " long bar ", " linear jammer "]
+        if oneEnded.contains(where: words.contains) { return nil }
         if words.contains(" smith ") { return .smith }
         if words.contains(" trap bar ") || words.contains(" hex bar ") { return .trapBar }
-        if words.contains(" ez bar ") || words.contains(" ez curl bar ") { return .ezBar }
+        if words.contains(" ez bar ") || words.contains(" ez curl ") { return .ezBar }
         if Self.normalised(equipment ?? "").contains(" barbell ") { return .barbell }
         return nil
     }
@@ -37,6 +39,7 @@ enum BarKind: String, CaseIterable, Codable, Identifiable {
     private static func normalised(_ text: String) -> String {
         var out = text.lowercased()
             .replacingOccurrences(of: "e-z", with: "ez")
+            .replacingOccurrences(of: "ezbar", with: "ez bar")
             .map { $0.isLetter || $0.isNumber ? $0 : " " }
             .reduce(into: "") { $0.append($1) }
         out = out.split(separator: " ").joined(separator: " ")
@@ -148,7 +151,8 @@ enum PlateMath {
             case .justTheBar:
                 return "Just the bar"
             case let .plates(perSide, total, shortBy):
-                let plates = "Per side: " + perSide.map(PlateMath.text).joined(separator: " · ")
+                let plates = perSide.isEmpty ? "Just the bar"
+                    : "Per side: " + perSide.map(PlateMath.text).joined(separator: " · ")
                 guard shortBy > 0 else { return plates }
                 return "Your plates make \(PlateMath.text(total)) \(unit.abbreviation), "
                     + "\(PlateMath.text(shortBy)) short. \(plates)"
@@ -167,10 +171,15 @@ enum PlateMath {
         if total < barWeight { return .lighterThanTheBar }
         if total == barWeight { return .justTheBar }
 
-        let target = Int(((total - barWeight) / 2 / step + 1e-6).rounded(.down))
         let owned = setup.plates
             .filter { $0.pairs > 0 && $0.weight > 0 }
             .map { (units: Int(($0.weight / step).rounded()), pairs: $0.pairs) }
+        // No more than the rack holds, so the search is sized by the plates
+        // and not by whatever was typed: 100000000 lb is still a few thousand
+        // steps, never gigabytes.
+        let capacity = owned.reduce(0) { $0 + $1.units * $1.pairs }
+        let wanted = (total - barWeight) / 2 / step + 1e-6
+        let target = wanted >= Double(capacity) ? capacity : Int(wanted.rounded(.down))
 
         // fewest[v]: the fewest plates making exactly v steps a side, with
         // the heaviest-first list that does it. Bounded by the pairs owned.
@@ -190,10 +199,9 @@ enum PlateMath {
             fewest = next
         }
 
-        guard let reached = (0...target).last(where: { fewest[$0] != nil }),
-              let units = fewest[reached], !units.isEmpty
-        else { return .justTheBar }
-        let perSide = units.sorted(by: >).map { Double($0) * step }
+        // Something is always reachable: nothing at all, which is the bar.
+        let reached = (0...target).last(where: { fewest[$0] != nil }) ?? 0
+        let perSide = (fewest[reached] ?? []).sorted(by: >).map { Double($0) * step }
         let loaded = barWeight + 2 * Double(reached) * step
         return .plates(perSide: perSide, total: loaded,
                        shortBy: ((total - loaded) * 100).rounded() / 100)

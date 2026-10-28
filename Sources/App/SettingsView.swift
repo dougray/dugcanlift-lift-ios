@@ -87,7 +87,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Training")
                 } footer: {
-                    Text("In a live session, tick a set done to start your rest; LIFT tells you when it's over, even with your phone locked. Your Apple Watch rests for the same time. While a live session is running, the screen doesn't lock. Plates and bars work out what to load for a set on a bar.")
+                    Text("In a live session, tick a set done to start your rest. If you allow notifications, LIFT tells you when it's over, even with your phone locked. Your Apple Watch rests for the same time. While a live session is running, the screen doesn't lock. Plates and bars work out what to load for a set on a bar.")
                 }
 
                 CoachSection()

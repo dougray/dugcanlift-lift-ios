@@ -502,7 +502,7 @@ own: no schema change, nothing in LiftKit, nothing on the wire.
 - **A folder is a rotation** (`RoutineRotation`). Up next is the routine after
   the last one started from that folder, by the `routine:<exercise id>` refs
   `startSession` writes; its order is the order routines were added, names
-  breaking a tie. The default folder is not a rotation. Train offers today's
+  breaking a tie, and Routines lists a named folder in that order. The default folder is not a rotation and stays newest first. Train offers today's
   up next only while today is empty and no coach booked it, and only from a
   rotation someone has started.
 - **The next weight** (`ProgressionRule`, shown by `ProgressionHint`) is double

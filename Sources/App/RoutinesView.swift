@@ -24,7 +24,15 @@ struct RoutinesView: View {
     private var groupedByFolder: [(folder: String, routines: [Routine])] {
         Dictionary(grouping: routines, by: \.folder)
             .sorted { $0.key < $1.key }
-            .map { (folder: $0.key.isEmpty ? "Routines" : $0.key, routines: $0.value) }
+            .map { folder, routines in
+                // A named folder is a rotation, so it reads in rotation order
+                // (`RoutineRotation.ordered`); the default folder stays newest
+                // first.
+                guard !folder.isEmpty else { return (folder: "Routines", routines: routines) }
+                let order = RoutineRotation.ordered(routines.map(RoutineRotation.member)).map(\.id)
+                return (folder: folder,
+                        routines: routines.sorted { order.firstIndex(of: $0.id)! < order.firstIndex(of: $1.id)! })
+            }
     }
 
     /// Each folder's next routine, by id.

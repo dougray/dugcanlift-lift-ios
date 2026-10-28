@@ -143,6 +143,7 @@ struct ExercisePickerView: View {
             Spacer()
             Button(filtering ? "Show all" : "Only mine") { showsEverything.toggle() }
                 .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.accentText)
         }
     }
 

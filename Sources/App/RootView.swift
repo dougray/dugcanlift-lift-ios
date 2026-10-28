@@ -119,6 +119,7 @@ struct RootView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: undo.current?.id)
         .liftAppearance()
+        .keepsScreenOnDuringLiveSession()
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .tint(Theme.accentText)

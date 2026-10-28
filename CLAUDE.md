@@ -128,6 +128,41 @@ read time.
 **Weights are always kilograms.** Every stored weight is metric. `WeightUnit`
 handles display conversion at the view layer only. Never persist pounds.
 
+The one exception is the rack, and it is not a weight anyone lifted.
+`PlateSetup` (Settings › Training › Plates and bars) keeps a 45 lb plate as 45
+under `plateSetup.pounds` and a 20 kg plate as 20 under `plateSetup.kilograms`:
+those are the sizes stamped on the equipment, one rack per unit, never mixed
+and never converted. Stored as kilograms a 45 would come back as 44.9999 and
+miss its own pair. A set's weight is still kilograms, and `PlateLine` converts
+it for display before asking which plates make it.
+
+## Live sessions
+
+**A live session is the "training now" overlay** (`WorkoutDay.liveStartedAt`
+set, `liveEndedAt` nil). Three things follow it, and nothing else does:
+
+- **The screen stays on** (`LiveSessionScreen`, attached once at the root so it
+  holds on every tab). A session nobody ended stops holding after eight hours,
+  as long as iOS keeps a Live Activity, and the modifier *waits* for that
+  moment: a screen held awake never changes scene phase, so nothing else
+  would ask again.
+- **Each set gets a done tick**, which is the set's own `completedAt` (already
+  in backups). Ticking starts a rest of `WatchPlanSettings` "Rest between
+  sets", the watch's own setting, so the two never disagree.
+- **The rest is `RestTimer`**: one at a time; the next tick restarts it;
+  unticking or deleting the set that started it takes it back; End ends it.
+  Kept in `UserDefaults` so iOS ending LIFT mid-rest loses nothing. Its outlets
+  are a local notification at the end (scheduled on the main actor after
+  permission is answered, and only if that rest is still the one wanted) and a
+  Live Activity (`Sources/Widgets/RestActivityWidget.swift`, state
+  `RestCountdown` in `Sources/Shared`). The activity is only ever started and
+  updated by the app, with no push token.
+
+**What the app cannot do: end a finished rest's activity while suspended.**
+Past its end the activity is stale and reads "Rest over", and it goes the next
+time LIFT is opened or the session is ended. Ending it from the device without
+the app running would take a push, and LIFT has no server.
+
 **Set `dayKey` whenever you set a date.** Day-scoped queries use the normalised
 string key, not date-range predicates. The two must stay consistent.
 

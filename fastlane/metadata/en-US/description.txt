@@ -25,6 +25,9 @@ COOK
 TRAIN
 - Log sessions of exercises and sets, or run a live session
 - A training focus decides which set fields you see
+- In a live session, tick a set done to start your rest timer. It counts down on the lock screen and in the Dynamic Island, and tells you when rest is over
+- Plate math: what goes on each side of the bar, from the plates you own
+- The screen stays on while you train
 - Save workouts as routines, or start from ready-made ones
 - Record runs, walks and hikes with GPS, including while your phone is locked, and see your route and personal bests
 

@@ -7,6 +7,7 @@ import LiftCore
 struct RoutinesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
+    @Query(RoutineRotation.recentDays) private var recentDays: [WorkoutDay]
     @State private var isCreatingRoutine = false
     /// Read so that a change of interface style invalidates this body, which
     /// is what re-applies the navigation bar's colours. See the note on
@@ -26,13 +27,36 @@ struct RoutinesView: View {
             .map { (folder: $0.key.isEmpty ? "Routines" : $0.key, routines: $0.value) }
     }
 
+    /// Each folder's next routine, by id.
+    private var upNext: Set<UUID> {
+        let days = recentDays.map(RoutineRotation.day)
+        return Set(RoutineRotation.folders(routines).compactMap {
+            RoutineRotation.upNext(folder: $0.folder, members: $0.members, days: days)?.routineID
+        })
+    }
+
+    private func firstRotation(_ upNext: Set<UUID>) -> String? {
+        groupedByFolder.first { group in
+            group.routines.contains { upNext.contains($0.id) }
+        }?.folder
+    }
+
     var body: some View {
+        let upNext = upNext
+        let firstRotation = firstRotation(upNext)
         NavigationStack {
             List {
                 ForEach(groupedByFolder, id: \.folder) { group in
-                    Section(group.folder) {
+                    Section {
                         ForEach(group.routines) { routine in
-                            RoutineRow(routine: routine)
+                            RoutineRow(routine: routine, isUpNext: upNext.contains(routine.id))
+                        }
+                    } header: {
+                        Text(group.folder)
+                    } footer: {
+                        // Said once, under the first folder it applies to.
+                        if group.folder == firstRotation {
+                            Text("A folder is a rotation: Up next is the routine after the last one you started from it.")
                         }
                     }
                 }
@@ -107,13 +131,21 @@ struct RoutinesView: View {
 private struct RoutineRow: View {
     @Environment(\.modelContext) private var context
     let routine: Routine
+    var isUpNext = false
     @State private var didSendToWatch = false
     @State private var confirmingDelete = false
     @State private var summary = RoutineRemoval.Summary()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(routine.name).font(.headline)
+            HStack(spacing: 8) {
+                Text(routine.name).font(.headline)
+                if isUpNext {
+                    Text("Up next")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.accentText)
+                }
+            }
             Text("\(routine.orderedExercises.count) exercise\(routine.orderedExercises.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -11,6 +11,8 @@ struct SettingsView: View {
     @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
     @AppStorage(WatchPlanSettings.restSecondsKey) private var watchRestSeconds =
         WatchPlanSettings.defaultRestSeconds
+    @AppStorage(LiveSessionScreen.enabledKey) private var keepsScreenOn =
+        LiveSessionScreen.defaultEnabled
 
     @Query(filter: #Predicate<WorkoutDay> { $0.healthKitUUID == nil })
     private var unsynced: [WorkoutDay]
@@ -70,6 +72,14 @@ struct SettingsView: View {
                 // it hears about a change on the next context push.
                 .onChange(of: unitRaw) { WatchSyncReceiver.shared?.pushRecentFoodsSnapshot() }
                 .onChange(of: distanceUnitRaw) { WatchSyncReceiver.shared?.pushRecentFoodsSnapshot() }
+
+                Section {
+                    Toggle("Keep the screen on", isOn: $keepsScreenOn)
+                } header: {
+                    Text("Live session")
+                } footer: {
+                    Text("While a live session is running, the screen doesn't lock between sets.")
+                }
 
                 Section {
                     Stepper(value: $watchRestSeconds,

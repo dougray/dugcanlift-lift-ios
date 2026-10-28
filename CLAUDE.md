@@ -516,6 +516,43 @@ own: no schema change, nothing in LiftKit, nothing on the wire.
   for a lift logged a side at a time, a bodyweight lift, or a lift with no
   earlier session.
 
+## Training history in and out as CSV
+
+Settings → Your data → "Import from Strong, Hevy or FitNotes" and "Export
+training as a spreadsheet (CSV)". The code is `WorkoutCSV` and
+`WorkoutCSVTests` pins it (build plan item 13).
+
+**None of the three apps publishes its export format.** Their help pages say
+only where the button is. The shapes the reader accepts were read from real
+exports people have published, and the fixtures in `Tests/Fixtures/csv-*.csv`
+are built from those shapes, not copied from a maker. So the reader is strict:
+a file it can't place is refused, never half-read.
+
+- **Strong** comes in two layouts.
+  - The semicolon one is fully quoted, has a `Workout #` column and says
+    `Weight (kg)`.
+  - The comma one names **no unit at all**, so the import sheet asks for one
+    and builds nothing until it is answered. A guess would be 2.2x wrong either
+    way.
+  - `Set Order` `W` is a warm-up. `D` and `F` are working sets. `Note` and
+    `Rest Timer` rows are not sets.
+- **Hevy** says its unit in the header (`weight_kg` or `weight_lbs`,
+  `distance_km` or `distance_miles`). It writes dates as locale text in one of
+  two shapes. `set_type` `warmup` is a warm-up.
+- **FitNotes** says the unit on every row, and one file can mix units. It
+  keeps one workout a day, with the date only. Its category becomes the
+  primary muscle, except "Cardio".
+- **Numbers are digits and a point only**, as every export seen writes them.
+  Weights become kilograms on the way in.
+- Times carry no zone in any of the files, and are read as local time.
+- "Bench Press (Barbell)" splits into a name and equipment.
+- **A day LIFT already has training on is left alone and counted**, never
+  merged into: an imported session can't be told apart from the same one
+  logged by hand. That also makes a second import of the same file add
+  nothing.
+- Two workouts on one day become one LIFT day.
+- The export is one row per set, always in kilograms, with blanks left blank.
+
 ## Barcodes
 
 The food search can scan a barcode (`BarcodeScannerView`, VisionKit's

@@ -13,6 +13,9 @@ struct ProgressionHint: View {
     @AppStorage(ProgressionRule.enabledKey) private var enabled = true
     @AppStorage(PlateSetup.key(for: .pounds)) private var poundPlates = Data()
     @AppStorage(PlateSetup.key(for: .kilograms)) private var kiloPlates = Data()
+    /// Which sets are drop or rest-pause, on the routine and on each logged
+    /// day: those are not working sets for the rule, and "Use" leaves them be.
+    @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
 
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
@@ -35,17 +38,17 @@ struct ProgressionHint: View {
         _earlier = Query(descriptor)
     }
 
-    private var target: (reps: Int, sets: Int)? {
+    private var target: ProgressionRule.Target? {
         guard let id = ProgressionRule.routineExerciseID(exercise) else { return nil }
         let descriptor = FetchDescriptor<RoutineExercise>(predicate: #Predicate { $0.id == id })
         guard let prescribed = try? context.fetch(descriptor).first,
               let routineID = prescribed.routine?.id else { return nil }
         let booked = FetchDescriptor<ScheduledSession>(predicate: #Predicate { $0.routineID == routineID })
         guard ((try? context.fetchCount(booked)) ?? 0) == 0 else { return nil }
-        let reps = prescribed.orderedSets.compactMap(\.targetReps)
-        guard let most = reps.max() else { return nil }
-        return (most, reps.count)
+        return ProgressionRule.target(of: prescribed, setTypes: setTypes)
     }
+
+    private var setTypes: RoutineSetTypes { RoutineSetTypes.decode(setTypesData) }
 
     private var next: ProgressionRule.Next? {
         guard enabled, !perSide, let day = exercise.day,
@@ -55,16 +58,14 @@ struct ProgressionHint: View {
             ?? PlateSetup.standard(for: unit)
         return ProgressionRule.next(
             target: target.reps, setCount: target.sets,
-            sessions: ProgressionRule.sessions(of: exercise, in: earlier, unit: unit),
+            sessions: ProgressionRule.sessions(of: exercise, in: earlier, unit: unit, setTypes: setTypes),
             step: ProgressionRule.step(unit: unit, bar: bar, setup: setup))
     }
 
-    /// Working sets not ticked done whose weight is not already the one.
+    /// Straight working sets not ticked done whose weight is not already the
+    /// one (`ProgressionRule.setsToFill`).
     private func open(for weight: Double) -> [SetEntry] {
-        let kg = unit.toKilograms(weight)
-        return exercise.orderedSets.filter {
-            !$0.isWarmup && $0.completedAt == nil && abs($0.weightKg - kg) > 0.001
-        }
+        ProgressionRule.setsToFill(in: exercise, weight: weight, unit: unit, setTypes: setTypes)
     }
 
     var body: some View {

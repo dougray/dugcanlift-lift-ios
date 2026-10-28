@@ -578,7 +578,9 @@ own: no schema change, nothing in LiftKit, nothing on the wire.
   rotation someone has started.
 - **The next weight** (`ProgressionRule`, shown by `ProgressionHint`) is double
   progression: every working set at last session's top weight reached the
-  routine's reps, as many sets as it asks for, is up one step; short is the
+  routine's reps, as many sets as it asks for, is up one step (drop and
+  rest-pause sets count on neither side, and "Use" leaves them be, so a top
+  set and its drops progresses as a one-set routine); short is the
   same again; short at the same weight two sessions running backs off about
   10%. It works in the lifter's unit, so a step is a real plate pair (two of the
   smallest plate owned for a bar, otherwise 5 lb or 2.5 kg). It is a line with

@@ -18,8 +18,9 @@ import LiftCore
 //             exercise's first set has no set before it, so it is always
 //             straight.
 //
-// Tracked and shown, never graded. Progression, the imbalance figure and volume
-// read the log, never these.
+// Tracked and shown, never graded. The imbalance figure and volume read the
+// log, never these. Progression reads one thing from them: a drop or
+// rest-pause set is not a working set for the next weight (`ProgressionRule`).
 
 // MARK: - A set's kind
 

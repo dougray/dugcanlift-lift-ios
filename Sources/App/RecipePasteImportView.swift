@@ -111,9 +111,10 @@ struct RecipePasteImportView: View {
 
                 // Says plainly where this is the wrong tool, so a recipe site
                 // does not get pasted in as one long ingredient.
+                // The second sentence is the kit's shared bookmarklet wording.
                 detail("For a recipe written out as text — a video caption, an email, a "
-                       + "handwritten card. For a recipe website, share the page from Safari "
-                       + "to LIFT: it reads the page's recipe card.")
+                       + "handwritten card. A recipe website's address will not work here. "
+                       + "Use Send recipes from your browser for a website instead.")
             }
         }
     }

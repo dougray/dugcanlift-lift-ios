@@ -307,6 +307,9 @@ struct SharePlanView: View {
         case .pageWithoutPlan:        return "Shared from the open page"
         case .link(.notAddressedToThisDevice): return "This plan isn't for this phone"
         case .link:                   return "This plan link couldn't be read"
+        // Only `IncomingLink.open` refuses these, and the share sheet never
+        // asks it; listed so the switch stays exhaustive.
+        case .unreadableRecipeLink, .noRecipeInLink: return "Couldn't open this recipe"
         }
     }
 }

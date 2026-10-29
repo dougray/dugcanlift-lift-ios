@@ -211,6 +211,25 @@ emptied when it is drained, not when a review is saved, so Cancel, or the app
 being killed mid-review, means sharing the page from Safari again -- the step
 the lifter took the first time. Accepted, not an oversight to work around.
 
+**A recipe also arrives from a bookmark**, for the browsers Safari's share
+sheet does not reach (Chrome on iPhone). The "Send to LIFT" bookmarklet reads
+the page's JSON-LD in the browser and opens `dugcanliftlift://recipe#r1...`;
+the contract, the wire format and the rules every build follows are
+dugcanlift-kit's `bookmarklet/README.md`. `RecipeLink` is a port of the kit's
+`recipe-link.mjs`, refusal for refusal, and decodes to the same
+`SharedRecipePage` Safari produces. `IncomingLink` sends the `recipe` host to
+it and every other `dugcanliftlift://` URL to `PlanLinkIntake` as before, so a
+plan and a recipe are never read as each other. The recipe joins the App Group
+queue a Safari share fills (`RecipeIntake.received`) and opens the same
+`RecipeImportView`, one at a time. Cook's "Send recipes from your browser"
+shows the kit's `liftApp` string. Its words, and the two refusals ("That recipe
+link could not be read, so nothing was added. ..." and "That page has no recipe
+LIFT can read. ..."), are the wording shared by every build: change them in all
+or in none. `Resources/bookmarklets.json` and `bookmarklets.sha256` are
+copied from the kit together and `BookmarkletTests` hashes what the bundle
+holds, as `RoadFoodDataTests` does; `Tests/Fixtures/recipe-link*.{txt,json}`
+are the kit's fixture pair. Never edit or regenerate any of them here.
+
 **A pasted recipe is edited, not reviewed.** `RecipeImportView` can review
 because a page's JSON-LD is labelled — the publisher said which strings are
 ingredients. A caption is prose, so `LiftCore.CaptionRecipe` only *proposes* a

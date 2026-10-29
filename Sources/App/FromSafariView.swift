@@ -20,7 +20,7 @@ struct FromSafariView: View {
                             step(4, "Come back to LIFT. The recipe opens for review.")
                         }
                     }
-                    Text("Only Safari passes the recipe along. From another app or browser, copy the recipe's text and use Paste a recipe.")
+                    Text("From Chrome, use Send recipes from your browser. From another app, copy the recipe's text and use Paste a recipe.")
                         .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }

@@ -26,11 +26,11 @@ settings:
     # widgets and its watch app. App Store validation rejects an embedded
     # watch app or extension whose CFBundleShortVersionString differs from
     # the app's, so every target's Info.plist reads these two settings rather
-    # than carrying a literal. "1.0" is what the app has always reported:
-    # this said "1.0.0" while XcodeGen wrote a literal "1.0" into
-    # Lift-Info.plist, so the setting reached nothing.
-    MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    # than carrying a literal. 1.0 (1) was the first App Store build
+    # (2026-10-26). CURRENT_PROJECT_VERSION must be higher than every build
+    # ever uploaded, so it only goes up, whatever the version says.
+    MARKETING_VERSION: "1.1"
+    CURRENT_PROJECT_VERSION: "2"
     # SwiftData @Model classes are not Sendable. `complete` buries real errors
     # under concurrency warnings during scaffolding — tighten once it builds.
     SWIFT_STRICT_CONCURRENCY: minimal
@@ -402,6 +402,8 @@ targets:
       path: Config/LiftShare-Info.plist
       properties:
         CFBundleDisplayName: LIFT
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services

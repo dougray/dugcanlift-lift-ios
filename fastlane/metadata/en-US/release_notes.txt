@@ -7,3 +7,4 @@
 - Progress: your training year, sets per muscle this week, a body weight chart, and progress photos that stay on your phone
 - Import your training history from Strong, Hevy or FitNotes, and export yours as CSV
 - Road Food: six more chains, newer charts, allergens to avoid, and a meal you can put together before you order
+- Send recipes from your browser: save a bookmark once, then tap it on a recipe page and the recipe opens in LIFT for you to check. LIFT never visits the page. In Safari, Share → LIFT does the same

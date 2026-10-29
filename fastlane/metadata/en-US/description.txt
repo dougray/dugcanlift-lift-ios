@@ -22,14 +22,31 @@ COOK
 - Plan meals across the week and log a planned meal in one tap
 - A shopping list built from the week's plan
 
+ROAD FOOD
+Fast-food chains and gas-station snacks, ranked by how well each fits what is left of today's goal.
+- Nutrition comes from each chain's own published chart
+- Put a meal together from several items, see whether it fits before you order, and log it in one go
+- Avoid an allergen to hide the items whose chart says they contain it. An item the chart says nothing about stays on the list, marked "not stated". The charts don't cover cross-contact, so ask the restaurant
+- LIFT never uses your location
+
 TRAIN
 - Log sessions of exercises and sets, or run a live session
 - A training focus decides which set fields you see
 - In a live session, tick a set done to start your rest timer. It counts down on the lock screen and in the Dynamic Island, and tells you when rest is over
+- Supersets, circuits, drop sets and rest-pause sets. Rest follows the round: none between the exercises of a superset, and none before a drop set
 - Plate math: what goes on each side of the bar, from the plates you own
 - The screen stays on while you train
 - Save workouts as routines, or start from ready-made ones
+- Keep routines in a folder and LIFT runs them as a rotation, showing which one is up next
+- For your own routines, LIFT suggests the next weight and says why: a step up when you made every rep, the same again when you didn't
+- Tell LIFT which equipment you have, and exercise search leaves out what you can't use
 - Record runs, walks and hikes with GPS, including while your phone is locked, and see your route and personal bests
+
+PROGRESS
+- Your year: every day of the last year as a square, darker the more sets you did
+- Muscles this week: working sets for each muscle
+- Body weight: one weigh-in a day, the last 90 days as a chart, against a goal if you set one
+- Progress photos you can compare. They stay on your phone: they are not in backups and are never sent to a coach
 
 APPLE HEALTH
 LIFT can save your strength workouts, and your runs, walks and hikes with their route, to Apple Health. It reads your body weight and step count.
@@ -38,6 +55,6 @@ WORKING WITH A COACH
 Send your recent log to a coach as a link, from your own email. A route is only included if you turn that on, and its start and end are trimmed off. A coach can send you a plan of workouts and meals to add.
 
 YOUR DATA
-Save a backup file and restore it on another phone, or in LIFT for Android or the web.
+Save a backup file and restore it on another phone, or in LIFT for Android or the web. Bring in your training history from Strong, Hevy or FitNotes, or export yours as a spreadsheet (CSV).
 
 A widget shows today's calories, protein and workouts on your Home Screen. LIFT follows your phone's light or dark setting, or you can pick one.

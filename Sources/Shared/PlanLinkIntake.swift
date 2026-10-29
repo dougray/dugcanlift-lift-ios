@@ -26,6 +26,21 @@ enum PlanLinkIntake {
         case pageWithoutPlan
         /// A real fragment the codec refused.
         case link(PlanLinkError)
+        /// A `dugcanliftlift://recipe#r1...` link from the "Send to LIFT"
+        /// bookmarklet that `RecipeLink` refused. The two recipe cases are here
+        /// rather than in a type of their own so they are held behind a recipe
+        /// review and shown in turn, as a plan's refusal is.
+        case unreadableRecipeLink
+        /// A recipe link that read cleanly but whose blocks hold no Recipe
+        /// `RecipeJSONLD` can read.
+        case noRecipeInLink
+
+        var isAboutARecipe: Bool { self == .unreadableRecipeLink || self == .noRecipeInLink }
+
+        /// The alert's title on `LiftApp`.
+        var alertTitle: String {
+            isAboutARecipe ? "Couldn't open this recipe" : "Couldn't open this plan"
+        }
 
         var message: String {
             switch self {
@@ -40,6 +55,12 @@ enum PlanLinkIntake {
                 return "This plan isn't addressed to you. Ask your coach to send a new link for this phone."
             case .link:
                 return "This plan link couldn't be read."
+            // The kit's shared wording for the bookmarklet, word for word in
+            // every build (Doug reviews it): change it in all of them or none.
+            case .unreadableRecipeLink:
+                return "That recipe link could not be read, so nothing was added. Open the recipe page and tap Send to LIFT again."
+            case .noRecipeInLink:
+                return "That page has no recipe LIFT can read. Copy the recipe text and use Paste a recipe instead."
             }
         }
     }

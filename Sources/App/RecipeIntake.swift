@@ -7,6 +7,7 @@ protocol RecipeInbox {
     func markOpened(_ item: PendingRecipeImports.Item)
     func unmarkOpened(_ item: PendingRecipeImports.Item)
     func remove(_ item: PendingRecipeImports.Item)
+    func add(_ item: PendingRecipeImports.Item) throws
 }
 
 extension PendingRecipeImports: RecipeInbox {}
@@ -50,6 +51,17 @@ struct RecipeIntake<Report> {
             queue.enqueue(inbox.forReview(givingUp: !launched))
         }
         launched = true
+    }
+
+    /// A recipe the "Send to LIFT" bookmarklet opened LIFT with
+    /// (`IncomingLink`). It is written to the same App Group queue a Safari
+    /// share writes to, so from here it is that share in every respect: it
+    /// waits its turn, it survives iOS ending LIFT mid-review, and Save or
+    /// Cancel is what deletes it. The same page sent twice is one review.
+    /// Queued in memory too, so a phone without the App Group still opens it.
+    mutating func received(_ item: PendingRecipeImports.Item) {
+        try? inbox?.add(item)
+        queue.enqueue([item])
     }
 
     /// Opens the next review when the caller has nothing else on screen.

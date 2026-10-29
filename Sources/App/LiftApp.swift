@@ -60,9 +60,18 @@ struct LiftApp: App {
                 // needs no entitlement — and, on a paid team where Associated
                 // Domains can be signed, a `www.dugcanlift.com/lift/#...`
                 // Universal Link. Both go through the same intake, so a link
-                // that opens one way opens the other.
+                // that opens one way opens the other. The same scheme's
+                // `recipe` host is the "Send to LIFT" bookmarklet
+                // (`RecipeLink`): its recipe joins the queue a Safari share
+                // fills, and opens the same review.
                 .onOpenURL { url in
-                    handle(PlanLinkIntake.open(url, expectedLifterID: CoachShare.Settings.lifterID))
+                    switch IncomingLink.open(url, expectedLifterID: CoachShare.Settings.lifterID) {
+                    case .recipe(let item):
+                        recipes.received(item)
+                        presentNextRecipe()
+                    case .report(let outcome):
+                        handle(outcome)
+                    }
                 }
                 // `.active` covers both a cold launch and returning from the
                 // share sheet, which is when the extension's queue has
@@ -101,7 +110,7 @@ struct LiftApp: App {
                         .interactiveDismissDisabled()
                         .liftAppearance()
                 }
-                .alert("Couldn't open this plan", isPresented: .constant(refusal != nil), presenting: refusal) { _ in
+                .alert(refusal?.alertTitle ?? "Couldn't open this plan", isPresented: .constant(refusal != nil), presenting: refusal) { _ in
                     Button("OK") { refusal = nil }
                 } message: { refusal in
                     Text(refusal.message)

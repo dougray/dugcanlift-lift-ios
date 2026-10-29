@@ -186,4 +186,58 @@ final class RecipeIntakeTests: XCTestCase {
         intake.closing()
         XCTAssertEqual(files.pending, [item(1)], "the retry had not appeared, so nothing finished")
     }
+
+    // MARK: A recipe from the bookmarklet
+
+    /// A bookmarklet recipe is a Safari share from here on: it is on disk
+    /// before its review opens, so iOS ending LIFT mid-review loses nothing.
+    func testABookmarkletRecipeIsQueuedLikeASafariShare() throws {
+        let files = try folder()
+        var intake = Intake(inbox: files)
+        intake.activated()
+        intake.received(item(1))
+        XCTAssertEqual(files.pending, [item(1)])
+        XCTAssertEqual(intake.next(canPresent: true)?.item, item(1))
+        intake.appeared(intake.reviewing!.id)
+        var relaunched = Intake(inbox: files)
+        relaunched.activated()
+        XCTAssertEqual(relaunched.next(canPresent: true)?.item, item(1), "ended mid-review, it comes back")
+    }
+
+    /// The link can land before the activation that reads the files, or after
+    /// it: either way the recipe is one review, not two.
+    func testTheSameRecipeArrivingTwoWaysIsOneReview() throws {
+        let files = try folder()
+        var intake = Intake(inbox: files)
+        intake.received(item(1))
+        intake.activated()
+        intake.received(item(1))
+        XCTAssertEqual(intake.waiting.map(\.item), [item(1)])
+        XCTAssertEqual(files.pending, [item(1)])
+    }
+
+    /// One at a time: a recipe sent while another is under review waits, and
+    /// Save or Cancel on the first deletes only the first.
+    func testABookmarkletRecipeWaitsForTheReviewOnScreen() throws {
+        let files = try folder()
+        try files.add(item(1))
+        var intake = Intake(inbox: files)
+        intake.activated()
+        _ = intake.next(canPresent: true)
+        intake.appeared(intake.reviewing!.id)
+        intake.received(item(2))
+        XCTAssertNil(intake.next(canPresent: true), "nothing opens over a review")
+        intake.closing()
+        intake.closed()
+        XCTAssertEqual(files.pending, [item(2)])
+        XCTAssertEqual(intake.next(canPresent: true)?.item, item(2))
+    }
+
+    /// No App Group in the running build: the recipe still opens, held in memory.
+    func testABookmarkletRecipeOpensWithoutTheAppGroup() {
+        var intake = Intake(inbox: nil)
+        intake.activated()
+        intake.received(item(1))
+        XCTAssertEqual(intake.next(canPresent: true)?.item, item(1))
+    }
 }

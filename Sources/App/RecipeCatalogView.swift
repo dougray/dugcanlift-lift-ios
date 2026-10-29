@@ -12,6 +12,11 @@ import LiftReference
 /// Nothing here is in the library until **Add** is tapped. A catalogue recipe
 /// is reference data, the same as a food or an exercise, and browsing it must
 /// not quietly fill someone's recipe list.
+///
+/// What it shows follows `CatalogDisplay`, the rules every LIFT and Coach
+/// build that ships the catalogue holds: the whole list with no search typed,
+/// whole numbers rounded, and a servings count asked for whenever the source
+/// states no yield.
 struct RecipeCatalogView: View {
 
     @Environment(\.modelContext) private var context
@@ -23,23 +28,30 @@ struct RecipeCatalogView: View {
     @State private var selected: CatalogEntry?
     /// Only consulted for a recipe whose source stated no yield. A published
     /// per-serving figure is never rescaled by it.
-    @State private var servings: Double = 4
+    @State private var servings: Double = CatalogDisplay.defaultServings
     @State private var showingCredits = false
     @State private var credits: [String] = []
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.cardSpacing) {
-                    if let selected {
-                        detail(selected)
-                    } else {
-                        list
+            ScrollViewReader { proxy in
+                ScrollView {
+                    // Lazy: with no search typed the list is the whole catalogue,
+                    // 622 cards, and only the ones on screen should be built.
+                    LazyVStack(alignment: .leading, spacing: Theme.cardSpacing) {
+                        if let selected {
+                            detail(selected)
+                        } else {
+                            list
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .readableContentWidth()
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .readableContentWidth()
+                .onChange(of: selected?.id) { old, new in
+                    reposition(proxy, from: old, to: new)
+                }
             }
             .liftScreen()
             .background(Theme.background)
@@ -121,21 +133,12 @@ struct RecipeCatalogView: View {
                 }
             }
 
-            if let calories = recipe.caloriesPerServing {
-                Text("\(Int(calories)) kcal per serving")
-                    .font(Theme.detail)
-                    .foregroundStyle(Theme.textSecondary)
-            } else if recipe.needsServings {
-                // Said here rather than only in the detail, so a browsing eye
-                // never reads a whole-dish number as a portion.
-                Text("Macros for the whole dish")
-                    .font(Theme.detail)
-                    .foregroundStyle(Theme.textSecondary)
-            } else {
-                Text("No macros")
-                    .font(Theme.detail)
-                    .foregroundStyle(Theme.textSecondary)
-            }
+            // Says "Macros for the whole dish" rather than only leaving it to
+            // the detail, so a browsing eye never reads a whole-dish number as
+            // a portion.
+            Text(CatalogDisplay.listSummary(recipe))
+                .font(Theme.detail)
+                .foregroundStyle(Theme.textSecondary)
 
             Text("\(entry.ingredientLines.count) ingredients")
                 .font(Theme.detail)
@@ -159,13 +162,13 @@ struct RecipeCatalogView: View {
                     .foregroundStyle(Theme.accentText)
                 if let summary = recipe.summary { detailText(summary) }
 
-                if recipe.needsServings {
+                if CatalogDisplay.asksForServings(recipe) {
                     Stepper(value: $servings, in: 1...48, step: 1) {
                         Text(CookFormat.servingsLabel(servings))
                             .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                     }
-                    detailText("This book states no yield, so the macros below are for the whole dish. Set how many it serves and they divide.")
+                    detailText(CatalogDisplay.servingsNote(recipe))
                 } else if let stated = recipe.servings {
                     detailText(CookFormat.servingsLabel(stated))
                 }
@@ -175,6 +178,7 @@ struct RecipeCatalogView: View {
                 }
             }
         }
+        .id(Self.detailTop)
 
         card {
             VStack(alignment: .leading, spacing: 8) {
@@ -225,7 +229,7 @@ struct RecipeCatalogView: View {
                     .foregroundStyle(Theme.accentText)
 
                 if let facts = recipe.nutrition(servings: servings) {
-                    Text("\(Int(facts.calories)) kcal · P \(Int(facts.proteinG)) · C \(Int(facts.carbsG)) · F \(Int(facts.fatG))")
+                    Text(CatalogDisplay.macroLine(facts))
                         .font(Theme.body)
                         .foregroundStyle(Theme.textPrimary)
                     detailText(recipe.needsServings
@@ -252,10 +256,26 @@ struct RecipeCatalogView: View {
 
     // MARK: - Behaviour
 
+    private static let detailTop = "catalogue-detail-top"
+
+    /// Opening a recipe starts it at its top, and Back returns to the row it
+    /// was opened from. The list and the detail share one scroll view, so
+    /// without this a recipe opened from far down the whole catalogue opened
+    /// scrolled past its own name and stepper, and Back landed at a random row.
+    private func reposition(_ proxy: ScrollViewProxy, from old: String?, to new: String?) {
+        Task { @MainActor in
+            if new != nil {
+                proxy.scrollTo(Self.detailTop, anchor: .top)
+            } else if let old {
+                proxy.scrollTo(old, anchor: .center)
+            }
+        }
+    }
+
     private func open(_ entry: CatalogEntry) {
         // Seeded from the source when it stated one, so the stepper starts
         // somewhere sensible rather than at a default the reader must undo.
-        servings = entry.recipe.servings ?? 4
+        servings = CatalogDisplay.startingServings(entry.recipe)
         selected = entry
     }
 
@@ -273,7 +293,7 @@ struct RecipeCatalogView: View {
         do {
             let found = trimmed.count >= 2
                 ? try await ReferenceDatabase.shared.searchRecipes(trimmed)
-                : try await ReferenceDatabase.shared.browseRecipes()
+                : try await ReferenceDatabase.shared.browseRecipes(limit: CatalogDisplay.browseLimit)
             guard !Task.isCancelled else { return }
             entries = found
             loadFailed = false
@@ -289,7 +309,8 @@ struct RecipeCatalogView: View {
     /// the order `RecipeEditorView.save()` uses. No widget reload: a `Recipe`
     /// is not widget content, only a `PlannedMeal` logged from one is.
     private func add(_ entry: CatalogEntry) {
-        let (recipe, ingredients) = entry.makeRecipe(servings: entry.recipe.servings ?? servings)
+        let (recipe, ingredients) = entry.makeRecipe(
+            servings: CatalogDisplay.servingsToSave(entry.recipe, chosen: servings))
         context.insert(recipe)
         for ingredient in ingredients {
             ingredient.recipe = recipe

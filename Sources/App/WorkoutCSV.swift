@@ -278,10 +278,15 @@ enum WorkoutCSV {
     /// RFC 4180, with the delimiter taken from the header (Strong's Android
     /// export uses `;`), quotes doubled to escape, CR LF or LF, and a BOM
     /// dropped.
+    ///
+    /// The header is the first line up to *any* line break. Swift reads CR LF
+    /// as one `Character`, `"\r\n"`, which is not equal to `"\n"`, so stopping
+    /// only at `"\n"` ran a CR LF file's "first line" on to the end of the file
+    /// and counted every delimiter in it.
     static func parse(_ text: String) -> [[String]] {
         var source = Substring(text)
         if source.hasPrefix("\u{FEFF}") { source = source.dropFirst() }
-        let firstLine = source.prefix { $0 != "\n" }
+        let firstLine = source.prefix { !$0.isNewline }
         let delimiter: Character = firstLine.filter { $0 == ";" }.count > firstLine.filter { $0 == "," }.count ? ";" : ","
         var rows: [[String]] = []
         var row: [String] = []
@@ -314,6 +319,17 @@ enum WorkoutCSV {
 
     // MARK: - LIFT's own export
 
+    /// A number as the export writes it: at most two decimals, trailing
+    /// zeros dropped, and the point with them when nothing is left after it,
+    /// so 59.999 is "60" and never "60.". Nil and non-finite are blank.
+    static func exportNumber(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "" }
+        var text = String(format: "%.2f", value)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+        return text == "-0" ? "0" : text
+    }
+
     static let exportHeader = ["Date", "Workout", "Exercise", "Equipment", "Set", "Warmup", "Side",
                                "Weight (kg)", "Reps", "RPE", "Seconds", "Distance (m)"]
 
@@ -334,21 +350,23 @@ enum WorkoutCSV {
 
     /// One row per set, kilograms always, blanks blank. A point for decimals
     /// whatever the phone's language, so the file reads the same everywhere.
+    ///
+    /// **Blank stays blank.** RPE, seconds and distance are optional on
+    /// `SetEntry`, and nil is an empty cell. Weight and reps are not optional:
+    /// there 0 *is* the absence (see `SetEntry.display`), so a bodyweight set's
+    /// weight and a set with no reps are written blank too, as LIFT web writes
+    /// them, rather than as a 0 nobody entered.
     static func export(_ rows: [ExportRow]) -> String {
         func cell(_ s: String) -> String {
             s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" })
                 ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
         }
-        func num(_ d: Double?) -> String {
-            guard let d, d.isFinite else { return "" }
-            return d == d.rounded() ? String(Int(d)) : String(format: "%.2f", d)
-                .replacingOccurrences(of: #"0+$"#, with: "", options: .regularExpression)
-        }
         var lines = [exportHeader.joined(separator: ",")]
         for r in rows {
             lines.append([r.dayKey, cell(r.workout), cell(r.exercise), cell(r.equipment ?? ""), String(r.set),
-                          r.isWarmup ? "yes" : "", r.side ?? "", num(r.weightKg), String(r.reps),
-                          num(r.rpe), r.seconds.map(String.init) ?? "", num(r.distanceMeters)]
+                          r.isWarmup ? "yes" : "", r.side ?? "",
+                          r.weightKg > 0 ? exportNumber(r.weightKg) : "", r.reps > 0 ? String(r.reps) : "",
+                          exportNumber(r.rpe), r.seconds.map(String.init) ?? "", exportNumber(r.distanceMeters)]
                 .joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"

@@ -200,15 +200,14 @@ targets:
           Lift uses your location to record the route of a run, walk or hike
           you start, including while your screen is locked until you finish it.
 
-        # Background refresh for HealthKit sync (BGTaskScheduler), plus
-        # location updates so a recording carries on while the phone is locked
-        # (LocationTracker).
-        # Identifiers MUST match the strings passed to BGTaskScheduler.register.
+        # Location updates so a recording carries on while the phone is locked
+        # (LocationTracker). No `processing` mode: nothing registers a
+        # BGTaskScheduler task -- Health syncs when a session ends, on connect
+        # and on Sync now -- and App Review asks about a declared mode nothing
+        # uses. Add it back with BGTaskSchedulerPermittedIdentifiers only
+        # alongside a real BGTaskScheduler.register call.
         UIBackgroundModes:
-          - processing
           - location
-        BGTaskSchedulerPermittedIdentifiers:
-          - com.dugcanlift.lift.healthsync
 
   # ------------------------------------------------------------- widgets
   LiftWidgets:

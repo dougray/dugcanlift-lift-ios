@@ -76,7 +76,7 @@ struct FoodEntryEdit: Equatable {
             case .protein:      return "Protein"
             case .carbs:        return "Carbs"
             case .fat:          return "Fat"
-            case .fiber:        return "Fibre"
+            case .fiber:        return "Fiber"
             case .saturatedFat: return "Saturated fat"
             case .sugar:        return "Sugar"
             case .sodium:       return "Sodium"
@@ -286,12 +286,12 @@ struct FoodEntryEdit: Equatable {
     /// The line under the macros card's title, in the terms its fields are in.
     var macrosHint: String {
         if isNew {
-            return "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fibre can be left blank — blank stays unknown, not zero."
+            return "As the label reads them per 100\u{00A0}g; the amount above works out the totals. Fiber can be left blank — blank stays unknown, not zero."
         }
         if editsRememberedFoodOnly {
-            return "As the label reads them per 100\u{00A0}g. Fibre can be left blank — blank stays unknown, not zero."
+            return "As the label reads them per 100\u{00A0}g. Fiber can be left blank — blank stays unknown, not zero."
         }
-        if isManual { return "Totals for the amount above. Fibre can be left blank — blank stays unknown, not zero." }
+        if isManual { return "Totals for the amount above. Fiber can be left blank — blank stays unknown, not zero." }
         return "From the food's own data, scaled to the amount above."
     }
 

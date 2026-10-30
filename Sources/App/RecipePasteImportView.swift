@@ -191,7 +191,7 @@ struct RecipePasteImportView: View {
         case .labelled:
             return "One per line. Split on the headings in the text — check it read them right."
         case .inferred:
-            return "One per line. The text labelled one section and this worked out the rest, "
+            return "One per line. The text labeled one section and this worked out the rest, "
                  + "so check the division before saving."
         case .unsorted, .none:
             return "One per line. The text had no headings, so everything landed here — cut "

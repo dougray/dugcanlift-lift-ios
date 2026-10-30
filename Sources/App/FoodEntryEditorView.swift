@@ -286,7 +286,7 @@ struct FoodEntryEditorView: View {
                     macroFigure("Protein", nutrition.proteinG)
                     macroFigure("Carbs", nutrition.carbsG)
                     macroFigure("Fat", nutrition.fatG)
-                    if let fiber = nutrition.fiberG { macroFigure("Fibre", fiber) }
+                    if let fiber = nutrition.fiberG { macroFigure("Fiber", fiber) }
                 }
             }
         }
@@ -376,7 +376,7 @@ struct FoodEntryEditorView: View {
                     macroFigure("Protein", nutrition.proteinG)
                     macroFigure("Carbs", nutrition.carbsG)
                     macroFigure("Fat", nutrition.fatG)
-                    if let fiber = nutrition.fiberG { macroFigure("Fibre", fiber) }
+                    if let fiber = nutrition.fiberG { macroFigure("Fiber", fiber) }
                 }
                 if let details = NutrientDetailsDisplay.entryLine(nutrition) {
                     Text(details)

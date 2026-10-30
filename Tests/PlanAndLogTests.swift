@@ -807,7 +807,7 @@ final class PlanAndLogTests: XCTestCase {
         // a screen, and it is the one a lifter cannot skim past.
         let every = (PlanAndLog.lines(result) + PlanAndLog.spokenLines(result))
             .joined(separator: " · ").lowercased()
-        for phrase in ["logged at", "nothing logged at", "not itemised", "no food logged",
+        for phrase in ["logged at", "nothing logged at", "not itemised", "not itemized", "no food logged",
                        "foods logged", "not tied to a meal", "only they know",
                        "only you know at"] {
             XCTAssertFalse(every.contains(phrase), "\"\(phrase)\" reached a screen: \(every)")
@@ -1054,7 +1054,7 @@ final class PlanAndLogTests: XCTestCase {
      * diet one fastest. Web's own list. Nothing here says what was eaten, so none
      * of these has anywhere to come from -- which is the point of listing them:
      * the day one does, this fails. */
-    private let forbiddenFood = ["ate ", "eaten", "logged at", "not itemised",
+    private let forbiddenFood = ["ate ", "eaten", "logged at", "not itemised", "not itemized",
                                  "no food", "foods logged", "calorie", "kcal",
                                  "macro", "protein", "cheat", "treat", "diet",
                                  "junk", "clean eating", "binge", "indulge",

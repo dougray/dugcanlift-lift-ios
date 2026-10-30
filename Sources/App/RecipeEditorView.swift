@@ -147,7 +147,7 @@ struct RecipeEditorView: View {
                 macroField("Protein", unit: "g", text: $protein)
                 macroField("Carbs", unit: "g", text: $carbs)
                 macroField("Fat", unit: "g", text: $fat)
-                macroField("Fibre", unit: "g", text: $fiber)
+                macroField("Fiber", unit: "g", text: $fiber)
             }
 
             moreNutrients

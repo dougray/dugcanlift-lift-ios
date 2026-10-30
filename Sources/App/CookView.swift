@@ -88,7 +88,7 @@ struct RecipeListView: View {
                     Button {
                         browsingCatalogue = true
                     } label: {
-                        Label("Browse the catalogue", systemImage: "books.vertical")
+                        Label("Browse the catalog", systemImage: "books.vertical")
                             .font(Theme.body.weight(.semibold))
                             .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)

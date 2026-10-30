@@ -43,7 +43,7 @@ struct RecipeImportView: View {
             _servings = State(initialValue: imported.servings ?? 1)
             _pageDidNotStateServings = State(initialValue: imported.servings == nil)
         } else {
-            _stage = State(initialValue: .failed("This recipe couldn't be read. Share the page from Safari again, or use Paste a recipe."))
+            _stage = State(initialValue: .failed("This recipe couldn't be read. Share the page again, or use Paste a recipe."))
             _servings = State(initialValue: 1)
             _pageDidNotStateServings = State(initialValue: false)
         }
@@ -66,7 +66,7 @@ struct RecipeImportView: View {
             }
             .liftScreen()
             .background(Theme.background)
-            .navigationTitle("Import from Safari")
+            .navigationTitle("Check this recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

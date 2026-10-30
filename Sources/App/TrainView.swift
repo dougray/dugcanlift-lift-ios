@@ -865,7 +865,7 @@ private struct SetRow: View {
                         }
                     }
                     if focus.showsDistance {
-                        field("metres", value: Binding(
+                        field("meters", value: Binding(
                             get: { set.distanceMeters ?? 0 },
                             set: { set.distanceMeters = $0 == 0 ? nil : $0; save() }
                         ), width: wideField, decimal: true)
@@ -978,7 +978,7 @@ private struct SetRow: View {
         case "kg": "Weight, kilograms"
         case "reps": "Reps"
         case "RPE": "RPE"
-        case "metres": "Distance, metres"
+        case "meters": "Distance, meters"
         default: prompt
         }
     }

@@ -159,8 +159,8 @@ final class RecipeLinkTests: XCTestCase {
                        "That recipe link could not be read, so nothing was added. Open the recipe page and tap Send to LIFT again.")
         XCTAssertEqual(PlanLinkIntake.Refusal.noRecipeInLink.message,
                        "That page has no recipe LIFT can read. Copy the recipe text and use Paste a recipe instead.")
-        XCTAssertEqual(PlanLinkIntake.Refusal.noRecipeInLink.alertTitle, "Couldn't open this recipe")
-        XCTAssertEqual(PlanLinkIntake.Refusal.unreadableRecipeLink.alertTitle, "Couldn't open this recipe")
+        XCTAssertEqual(PlanLinkIntake.Refusal.noRecipeInLink.alertTitle, "Couldn't read that recipe")
+        XCTAssertEqual(PlanLinkIntake.Refusal.unreadableRecipeLink.alertTitle, "Couldn't read that recipe")
         XCTAssertEqual(PlanLinkIntake.Refusal.link(.corruptPayload).alertTitle, "Couldn't open this plan")
     }
 

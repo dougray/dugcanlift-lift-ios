@@ -128,7 +128,7 @@ enum CookSampleData {
             ]
         ),
         Spec(
-            name: "Beef Chilli",
+            name: "Beef Chili",
             servings: 4,
             nutrition: NutritionFacts(calories: 438, proteinG: 36, carbsG: 31, fatG: 19, fiberG: 9),
             ingredients: [

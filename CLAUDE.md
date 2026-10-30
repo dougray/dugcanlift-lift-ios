@@ -678,7 +678,19 @@ a file it can't place is refused, never half-read.
   logged by hand. That also makes a second import of the same file add
   nothing.
 - Two workouts on one day become one LIFT day.
-- The export is one row per set, always in kilograms, with blanks left blank.
+- **Blank stays blank, on the way in.** RPE, seconds and distance are optional
+  on `SetEntry`, and an empty cell is nil. A 0 in seconds or distance (and in
+  Strong's RPE) is also nil: Strong fills every column a set did not use with
+  0, so keeping it would put "0:00 0 m" on every bench set. Hevy's RPE keeps a
+  0 it writes, as LIFT web does. Weight and reps are not optional, and an empty
+  one is 0, which on `SetEntry` is the absence (see `SetEntry.display`).
+  Making them optional is a schema change (see `LiftSchemaVersions.swift`).
+- The export is one row per set, always in kilograms, with blanks left blank:
+  nil is an empty cell, and so is a weight or reps of 0, as LIFT web writes
+  them. Numbers have at most two decimals with trailing zeros dropped, and the
+  point with them, so 59.999 is `60` (`WorkoutCSV.exportNumber`).
+- The delimiter is counted on the header line alone, up to any line break.
+  Swift reads CR LF as one `Character`, which a check for `"\n"` alone misses.
 
 ## Barcodes
 

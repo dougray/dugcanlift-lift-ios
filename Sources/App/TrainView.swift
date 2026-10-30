@@ -995,7 +995,13 @@ private struct SetRow: View {
 private struct OutdoorDaySection: View {
     let date: Date
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
-    @State private var startingActivityType: OutdoorActivityType?
+    /// The run being recorded, held here rather than inside the recording
+    /// screen so that screen being rebuilt mid-run (a light/dark switch does
+    /// it) is handed the same recording -- see `OutdoorRecording`.
+    @State private var recording: OutdoorRecording?
+    /// The same recording, kept past the moment the cover's item goes nil, so
+    /// `onDismiss` has something to tell.
+    @State private var presentedRecording: OutdoorRecording?
     @State private var justFinishedActivity: OutdoorActivity?
 
     @Query private var activities: [OutdoorActivity]
@@ -1015,13 +1021,13 @@ private struct OutdoorDaySection: View {
     var body: some View {
         LiftCard(title: "Outdoor") {
             HStack(spacing: 16) {
-                Button { startingActivityType = .run } label: {
+                Button { record(.run) } label: {
                     Label("Run", systemImage: "figure.run")
                 }
-                Button { startingActivityType = .walk } label: {
+                Button { record(.walk) } label: {
                     Label("Walk", systemImage: "figure.walk")
                 }
-                Button { startingActivityType = .hike } label: {
+                Button { record(.hike) } label: {
                     Label("Hike", systemImage: "figure.hiking")
                 }
                 Spacer()
@@ -1050,10 +1056,21 @@ private struct OutdoorDaySection: View {
                 }
             }
         }
-        .fullScreenCover(item: $startingActivityType) { type in
+        // A full-screen cover has no swipe to dismiss, so Cancel and Finish
+        // are the only ways out and each stops the run itself. `onDismiss` is
+        // the backstop for any other way the cover goes, so location can never
+        // outlive the screen; after Cancel or Finish it does nothing.
+        .fullScreenCover(item: $recording, onDismiss: {
+            // A run started during the old cover's dismiss animation is
+            // already the presented one; this late dismissal is not about it.
+            // `record` ended the old one when it replaced it.
+            guard recording == nil else { return }
+            presentedRecording?.handle(.dismissed)
+            presentedRecording = nil
+        }) { recording in
             NavigationStack {
-                OutdoorActivityRecordingView(activityType: type) { activity in
-                    startingActivityType = nil
+                OutdoorActivityRecordingView(recording: recording) { activity in
+                    self.recording = nil
                     justFinishedActivity = activity
                 }
             }
@@ -1063,6 +1080,16 @@ private struct OutdoorDaySection: View {
                 OutdoorActivityReviewView(activity: activity)
             }
         }
+    }
+
+    private func record(_ type: OutdoorActivityType) {
+        // Normally already ended by Cancel or Finish; if a tap lands while the
+        // last cover is still animating away, end it here, because its own
+        // `onDismiss` will find the new run presented and leave it alone.
+        presentedRecording?.handle(.dismissed)
+        let new = OutdoorRecording(activityType: type)
+        presentedRecording = new
+        recording = new
     }
 }
 

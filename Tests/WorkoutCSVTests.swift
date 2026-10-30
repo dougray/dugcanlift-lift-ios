@@ -110,6 +110,33 @@ final class WorkoutCSVTests: XCTestCase {
         XCTAssertEqual(rows, [["a", "b"], ["x, \"y\"", "2"]])
     }
 
+    /// Swift reads CR LF as one `Character`, so a header that stopped only at
+    /// `"\n"` ran on through the whole file, and its commas outvoted the
+    /// header's semicolons.
+    func testTheDelimiterIsReadFromTheHeaderLineAloneInACRLFFile() {
+        let rows = WorkoutCSV.parse("a;b\r\n\"w,x,y,z\";1\r\n")
+        XCTAssertEqual(rows, [["a", "b"], ["w,x,y,z", "1"]])
+    }
+
+    /// RPE, seconds and distance are optional on `SetEntry`: a cell the file
+    /// leaves empty is nil, never 0. Weight and reps are not optional, so an
+    /// empty one is the model's 0, which is its absence.
+    func testAnEmptyCellIsReadAsNothing() throws {
+        let text = """
+        "title","start_time","end_time","description","exercise_title","superset_id","exercise_notes","set_index","set_type","weight_kg","reps","distance_km","duration_seconds","rpe"
+        "A","Oct 1, 2026, 8:28 PM","Oct 1, 2026, 9:10 PM","","Pull Up",,"",0,"normal",,10,,,
+        "A","Oct 1, 2026, 8:28 PM","Oct 1, 2026, 9:10 PM","","Pull Up",,"",1,"normal",,8,,,0
+        """
+        let sets = try XCTUnwrap(WorkoutCSV.read(text).parse(nil).first?.exercises.first?.sets)
+        XCTAssertNil(sets[0].rpe)
+        XCTAssertNil(sets[0].durationSec)
+        XCTAssertNil(sets[0].distanceMeters)
+        XCTAssertEqual(sets[0].weightKg, 0)
+        XCTAssertEqual(sets[0].reps, 10)
+        // A 0 the file does write, in a field that can hold nothing, is kept.
+        XCTAssertEqual(sets[1].rpe, 0)
+    }
+
     func testEquipmentComesOutOfTheName() {
         XCTAssertTrue(WorkoutCSV.splitEquipment("Bench Press (Barbell)") == ("Bench Press", "Barbell"))
         XCTAssertTrue(WorkoutCSV.splitEquipment("Pull Up") == ("Pull Up", nil))
@@ -159,5 +186,59 @@ final class WorkoutCSVTests: XCTestCase {
             #"2026-10-26,"Push, heavy",Bench Press,Barbell,1,yes,,60,8,,,"#,
             #"2026-10-26,"Push, heavy","Split ""Squat""",,1,,left,22.5,10,8.5,,"#,
         ].joined(separator: "\n") + "\n")
+    }
+
+    /// Two decimals at most, trailing zeros dropped, and the point with them:
+    /// 59.999 was written "60." before.
+    func testANumberLosesItsPointWithItsZeros() {
+        XCTAssertEqual(WorkoutCSV.exportNumber(59.999), "60")
+        XCTAssertEqual(WorkoutCSV.exportNumber(60.5), "60.5")
+        XCTAssertEqual(WorkoutCSV.exportNumber(60.50001), "60.5")
+        XCTAssertEqual(WorkoutCSV.exportNumber(0.25), "0.25")
+        XCTAssertEqual(WorkoutCSV.exportNumber(22.75), "22.75")
+        XCTAssertEqual(WorkoutCSV.exportNumber(60), "60")
+        XCTAssertEqual(WorkoutCSV.exportNumber(100), "100")
+        XCTAssertEqual(WorkoutCSV.exportNumber(1000.001), "1000")
+        XCTAssertEqual(WorkoutCSV.exportNumber(0), "0")
+        XCTAssertEqual(WorkoutCSV.exportNumber(nil), "")
+        XCTAssertEqual(WorkoutCSV.exportNumber(.nan), "")
+        XCTAssertEqual(WorkoutCSV.exportNumber(.infinity), "")
+
+        let text = WorkoutCSV.export([
+            .init(dayKey: "2026-10-26", workout: "", exercise: "Row", equipment: nil, set: 1, isWarmup: false,
+                  side: nil, weightKg: 59.999, reps: 5, rpe: 7.5, seconds: nil, distanceMeters: 0.25),
+        ])
+        XCTAssertEqual(text.split(separator: "\n").last, "2026-10-26,,Row,,1,,,60,5,7.5,,0.25")
+    }
+
+    /// Nothing recorded is an empty cell, as LIFT web writes it: nil RPE,
+    /// seconds and distance, and weight and reps of 0, which on `SetEntry` is
+    /// the absence. A real 0 in an optional field is still written.
+    func testBlankStaysBlankOnTheWayOut() {
+        let text = WorkoutCSV.export([
+            .init(dayKey: "2026-10-26", workout: "", exercise: "Pull Up", equipment: nil, set: 1, isWarmup: false,
+                  side: nil, weightKg: 0, reps: 10, rpe: nil, seconds: nil, distanceMeters: nil),
+            .init(dayKey: "2026-10-26", workout: "", exercise: "Plank", equipment: nil, set: 1, isWarmup: false,
+                  side: nil, weightKg: 0, reps: 0, rpe: 0, seconds: 60, distanceMeters: nil),
+        ])
+        XCTAssertEqual(text.split(separator: "\n").dropFirst(), [
+            "2026-10-26,,Pull Up,,1,,,,10,,,",
+            "2026-10-26,,Plank,,1,,,,,0,60,",
+        ])
+    }
+
+    /// An empty cell goes in as nothing and comes back out as an empty cell,
+    /// through the store.
+    @MainActor
+    func testAnEmptyCellRoundTripsAsAnEmptyCell() throws {
+        let context = try context()
+        let text = """
+        "title","start_time","end_time","description","exercise_title","superset_id","exercise_notes","set_index","set_type","weight_kg","reps","distance_km","duration_seconds","rpe"
+        "Pull","Oct 1, 2026, 8:28 PM","Oct 1, 2026, 9:10 PM","","Pull Up",,"",0,"normal",,10,,,
+        """
+        let workouts = try WorkoutCSV.read(text).parse(nil)
+        XCTAssertEqual(WorkoutCSV.apply(workouts, source: .hevy, in: context).setsAdded, 1)
+        let exported = WorkoutCSV.export(WorkoutCSV.exportRows(from: context))
+        XCTAssertEqual(exported.split(separator: "\n").last, "2026-10-01,Pull,Pull Up,,1,,,,10,,,")
     }
 }

@@ -61,6 +61,13 @@ struct RoutineDetailView: View {
                                 .font(.caption)
                                 .textCase(nil)
                         }
+                        // "set 3 drop, set 4 rest-pause", LIFT Android's and
+                        // LIFT web's line; nothing when every set is straight.
+                        if let kinds = setTypes.kindsLine(of: exercise) {
+                            Text(kinds)
+                                .font(.caption)
+                                .textCase(nil)
+                        }
                     }
                 }
             }

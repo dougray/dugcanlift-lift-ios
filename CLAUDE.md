@@ -375,7 +375,11 @@ rather than pre-filled, takes its kind from `CoachPrescribedSet.kind` in
 `PlanSides.logged`. `RoutineRemoval` sweeps the routine's entries and leaves the
 logged copies. The routine's exercises open from its name on Routines
 (`RoutineDetailView`): the set types are editable there, the numbers are not --
-this build has never had a routine editor for them. **Not in the backup**: this
+this build has never had a routine editor for them. Under an exercise's name
+there, **"set 3 drop, set 4 rest-pause"** names its kinded sets by number from
+1, and says nothing when every set is straight (`SetKindLine`): LIFT Android's
+`RoutineExercise.summary` line and LIFT web's `routineSetKindsLine`, word for
+word. Change it in all three LIFT builds or in none. **Not in the backup**: this
 build writes no `routines[]` at all (a file's `routines` section is held and
 written back untouched, `group` and `kind` included), so there is nowhere for
 BACKUP-FORMAT's two fields to go until it does.

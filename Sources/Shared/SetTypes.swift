@@ -74,6 +74,28 @@ enum SetKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - The line that names them
+
+/// "set 3 drop, set 4 rest-pause": the sets of an exercise that are not
+/// straight, by number from 1, in order -- or nil when every set is straight,
+/// so there is no line at all. LIFT for Android's line, word for word
+/// (`RoutineExercise.summary`, where it follows the targets behind " · "), and
+/// LIFT web's (`routineSetKindsLine`), so a lifter reads the same sentence on
+/// every LIFT build: "set", the number, the kind's `label`, ", " between. Set
+/// 1 is never named, because it is always straight (`SetKind.at`). A value,
+/// with no view in it, for the reason `LiftProgression` is one.
+///
+/// Coach builds say a set's kind their own way ("30 lb x 12 L drop"); this is
+/// LIFT's.
+enum SetKindLine {
+    static func text(_ kinds: [SetKind?]) -> String? {
+        let named = kinds.enumerated().compactMap { index, kind in
+            SetKind.at(index, kind).map { "set \(index + 1) \($0.label)" }
+        }
+        return named.isEmpty ? nil : named.joined(separator: ", ")
+    }
+}
+
 // MARK: - Groups, as rules on a list of numbers
 
 /// What a grouped exercise is labelled: "Superset A" and "A1". Two exercises
@@ -297,6 +319,12 @@ struct RoutineSetTypes: Codable, Equatable {
     /// straight.
     func kinds(of exercise: RoutineExercise) -> [SetKind?] {
         exercise.orderedSets.enumerated().map { SetKind.at($0.offset, kinds[$0.element.id]) }
+    }
+
+    /// "set 3 drop, set 4 rest-pause", or nil when every set is straight --
+    /// `SetKindLine`, over `kinds(of:)`.
+    func kindsLine(of exercise: RoutineExercise) -> String? {
+        SetKindLine.text(kinds(of: exercise))
     }
 
     /// Whether the editor shows the Straight / Drop / Rest-pause control

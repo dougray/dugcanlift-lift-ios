@@ -271,6 +271,45 @@ final class SetTypesTests: XCTestCase {
         XCTAssertEqual(RoutineSetTypes.load(from: defaults), types)
     }
 
+    // MARK: - The line that names them
+
+    /// LIFT Android's `RoutineExercise.summary` ends with "set 3 drop, set 4
+    /// rest-pause" (`RoutineSetKindsTest`), and LIFT web's targets line with
+    /// the same words. Its numbering is from 1, by position; ", " between.
+    func testTheKindedSetsAreNamedByNumberInAndroidsWords() {
+        XCTAssertEqual(SetKindLine.text([nil, nil, .drop, .restPause]), "set 3 drop, set 4 rest-pause")
+        XCTAssertEqual(SetKindLine.text([nil, .restPause]), "set 2 rest-pause")
+        XCTAssertEqual(SetKindLine.text([nil, .drop, nil, .drop, nil]), "set 2 drop, set 4 drop")
+    }
+
+    func testNoKindsIsNoLine() {
+        XCTAssertNil(SetKindLine.text([]))
+        XCTAssertNil(SetKindLine.text([nil, nil, nil]))
+        XCTAssertNil(SetKindLine.text([.drop]), "set 1 is always straight, and never named")
+        XCTAssertEqual(SetKindLine.text([.drop, .drop]), "set 2 drop")
+    }
+
+    func testARoutinesLineReadsItsSideCar() throws {
+        let context = context()
+        let routine = Routine(name: "Push")
+        let bench = RoutineExercise(name: "Bench Press", orderIndex: 0)
+        bench.prescribedSets = (0..<4).map { RoutinePrescribedSet(orderIndex: $0, targetWeightKg: 84, targetReps: 8) }
+        routine.exercises = [bench]
+        context.insert(routine)
+        try context.save()
+
+        var types = RoutineSetTypes()
+        XCTAssertNil(types.kindsLine(of: bench), "a routine of straight sets has no line")
+        types.setKind(.restPause, for: bench.orderedSets[3], in: bench)
+        types.setKind(.drop, for: bench.orderedSets[2], in: bench)
+        XCTAssertEqual(types.kindsLine(of: bench), "set 3 drop, set 4 rest-pause")
+        types.setKind(.drop, for: bench.orderedSets[0], in: bench)
+        XCTAssertEqual(types.kindsLine(of: bench), "set 3 drop, set 4 rest-pause", "set 1 takes no kind")
+        types.setKind(nil, for: bench.orderedSets[2], in: bench)
+        types.setKind(nil, for: bench.orderedSets[3], in: bench)
+        XCTAssertNil(types.kindsLine(of: bench))
+    }
+
     func testTheSideCarReadsLeniently() throws {
         XCTAssertEqual(RoutineSetTypes.decode(Data("{}".utf8)), RoutineSetTypes())
         XCTAssertEqual(RoutineSetTypes.decode(Data("junk".utf8)), RoutineSetTypes())

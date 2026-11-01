@@ -375,7 +375,11 @@ rather than pre-filled, takes its kind from `CoachPrescribedSet.kind` in
 `PlanSides.logged`. `RoutineRemoval` sweeps the routine's entries and leaves the
 logged copies. The routine's exercises open from its name on Routines
 (`RoutineDetailView`): the set types are editable there, the numbers are not --
-this build has never had a routine editor for them. **Not in the backup**: this
+this build has never had a routine editor for them. Under an exercise's name
+there, **"set 3 drop, set 4 rest-pause"** names its kinded sets by number from
+1, and says nothing when every set is straight (`SetKindLine`): LIFT Android's
+`RoutineExercise.summary` line and LIFT web's `routineSetKindsLine`, word for
+word. Change it in all three LIFT builds or in none. **Not in the backup**: this
 build writes no `routines[]` at all (a file's `routines` section is held and
 written back untouched, `group` and `kind` included), so there is nowhere for
 BACKUP-FORMAT's two fields to go until it does.
@@ -678,7 +682,19 @@ a file it can't place is refused, never half-read.
   logged by hand. That also makes a second import of the same file add
   nothing.
 - Two workouts on one day become one LIFT day.
-- The export is one row per set, always in kilograms, with blanks left blank.
+- **Blank stays blank, on the way in.** RPE, seconds and distance are optional
+  on `SetEntry`, and an empty cell is nil. A 0 in seconds or distance (and in
+  Strong's RPE) is also nil: Strong fills every column a set did not use with
+  0, so keeping it would put "0:00 0 m" on every bench set. Hevy's RPE keeps a
+  0 it writes, as LIFT web does. Weight and reps are not optional, and an empty
+  one is 0, which on `SetEntry` is the absence (see `SetEntry.display`).
+  Making them optional is a schema change (see `LiftSchemaVersions.swift`).
+- The export is one row per set, always in kilograms, with blanks left blank:
+  nil is an empty cell, and so is a weight or reps of 0, as LIFT web writes
+  them. Numbers have at most two decimals with trailing zeros dropped, and the
+  point with them, so 59.999 is `60` (`WorkoutCSV.exportNumber`).
+- The delimiter is counted on the header line alone, up to any line break.
+  Swift reads CR LF as one `Character`, which a check for `"\n"` alone misses.
 
 ## Barcodes
 

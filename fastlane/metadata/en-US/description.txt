@@ -18,7 +18,8 @@ FOOD
 
 COOK
 - Write your own recipes, with macros per serving and the dish's total weight
-- Import a recipe shared from Safari, paste a recipe's text, or add one from the built-in catalog
+- Send recipes from your browser: tap a saved bookmark on a recipe page, or in Safari, Share → LIFT. LIFT never visits the page
+- Paste a recipe's text, or add one from the built-in catalog
 - Plan meals across the week and log a planned meal in one tap
 - A shopping list built from the week's plan
 

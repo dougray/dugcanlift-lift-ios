@@ -55,7 +55,7 @@ struct RecipeCatalogView: View {
             }
             .liftScreen()
             .background(Theme.background)
-            .navigationTitle(selected == nil ? "Recipe catalogue" : "Add recipe")
+            .navigationTitle(selected == nil ? "Recipe catalog" : "Add recipe")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "Search 600+ recipes")
             .toolbar {
@@ -83,7 +83,7 @@ struct RecipeCatalogView: View {
     @ViewBuilder
     private var list: some View {
         if loadFailed {
-            card { detailText("The recipe catalogue could not be opened.") }
+            card { detailText("The recipe catalog could not be opened.") }
         } else if entries.isEmpty {
             card {
                 detailText(query.trimmingCharacters(in: .whitespaces).count >= 2
@@ -100,7 +100,7 @@ struct RecipeCatalogView: View {
         // The credit is the CC BY-SA obligation, not decoration, so it sits on
         // the screen that shows the data rather than buried in a settings page.
         if !credits.isEmpty {
-            Button(showingCredits ? "Hide credits" : "Credits and licences") {
+            Button(showingCredits ? "Hide credits" : "Credits and licenses") {
                 showingCredits.toggle()
             }
             .font(Theme.detail)

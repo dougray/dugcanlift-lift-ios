@@ -1,7 +1,7 @@
 LIFT is a food and training log that keeps your data on your phone. There are no accounts, no ads and no analytics, and food and exercise search work offline.
 
 TODAY
-- Calories, protein, carbs, fat and fibre against your goal
+- Calories, protein, carbs, fat and fiber against your goal
 - Today's steps from Apple Health, against a daily step goal
 - What you trained today
 
@@ -18,7 +18,7 @@ FOOD
 
 COOK
 - Write your own recipes, with macros per serving and the dish's total weight
-- Import a recipe shared from Safari, paste a recipe's text, or add one from the built-in catalogue
+- Import a recipe shared from Safari, paste a recipe's text, or add one from the built-in catalog
 - Plan meals across the week and log a planned meal in one tap
 - A shopping list built from the week's plan
 

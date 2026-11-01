@@ -57,10 +57,9 @@ final class PermissionPinTests: XCTestCase {
                 "NSLocationWhenInUseUsageDescription",
             ],
             // `location` is "A recording you start keeps going with the phone
-            // locked". `processing` comes with project.yml's
-            // BGTaskSchedulerPermittedIdentifiers (com.dugcanlift.lift.healthsync)
-            // for a background HealthKit sync.
-            backgroundModes: ["processing", "location"]),
+            // locked". No `processing`: nothing registers a BGTaskScheduler
+            // task (#78), so a mode coming back here is a new ask.
+            backgroundModes: ["location"]),
         // Neither extension asks for anything: the widget reads the App Group
         // store, and the share extension reads only what the share sheet hands it.
         "PlugIns/LiftShare.appex": BundlePin(),

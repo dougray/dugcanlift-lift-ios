@@ -30,6 +30,15 @@ final class ProgressPhotoStoreTests: XCTestCase {
         XCTAssertEqual(store.photos().map(\.id), [later.id])
     }
 
+    /// app-privacy.md: progress photos are never uploaded, so the folder is
+    /// kept out of iCloud and computer backups of the phone.
+    func testThePhotoFolderIsLeftOutOfDeviceBackups() throws {
+        let store = store()
+        _ = try store.save(jpeg(width: 30, height: 40))
+        let values = try store.directory.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(values.isExcludedFromBackup, true)
+    }
+
     /// A camera original is cut down to 2048 px on its long side.
     func testABigPhotoIsScaledDown() throws {
         let store = store()

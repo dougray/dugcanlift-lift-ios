@@ -4,7 +4,8 @@ import UIKit
 import LiftCore
 
 /// Progress photos: kept as files in LIFT's own container, never in the
-/// SwiftData store, never in a backup file, never sent with a coach link.
+/// SwiftData store, never in a backup file, never in an iCloud or computer
+/// backup of the phone, never sent with a coach link.
 ///
 /// Files rather than rows because a photo is megabytes and the store is
 /// copied whole into every backup; a backup that quietly grew by a gigabyte of
@@ -47,10 +48,22 @@ struct ProgressPhotoStore {
         guard let image = UIImage(data: data), let jpeg = Self.scaled(image).jpegData(compressionQuality: 0.8)
         else { throw CocoaError(.fileReadCorruptFile) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try excludeFromDeviceBackup()
         let key = DayKey.make(from: day)
         let url = directory.appendingPathComponent("\(key)_\(UUID().uuidString).jpg")
         try jpeg.write(to: url, options: [.atomic, .completeFileProtection])
         return Photo(url: url, dayKey: key)
+    }
+
+    /// Application Support is in iCloud and computer backups by default, and
+    /// app-privacy.md says progress photos are never uploaded. Marking the
+    /// folder keeps everything in it out of both. Set on every save rather
+    /// than once, so a folder an earlier build made is covered too.
+    func excludeFromDeviceBackup() throws {
+        var folder = directory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try folder.setResourceValues(values)
     }
 
     func delete(_ photo: Photo) {

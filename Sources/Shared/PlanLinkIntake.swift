@@ -39,7 +39,7 @@ enum PlanLinkIntake {
 
         /// The alert's title on `LiftApp`.
         var alertTitle: String {
-            isAboutARecipe ? "Couldn't open this recipe" : "Couldn't open this plan"
+            isAboutARecipe ? "Couldn't read that recipe" : "Couldn't open this plan"
         }
 
         var message: String {

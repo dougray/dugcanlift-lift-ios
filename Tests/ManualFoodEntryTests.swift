@@ -233,7 +233,7 @@ final class ManualFoodEntryTests: XCTestCase {
         let new = newEntry()
         XCTAssertEqual(new.fieldLabel(for: .calories), "Calories (per 100 g)")
         XCTAssertEqual(new.fieldLabel(for: .protein), "Protein (g/100g)")
-        XCTAssertEqual(new.fieldLabel(for: .fiber), "Fibre (g/100g)")
+        XCTAssertEqual(new.fieldLabel(for: .fiber), "Fiber (g/100g)")
         XCTAssertEqual(new.fieldLabel(for: .sodium), "Sodium (mg/100g)")
 
         let existing = FoodEntryEdit(name: "Bar", foodRefID: "", mealType: .snack, quantity: 1,
@@ -519,7 +519,7 @@ final class ManualFoodEntryTests: XCTestCase {
         XCTAssertEqual(reopened.fieldLabel(for: .protein), "Protein (g)", "totals at the amount, not per 100 g")
         XCTAssertEqual(reopened.text(for: .calories), "202.5")
         XCTAssertEqual(reopened.macrosHint,
-                       "Totals for the amount above. Fibre can be left blank \u{2014} blank stays unknown, not zero.")
+                       "Totals for the amount above. Fiber can be left blank \u{2014} blank stays unknown, not zero.")
         XCTAssertEqual(reopened.detailsHint,
                        "Saturated fat, sugar and sodium, as totals for the amount above. No goals \u{2014} blank stays unknown, not zero.")
     }

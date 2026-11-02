@@ -32,8 +32,11 @@ enum BackupStore {
     /// - Parameter defaults: where the preferences and the side-cars this file
     ///   carries are read from (the goal, the step goal, the weight unit, and
     ///   `PlanMeals`). `.standard` is the app; a test passes its own suite.
+    /// - Parameter heartRates: the Apple Watch's heart rate beside the store
+    ///   (`WorkoutHeartRates`), read only.
     static func build(context: ModelContext, keepingForeignExt foreign: [String: Any] = [:],
-                      defaults: UserDefaults = .standard) throws -> Data {
+                      defaults: UserDefaults = .standard,
+                      heartRates: WorkoutHeartRateStore = .shared) throws -> Data {
         // An `outdoor` section an earlier build held as foreign data becomes
         // this app's own before anything is read, so this save writes it from
         // the store rather than dropping it. See `absorbPreservedOutdoor`.
@@ -98,12 +101,24 @@ enum BackupStore {
         }
 
         // ---- workouts ----
+        let rates = heartRates.rates
         data["workouts"] = days.map { day -> [String: Any] in
             let dayKey = day.id.uuidString
             var dayExtras: [String: Any] = ["focus": day.focus.rawValue]
             day.liveStartedAt.map { dayExtras["liveStartedAt"] = Int($0.timeIntervalSince1970 * 1000) }
             day.liveEndedAt.map { dayExtras["liveEndedAt"] = Int($0.timeIntervalSince1970 * 1000) }
             day.healthKitUUID.map { dayExtras["healthKitUUID"] = $0.uuidString }
+            // Each Apple Watch session's average and max, under ext.ios: no
+            // other build keeps a session's pair in this shape, and a day of
+            // the common format has no field for it. Omitted when none.
+            let sessions = rates.sessions(on: day.id)
+            if !sessions.isEmpty {
+                dayExtras["heartRate"] = sessions.map { session -> [String: Any] in
+                    ["sessionId": session.sessionID.uuidString,
+                     "averageBpm": session.averageBpm,
+                     "maxBpm": session.maxBpm]
+                }
+            }
             iosDays[dayKey] = dayExtras
 
             let exercises = day.orderedExercises.map { exercise -> [String: Any] in
@@ -136,6 +151,11 @@ enum BackupStore {
                     // written before per-limb logging has no key here and
                     // restores as both, which is what those sets always meant.
                     set.side.map { payload["side"] = $0.backupValue }
+                    // The highest heart rate an Apple Watch measured around
+                    // the set, in whole bpm, under the wire's name and LIFT
+                    // for Android's. Omitted when not recorded -- never 0 --
+                    // so a file with no watch sessions is what it was.
+                    rates.maxBpm(of: set.id).map { payload["maxBpm"] = $0 }
                     return payload
                 }
 
@@ -385,8 +405,11 @@ enum BackupStore {
 
     /// - Parameter defaults: as `build`'s -- where the preferences and the
     ///   side-cars this file carries are written.
+    /// - Parameter heartRates: where the file's heart rates are written, and
+    ///   only when it carries some.
     static func restore(context: ModelContext, from data: Data,
-                        defaults: UserDefaults = .standard) -> RestoreResult {
+                        defaults: UserDefaults = .standard,
+                        heartRates: WorkoutHeartRateStore = .shared) -> RestoreResult {
         guard
             let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             root["app"] as? String == app,
@@ -444,9 +467,21 @@ enum BackupStore {
             added += 1
         }
 
+        // Heart rate for the days and sets this restore adds, and only those:
+        // a day already on this phone is left alone, so are its figures.
+        var restoredRates = WorkoutHeartRates()
+
         for raw in payload["workouts"] as? [[String: Any]] ?? [] {
             guard let id = recordID(raw["id"]), !existingDays.contains(id) else { continue }
             let extras = iosDays[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
+            for case let session as [String: Any] in extras["heartRate"] as? [Any] ?? [] {
+                guard let sessionID = uuid(session["sessionId"]),
+                      let average = finite(session["averageBpm"]),
+                      let peak = finite(session["maxBpm"]) else { continue }
+                restoredRates.setSession(WorkoutHeartRates.Session(sessionID: sessionID,
+                                                                   averageBpm: average, maxBpm: peak),
+                                         sessionID: sessionID, on: id)
+            }
 
             let day = WorkoutDay(
                 date: date(raw["startedAt"]) ?? .now,
@@ -485,11 +520,28 @@ enum BackupStore {
                     )
                     set.id = uuid(rawSet["id"]) ?? UUID()
                     set.completedAt = date(setExtras["completedAt"])
+                    restoredRates.setMaxBpm(wholeBpm(rawSet["maxBpm"]), for: set.id)
                     set.exercise = exercise
                     context.insert(set)
                 }
             }
             added += 1
+        }
+
+        // Written once, and only when the file said something: a file from
+        // before heart rate per set, or with no watch sessions, touches no file.
+        if !restoredRates.isEmpty {
+            heartRates.update { rates in
+                for (key, bpm) in restoredRates.sets {
+                    if let setID = UUID(uuidString: key) { rates.setMaxBpm(bpm, for: setID) }
+                }
+                for (key, sessions) in restoredRates.days {
+                    guard let dayID = UUID(uuidString: key) else { continue }
+                    for session in sessions {
+                        rates.setSession(session, sessionID: session.sessionID, on: dayID)
+                    }
+                }
+            }
         }
 
         // Bodyweight prefers the richer ios record and falls back to the flat map.
@@ -918,6 +970,15 @@ enum BackupStore {
     /// A number, read strictly: `finite`, so a JSON boolean or a string is not
     /// one (`"fiberG": true` is unknown, never 1 g), and NaN or infinity, which
     /// JSONSerialization could not write back out, is not one either.
+    /// A heart rate as a file may spell it: a positive whole number, or
+    /// nothing. 142.0 is 142; 141.5, 0, a string or a boolean is no figure.
+    private static func wholeBpm(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let double = number.doubleValue
+        guard double.isFinite, double > 0, double == double.rounded(), double < Double(Int.max) else { return nil }
+        return Int(double)
+    }
+
     private static func number(_ value: Any?) -> Double? {
         finite(value)
     }

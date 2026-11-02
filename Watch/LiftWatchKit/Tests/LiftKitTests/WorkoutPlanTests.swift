@@ -144,6 +144,32 @@ final class WorkoutPlanTests: XCTestCase {
         XCTAssertEqual(PrescribedSet().summary(unit: .pounds), "—")
     }
 
+    // MARK: - The side, on screen
+
+    func testTheSideIsAppendedAsTheSpecDrawsIt() {
+        // The Now screen's big line for a named set: "30 x 8 · L".
+        let set = PrescribedSet(weightKg: 13.6078, reps: 8, side: .left)
+        XCTAssertEqual(set.headline(unit: .pounds, side: .left), "30 x 8 · L")
+        // An each-side set names no side of its own; the session says which
+        // limb is next, and the line reads the same either way.
+        XCTAssertEqual(PrescribedSet(weightKg: 13.6078, reps: 8)
+                        .headline(unit: .pounds, side: .right), "30 x 8 · R")
+        // The numbers stay together: RPE, then the side.
+        XCTAssertEqual(set.summary(unit: .pounds, side: .left), "30 x 8 · L")
+        XCTAssertEqual(PrescribedSet(weightKg: 13.6078, reps: 8, rpe: 8)
+                        .summary(unit: .pounds, side: .left), "30 x 8 @8 · L")
+        // No side, and it is word for word what it always was.
+        XCTAssertEqual(set.headline(unit: .pounds), "30 x 8")
+        // A side with nothing prescribed is still a side.
+        XCTAssertEqual(PrescribedSet().headline(unit: .pounds, side: .left), "— · L")
+    }
+
+    func testASetThatOnlyNamesASideStillPrescribesNothing() {
+        // "One more on the left, you pick the weight" is an empty
+        // prescription in everything the big digits draw.
+        XCTAssertTrue(PrescribedSet(side: .left).isEmpty)
+    }
+
     func testHalfStepRPEAndHalfKiloWeightsKeepTheirDecimal() {
         let set = PrescribedSet(weightKg: 82.5, reps: 3, rpe: 7.5)
         XCTAssertEqual(set.summary(unit: .kilograms), "82.5 x 3 @7.5")

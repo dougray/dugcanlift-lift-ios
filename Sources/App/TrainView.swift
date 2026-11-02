@@ -3,6 +3,7 @@ import SwiftData
 import WidgetKit
 import LiftCore
 import LiftReference
+import LiftSync
 
 /// Day-based training log. Previous / Next walks calendar days; a day record
 /// is created lazily on first edit so browsing empty dates costs nothing.
@@ -290,6 +291,10 @@ private struct DayEditor: View {
     /// Supersets, drop sets and rest-pause on the day's logged rows, copied
     /// there when a routine was started (`RoutineSetTypes`).
     @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
+    /// What an Apple Watch measured during a session it ran: each set's
+    /// figure and each session's pair (`WorkoutHeartRates`). Empty for a
+    /// session logged here, which reads no heart rate.
+    @ObservedObject private var heartRates = WorkoutHeartRateStore.shared
 
     init(date: Date, unit: WeightUnit, showingPicker: Binding<Bool>) {
         self.date = date
@@ -319,13 +324,26 @@ private struct DayEditor: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
 
+                // "Heart rate: average 118 · max 156 bpm", one line per watch
+                // session filed under this day, and nothing at all for a day
+                // with none. Shown, never graded: no zone, no colour.
+                if let day {
+                    ForEach(heartRates.rates.sessions(on: day.id), id: \.sessionID) { session in
+                        Text(HeartRateWords.session(SessionHeartRate(averageBpm: session.averageBpm,
+                                                                     maxBpm: session.maxBpm)))
+                            .font(Theme.detail)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+
                 if let day {
                     let exercises = day.orderedExercises
                     let labels = RoutineSetTypes.decode(setTypesData).loggedLabels(exercises)
                     ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
                         ExerciseBlock(exercise: exercise, unit: unit,
                                       focus: day.focus, isLive: day.isLive,
-                                      groupLabel: labels[index]) { set in
+                                      groupLabel: labels[index],
+                                      heartRates: heartRates.rates) { set in
                             ticked(set, of: exercise, in: day)
                         }
                         Divider().overlay(Theme.hairline)
@@ -411,6 +429,8 @@ private struct ExerciseBlock: View {
     var isLive: Bool = false
     /// "Superset A · A1" when the routine it was started from grouped it.
     var groupLabel: GroupLabel? = nil
+    /// Each set's heart rate, when an Apple Watch ran the session.
+    var heartRates = WorkoutHeartRates()
     /// A set ticked done during a live session; the day decides the rest.
     var onTicked: (SetEntry) -> Void = { _ in }
 
@@ -539,6 +559,7 @@ private struct ExerciseBlock: View {
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
                        showsSide: showsSide, bar: bar,
                        kind: setTypes.loggedKind(of: set, at: index),
+                       maxBpm: heartRates.maxBpm(of: set.id),
                        restsBefore: isLive ? exercise.displayName : nil,
                        onTicked: { onTicked(set) }) {
                     delete(set, number: index + 1)
@@ -682,6 +703,9 @@ private struct SetRow: View {
     /// Drop or rest-pause, from the routine it was started from. Said after
     /// the side, as Coach and LIFT web say it: "30 x 12 L drop".
     var kind: SetKind? = nil
+    /// The highest heart rate the Apple Watch measured around this set, when
+    /// the watch ran the session. Nil for every set logged here.
+    var maxBpm: Int? = nil
     /// Set during a live session: the row gets a done tick, and ticking it
     /// starts a rest before this exercise's next set. Nil otherwise.
     var restsBefore: String? = nil
@@ -718,15 +742,26 @@ private struct SetRow: View {
                 Button {
                     isEditing.toggle()
                 } label: {
-                    // The control beside it already says L or R.
-                    Text(set.display(unit: unit, includingSide: !showsSide))
-                        .scaledFont(size: 16, weight: set.isWarmup ? .regular : .semibold)
-                        .foregroundStyle(set.isWarmup ? Theme.textSecondary : Theme.textPrimary)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
+                    VStack(alignment: .leading, spacing: 0) {
+                        // The control beside it already says L or R.
+                        Text(set.display(unit: unit, includingSide: !showsSide))
+                            .scaledFont(size: 16, weight: set.isWarmup ? .regular : .semibold)
+                            .foregroundStyle(set.isWarmup ? Theme.textSecondary : Theme.textPrimary)
+                        // "max 142 bpm", muted, under the numbers rather than
+                        // beside them, so a narrow row with sides and a kind
+                        // does not push it off. Nothing beside it either:
+                        // shown, never graded.
+                        if let maxBpm {
+                            Text(HeartRateWords.set(maxBpm: maxBpm))
+                                .scaledFont(size: 12)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Set \(index), \(set.display(unit: unit))\(set.isWarmup ? ", warmup" : "")\(kind.map { ", \($0.label)" } ?? "")")
+                .accessibilityLabel("Set \(index), \(set.display(unit: unit))\(set.isWarmup ? ", warmup" : "")\(kind.map { ", \($0.label)" } ?? "")\(maxBpm.map { ", \(HeartRateWords.set(maxBpm: $0))" } ?? "")")
                 .accessibilityHint(isEditing ? "Closes the editor" : "Edits this set")
 
                 if set.isWarmup {

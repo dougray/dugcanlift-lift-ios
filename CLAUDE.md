@@ -1048,6 +1048,31 @@ that repo is Wear OS only now. `Watch/README.md` has the detail.
   than under a broken clock's year; it is never dropped. The watch keeps the
   session in `UnsentSessionLog` until the acknowledgement arrives, so nothing
   is lost if this app is never opened.
+- **Heart rate per set** (LIFT superproject `2026-10-28-build-plan.md` item
+  16): the highest bpm the watch measured around each set, shown and never
+  graded. **The rule is `SetHeartRate`** in `LiftWatchKit`, a pure function:
+  a window ends 20 s after the set's tick or at the next tick, starts at the
+  previous tick or the session's start, never more than 5 minutes back, both
+  ends inclusive; no reading in it is no figure, never 0. It is checked against
+  `Tests/LiftKitTests/Fixtures/heart-rate-per-set.json`, worked by hand and
+  shared with `dugcanlift-lift-watch`'s Kotlin port: never regenerate it from
+  either port. `LiftingSessionRecorder` keeps the last ten minutes of readings
+  in memory only, from an anchored query (the builder's statistics give only
+  the newest reading of a batch), and the figure lands on `DraftSet.maxBpm`
+  when its window closes -- higher only, and not a revision. On the wire it is
+  `maxBpm` on a performed set, a positive integer, absent when not recorded.
+  **On the iPhone it is a side-car, not a column**: `WorkoutHeartRates`, a JSON
+  file in Application Support keyed by set id (and each session's pair by day
+  id), written by `WatchSessionImporter` after the store saves and swept of
+  sets and days that are gone on each import. In a backup a set carries
+  `maxBpm` and a day's pairs ride in `ext.ios.workouts[id].heartRate`. The
+  importer and `WatchSyncReceiver` take the store with **no default**: the
+  importer sweeps it against the context it is handed, so a test that took
+  `.shared` would empty the test host's. A phone-led session gets no figure:
+  no phone reads heart rate from Apple Health. Nothing goes to a coach, LIFT
+  web or a CSV. The words are `HeartRateWords` in `LiftSync`, which both apps
+  compile: "max 142 bpm" and "Heart rate: average 118 · max 156 bpm", the
+  Android builds' too -- change them everywhere or nowhere.
 - **A food is stored once and acknowledged.** A watch-logged food arrives as
   `FOOD_LOGGED`; `WatchSyncReceiver` stores each one-shot id once
   (`WatchFoodLogReceipts`) and answers with a `WORKOUT_SYNC_ACK` under that id,

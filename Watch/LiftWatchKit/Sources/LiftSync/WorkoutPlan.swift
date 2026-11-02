@@ -379,6 +379,19 @@ public enum HeartRateWords {
         "Heart rate: average \(whole(heartRate.averageBpm)) · max \(whole(heartRate.maxBpm)) bpm"
     }
 
+    /// The same line from halves either of which may be absent, as a backup
+    /// can carry them: one half alone says only that half ("Heart rate: max
+    /// 156 bpm"), and neither is no line at all. LIFT for Android's
+    /// `HeartRateLines.session`, word for word. The watch always sends both,
+    /// so only a hand-edited or foreign backup ever shows a half.
+    public static func session(averageBpm: Double?, maxBpm: Double?) -> String? {
+        let parts = [
+            averageBpm.flatMap { $0.isFinite && whole($0) > 0 ? "average \(whole($0))" : nil },
+            maxBpm.flatMap { $0.isFinite && whole($0) > 0 ? "max \(whole($0))" : nil }
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : "Heart rate: \(parts.joined(separator: " · ")) bpm"
+    }
+
     private static func whole(_ bpm: Double) -> Int {
         Int(bpm.rounded(.toNearestOrAwayFromZero))
     }

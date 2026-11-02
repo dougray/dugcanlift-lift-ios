@@ -26,11 +26,14 @@ import Combine
 /// and a backup carries only the figures of sets it writes.
 struct WorkoutHeartRates: Codable, Equatable {
 
-    /// One watch session's pair, as `SESSION_FINISHED` sent it.
+    /// One watch session's pair, as `SESSION_FINISHED` sent it. Either half
+    /// may be absent: the watch always sends both, but a backup written by
+    /// hand, or by another build, may carry one, and LIFT for Android keeps
+    /// one half on its own rather than dropping the other.
     struct Session: Codable, Equatable {
         var sessionID: UUID
-        var averageBpm: Double
-        var maxBpm: Double
+        var averageBpm: Double?
+        var maxBpm: Double?
     }
 
     /// `SetEntry.id` -> the set's figure, whole beats per minute.
@@ -53,14 +56,19 @@ struct WorkoutHeartRates: Codable, Equatable {
     }
 
     /// A session's pair on a day, replacing an earlier one from the same
-    /// session (a newer revision). Nil, or a pair that is not above zero,
-    /// removes it: absent means not recorded, never zero.
+    /// session (a newer revision). A half that is not above zero is absent,
+    /// and a pair with neither half removes it: absent means not recorded,
+    /// never zero.
     mutating func setSession(_ session: Session?, sessionID: UUID, on dayID: UUID) {
         let key = dayID.uuidString
         var list = (days[key] ?? []).filter { $0.sessionID != sessionID }
-        if let session, session.averageBpm > 0, session.maxBpm > 0,
-           session.averageBpm.isFinite, session.maxBpm.isFinite {
-            list.append(session)
+        func reading(_ bpm: Double?) -> Double? {
+            bpm.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        }
+        if var session {
+            session.averageBpm = reading(session.averageBpm)
+            session.maxBpm = reading(session.maxBpm)
+            if session.averageBpm != nil || session.maxBpm != nil { list.append(session) }
         }
         days[key] = list.isEmpty ? nil : list
     }

@@ -1065,7 +1065,12 @@ that repo is Wear OS only now. `Watch/README.md` has the detail.
   file in Application Support keyed by set id (and each session's pair by day
   id), written by `WatchSessionImporter` after the store saves and swept of
   sets and days that are gone on each import. In a backup a set carries
-  `maxBpm` and a day's pairs ride in `ext.ios.workouts[id].heartRate`. The
+  `maxBpm`, and a day of one watch session carries `averageBpm` / `maxBpm` in
+  whole bpm on its common `workouts[]` record, LIFT for Android's shape; only a
+  day of two or more keeps a list in `ext.ios.workouts[id].heartRate`, with the
+  common pair left off, because a merged average nobody measured is never
+  written. On restore that list wins, and otherwise the common pair is the
+  day's one session, either half on its own. The
   importer and `WatchSyncReceiver` take the store with **no default**: the
   importer sweeps it against the context it is handed, so a test that took
   `.shared` would empty the test host's. A phone-led session gets no figure:

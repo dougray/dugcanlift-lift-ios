@@ -15,7 +15,7 @@ import XCTest
 /// - "Camera" -- iPhone: barcode scanning only.
 /// - "Notifications" > "iPhone" -- the end of a rest, scheduled on the phone (no
 ///   Info.plist key: iOS asks at `requestAuthorization`).
-/// - "Progress photos (iPhone)" -- the system photo picker, which needs no
+/// - "Progress photos" > "iPhone" -- the system photo picker, which needs no
 ///   photo-library key, so there must not be one.
 /// - "The watch apps" -- Apple Watch.
 ///
@@ -102,7 +102,7 @@ final class PermissionPinTests: XCTestCase {
         ],
     ]
 
-    static let page = "dugcanlift-site/app-privacy.md (\"Location\", \"Health Connect and Apple Health\", \"Camera\", \"Notifications\", \"Progress photos (iPhone)\", \"The watch apps\")"
+    static let page = "dugcanlift-site/app-privacy.md (\"Location\", \"Health Connect and Apple Health\", \"Camera\", \"Notifications\", \"Progress photos\", \"The watch apps\")"
 
     static func pin(ofInfo info: [String: Any]) -> BundlePin {
         BundlePin(usageDescriptions: Set(info.keys.filter { $0.hasPrefix("NS") && $0.contains("UsageDescription") }),

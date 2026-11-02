@@ -307,6 +307,9 @@ final class WorkoutSessionModel: ObservableObject {
     }
 
     func finishWorkout() {
+        // A second tap on a Finish confirmation still on screen for a frame
+        // must not end the HealthKit session again or queue anything.
+        guard let current = draft, !current.isFinished else { return }
         edit { $0.finish() }
         restTimer.stop()
         // Ends the HealthKit session and hands back the two numbers the

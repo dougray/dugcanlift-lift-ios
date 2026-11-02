@@ -95,7 +95,9 @@ as application context:
 | Recent foods | phone -> watch | `updateApplicationContext`, with per-100 g macros where the phone knows them |
 | `FOOD_LOGGED` | watch -> phone | `sendMessage` if reachable, else `transferUserInfo` |
 | `WORKOUT_SYNC_ACK` for a food | phone -> watch | as `PLAN_PUSHED`; takes the food out of the standalone log |
-| `SESSION_FINISHED`, `WORKOUT_EDITED`, `OUTDOOR_ACTIVITY_FINISHED` | watch -> phone | `transferUserInfo` via `SyncOutbox` |
+| `SESSION_FINISHED` (carrying the whole workout) | watch -> phone | `sendMessage` if reachable, else `transferUserInfo`; stays in `SyncOutbox` and `UnsentSessionLog` until acknowledged |
+| `WORKOUT_SYNC_ACK` for a session | phone -> watch | as `PLAN_PUSHED`; takes the session out of `UnsentSessionLog` |
+| `WORKOUT_EDITED`, `OUTDOOR_ACTIVITY_FINISHED` | watch -> phone | `transferUserInfo` via `SyncOutbox` |
 
 **`transferUserInfo` never arrives between simulators**, in either direction.
 Apple DTS says the watchOS Simulator does not support it, and the spike's
@@ -144,13 +146,79 @@ the free-entry flow unchanged**.
   `[null, 5]` is "five reps, you pick the weight" and a blank must never reach
   a wrist as a zero. `headline(unit:)` renders that as "5 reps", and a set
   prescribing nothing at all as "—".
-- `GuidedSession` holds position only: which exercise, which set of it, and
-  what to do when one is logged.
+- `GuidedSession` holds position only: which exercise, which set of it, which
+  side that set is for, and what to do when one is logged.
+- **A coach's sides reach the wrist** (PLAN-FORMAT.md "Sides"). A
+  `PlanExercise` can be `eachSide` -- every prescribed set done on both sides,
+  so "3 x 8 each side" is three prescribed rows and six sets -- and a
+  `PrescribedSet` can name a `side`. Both are **omitted** when they say
+  nothing, never `false` and never `"both"`, so a plan without sides is byte
+  for byte what the build before them wrote; `WatchPlanRevisions` hashes the
+  payload, and one stray key would re-push every plan once. The Now screen
+  reads `3/6 - L` and `30 x 8 - L` (with a middle dot), Log Set offers the
+  phone's own two-button L / R control, and `DraftSet.side` records the limb
+  the set was actually done on -- **absent is both, forever**, the phone's own
+  rule and its own two words (`PlanSide`).
+  *Which* side is next is LIFT for iPhone's rule, ported: the first prescribed
+  sided set the log has not filled, then whichever side is behind, left
+  breaking a tie -- so an each-side exercise alternates L, R, L, R, and a
+  named-side set on an exercise that is not each side stops asking about sides
+  once it is logged. `GuidedSessionTests` pins all of it, including that a
+  plan with no sides behaves exactly as before.
+- **So do a coach's set types** (PLAN-FORMAT.md "Set types"). A `PlanExercise`
+  can carry a `group` -- adjacent exercises with the same positive integer are
+  a superset (two) or a circuit (three or more), done round by round -- and a
+  `PrescribedSet` a `kind`, `drop` or `restPause`. Both are **omitted** when
+  they say nothing, so a plan without them is byte for byte unchanged. Both are
+  read leniently: anything but a positive integer is not grouped, an unknown
+  kind is straight, and an exercise's first set is straight whatever arrived
+  (`PlanExercise.kind(ofSet:)`). The Now screen heads a grouped exercise
+  "Superset A · A1" (also on the exercise list), and the position line reads
+  `2/4 - drop` or `5/6 - L rest-pause` (with middle dots): side then kind, as
+  the phone reads a set. The order and the rest are LIFT for iPhone's
+  `SessionRest`, ported into `GuidedSession`: one prescribed row of each member
+  per round, skipping one that has run out; no rest inside a round, with "Next:
+  Seated Cable Rows" on the Now screen; none before a drop set ("Drop set
+  next"); 15 seconds before rest-pause; otherwise the rest the set prescribed.
+  An each-side member does both sides in its round. `PlanGrouping` is the
+  port of the phone's `ExerciseGrouping` labels, and `SetTypesSessionTests`
+  pins it all.
 - `LiftingSessionRecorder` runs an `HKWorkoutSession` of
   `.traditionalStrengthTraining` with an `HKLiveWorkoutBuilder`, which
   surfaces current, average and maximum heart rate and saves the workout with
   its samples. Only one `HKWorkoutSession` may be live at a time, which the UI
   guarantees: an outdoor recording owns the whole screen.
+
+### Back to the phone
+
+A set logged on the wrist has to become a set on the phone, and the phone may
+not have been reachable for a single one of them.
+
+- **`SESSION_FINISHED` carries the whole workout** (`FinishedSession`): every
+  exercise in order, every set with its weight in kilograms, reps, RPE, warmup
+  flag, side and completion time, the local day it belongs to, the focus, and
+  the session's average and maximum heart rate. One message, one
+  reconciliation.
+- **Not a streamed `SET_LOGGED`.** The schema left room for one and the spec
+  called it optional. A phone in a locker is not reachable, so every streamed
+  message would be lost and only the queued transport would carry anything --
+  and the offline path is the one that has to work. `WORKOUT_EDITED` still
+  goes per edit and is still only a notification.
+- **Identity is the envelope's**, as a plan's is: `workoutId` is the session's
+  id and `revision` the draft's revision. A resend, a queued copy arriving
+  second and a later edit all reconcile under "newer revision wins".
+- **It takes the fast path when there is one.** `sendMessage` to a phone
+  that is awake, so the workout is there when the lifter picks it up, and
+  `transferUserInfo` otherwise -- the same two-step a food takes. Sending it
+  twice is safe: the phone stores a session id once and acknowledges it again.
+- **`UnsentSessionLog` keeps it until the phone says it has it.**
+  `WorkoutStore` and `SyncOutbox` are in memory and die with the app;
+  `transferUserInfo` returns normally with no iPhone ever paired, and its queue
+  cannot be read back. So a finished session is written to `UserDefaults`
+  before it is handed to any transport, re-offered on every launch and every
+  reachability change, and removed only by a `WORKOUT_SYNC_ACK` under its id --
+  the rule `StandaloneFoodLog` already follows for food, including that
+  retention is bounded by count and never by a date.
 
 ### Food
 

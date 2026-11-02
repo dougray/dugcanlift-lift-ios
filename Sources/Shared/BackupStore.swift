@@ -108,15 +108,24 @@ enum BackupStore {
             day.liveStartedAt.map { dayExtras["liveStartedAt"] = Int($0.timeIntervalSince1970 * 1000) }
             day.liveEndedAt.map { dayExtras["liveEndedAt"] = Int($0.timeIntervalSince1970 * 1000) }
             day.healthKitUUID.map { dayExtras["healthKitUUID"] = $0.uuidString }
-            // Each Apple Watch session's average and max, under ext.ios: no
-            // other build keeps a session's pair in this shape, and a day of
-            // the common format has no field for it. Omitted when none.
+            // A watch session's average and max. One session on the day --
+            // the ordinary case -- is `averageBpm` / `maxBpm` in whole bpm on
+            // the common record below, LIFT for Android's spelling and shape,
+            // so the line survives a trip through the other build. Two or
+            // more stay a list under ext.ios and the common fields are left
+            // off: a merged average nobody measured is never written.
+            // Omitted entirely when none.
             let sessions = rates.sessions(on: day.id)
-            if !sessions.isEmpty {
+            var commonPair: [String: Any] = [:]
+            if sessions.count == 1, let only = sessions.first {
+                only.averageBpm.flatMap(Self.roundedBpm).map { commonPair["averageBpm"] = $0 }
+                only.maxBpm.flatMap(Self.roundedBpm).map { commonPair["maxBpm"] = $0 }
+            } else if sessions.count > 1 {
                 dayExtras["heartRate"] = sessions.map { session -> [String: Any] in
-                    ["sessionId": session.sessionID.uuidString,
-                     "averageBpm": session.averageBpm,
-                     "maxBpm": session.maxBpm]
+                    var row: [String: Any] = ["sessionId": session.sessionID.uuidString]
+                    session.averageBpm.map { row["averageBpm"] = $0 }
+                    session.maxBpm.map { row["maxBpm"] = $0 }
+                    return row
                 }
             }
             iosDays[dayKey] = dayExtras
@@ -175,7 +184,7 @@ enum BackupStore {
                 "note": "",
                 "startedAt": Int(day.date.timeIntervalSince1970 * 1000),
                 "exercises": exercises
-            ]
+            ].merging(commonPair) { kept, _ in kept }
         }
 
         // ---- bodyweight ----
@@ -474,13 +483,26 @@ enum BackupStore {
         for raw in payload["workouts"] as? [[String: Any]] ?? [] {
             guard let id = recordID(raw["id"]), !existingDays.contains(id) else { continue }
             let extras = iosDays[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
+            // This build's own list wins when there is one: it is the only
+            // shape that says two sessions apart. Otherwise the common pair
+            // on the record -- LIFT for Android's, or this build's for a day
+            // of one session -- is that day's one session, either half on its
+            // own, junk or zero absent. It carries no session id, so the
+            // day's own id stands in for one.
+            var listed = false
             for case let session as [String: Any] in extras["heartRate"] as? [Any] ?? [] {
-                guard let sessionID = uuid(session["sessionId"]),
-                      let average = finite(session["averageBpm"]),
-                      let peak = finite(session["maxBpm"]) else { continue }
-                restoredRates.setSession(WorkoutHeartRates.Session(sessionID: sessionID,
-                                                                   averageBpm: average, maxBpm: peak),
-                                         sessionID: sessionID, on: id)
+                guard let sessionID = uuid(session["sessionId"]) else { continue }
+                let pair = WorkoutHeartRates.Session(sessionID: sessionID,
+                                                     averageBpm: finite(session["averageBpm"]),
+                                                     maxBpm: finite(session["maxBpm"]))
+                restoredRates.setSession(pair, sessionID: sessionID, on: id)
+                listed = listed || !restoredRates.sessions(on: id).isEmpty
+            }
+            if !listed {
+                let pair = WorkoutHeartRates.Session(sessionID: id,
+                                                     averageBpm: wholeBpm(raw["averageBpm"]).map(Double.init),
+                                                     maxBpm: wholeBpm(raw["maxBpm"]).map(Double.init))
+                restoredRates.setSession(pair, sessionID: id, on: id)
             }
 
             let day = WorkoutDay(
@@ -970,6 +992,14 @@ enum BackupStore {
     /// A number, read strictly: `finite`, so a JSON boolean or a string is not
     /// one (`"fiberG": true` is unknown, never 1 g), and NaN or infinity, which
     /// JSONSerialization could not write back out, is not one either.
+    /// A session's average or max as the common record writes it: whole
+    /// bpm, halves away from zero, and nothing that is not above zero.
+    private static func roundedBpm(_ bpm: Double) -> Int? {
+        guard bpm.isFinite else { return nil }
+        let whole = bpm.rounded(.toNearestOrAwayFromZero)
+        return whole > 0 && whole < Double(Int.max) ? Int(whole) : nil
+    }
+
     /// A heart rate as a file may spell it: a positive whole number, or
     /// nothing. 142.0 is 142; 141.5, 0, a string or a boolean is no figure.
     private static func wholeBpm(_ value: Any?) -> Int? {

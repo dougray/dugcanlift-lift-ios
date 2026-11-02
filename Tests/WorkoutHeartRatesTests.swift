@@ -162,9 +162,26 @@ final class WorkoutHeartRatesTests: XCTestCase {
         let set = UUID()
         rates.setMaxBpm(0, for: set)
         XCTAssertNil(rates.maxBpm(of: set))
-        rates.setSession(WorkoutHeartRates.Session(sessionID: set, averageBpm: 0, maxBpm: 150),
-                         sessionID: set, on: UUID())
+        let day = UUID()
+        rates.setSession(WorkoutHeartRates.Session(sessionID: set, averageBpm: 0, maxBpm: -1),
+                         sessionID: set, on: day)
         XCTAssertTrue(rates.isEmpty)
+        // One half on its own is kept, and the zero beside it is absent.
+        rates.setSession(WorkoutHeartRates.Session(sessionID: set, averageBpm: 0, maxBpm: 150),
+                         sessionID: set, on: day)
+        XCTAssertEqual(rates.sessions(on: day),
+                       [WorkoutHeartRates.Session(sessionID: set, averageBpm: nil, maxBpm: 150)])
+    }
+
+    func testOneHalfSaysOnlyThatHalf() {
+        // LIFT for Android's `HeartRateLines.session`, word for word.
+        XCTAssertEqual(HeartRateWords.session(averageBpm: 117.6, maxBpm: 156),
+                       "Heart rate: average 118 · max 156 bpm")
+        XCTAssertEqual(HeartRateWords.session(averageBpm: nil, maxBpm: 156),
+                       "Heart rate: max 156 bpm")
+        XCTAssertEqual(HeartRateWords.session(averageBpm: 118, maxBpm: nil),
+                       "Heart rate: average 118 bpm")
+        XCTAssertNil(HeartRateWords.session(averageBpm: nil, maxBpm: 0))
     }
 
     func testAFileWithOneBadEntryKeepsTheRest() throws {
@@ -185,23 +202,99 @@ final class WorkoutHeartRatesTests: XCTestCase {
         let backup = try BackupStore.build(context: source, defaults: isolatedDefaults(),
                                            heartRates: sourceRates)
 
-        // On the set, under the wire's name; the pair under ext.ios.
+        // On the set, under the wire's name; a day of one session carries its
+        // pair on the common record, in whole bpm, as LIFT for Android does,
+        // and nothing under ext.ios.
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
         let workout = try XCTUnwrap(((root["data"] as? [String: Any])?["workouts"] as? [[String: Any]])?.first)
         let rows = try XCTUnwrap((workout["exercises"] as? [[String: Any]])?.first?["sets"] as? [[String: Any]])
         XCTAssertEqual(rows.map { $0["maxBpm"] as? Int }, [142, nil])
         XCTAssertTrue(rows[1]["maxBpm"] == nil, "absent, never 0 or null")
+        XCTAssertEqual(workout["averageBpm"] as? Int, 118)
+        XCTAssertEqual(workout["maxBpm"] as? Int, 156)
+        XCTAssertNil(try dayExtras(root, workout)["heartRate"])
+
+        let target = makeContext()
+        let targetRates = isolatedHeartRates("restored")
+        _ = BackupStore.restore(context: target, from: backup, defaults: isolatedDefaults("restored"),
+                                heartRates: targetRates)
+        XCTAssertEqual(try sets(in: target).map { targetRates.rates.maxBpm(of: $0.id) }, [142, nil])
+        let day = try XCTUnwrap(try sets(in: target).first?.exercise?.day)
+        XCTAssertEqual(targetRates.rates.sessions(on: day.id).map(\.averageBpm), [118])
+        XCTAssertEqual(targetRates.rates.sessions(on: day.id).map(\.maxBpm), [156])
+    }
+
+    private func dayExtras(_ root: [String: Any], _ workout: [String: Any]) throws -> [String: Any] {
         let ios = try XCTUnwrap((root["ext"] as? [String: Any])?["ios"] as? [String: Any])
-        let dayExtras = try XCTUnwrap((ios["workouts"] as? [String: Any])?[workout["id"] as! String] as? [String: Any])
-        let pairs = try XCTUnwrap(dayExtras["heartRate"] as? [[String: Any]])
-        XCTAssertEqual(pairs.first?["maxBpm"] as? Double, 156)
+        return try XCTUnwrap((ios["workouts"] as? [String: Any])?[workout["id"] as! String] as? [String: Any])
+    }
+
+    func testADayOfTwoSessionsKeepsBothAndWritesNoMergedPair() throws {
+        let source = makeContext()
+        let defaults = isolatedDefaults()
+        let sourceRates = isolatedHeartRates()
+        WatchSessionImporter.apply(envelope(), in: source, now: now,
+                                   defaults: defaults, heartRates: sourceRates)
+        WatchSessionImporter.apply(envelope(pair: SessionHeartRate(averageBpm: 101, maxBpm: 140)),
+                                   in: source, now: now, defaults: defaults, heartRates: sourceRates)
+        let backup = try BackupStore.build(context: source, defaults: isolatedDefaults("build"),
+                                           heartRates: sourceRates)
+
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        let workouts = try XCTUnwrap((root["data"] as? [String: Any])?["workouts"] as? [[String: Any]])
+        XCTAssertEqual(workouts.count, 1, "both sessions are filed under one day")
+        XCTAssertNil(workouts[0]["averageBpm"], "a merged average nobody measured")
+        XCTAssertNil(workouts[0]["maxBpm"])
+        let listed = try XCTUnwrap(try dayExtras(root, workouts[0])["heartRate"] as? [[String: Any]])
+        XCTAssertEqual(listed.compactMap { $0["maxBpm"] as? Double }, [156, 140])
 
         let target = makeContext()
         let targetRates = isolatedHeartRates("restored")
         _ = BackupStore.restore(context: target, from: backup, defaults: isolatedDefaults("restored"),
                                 heartRates: targetRates)
         XCTAssertEqual(targetRates.rates, sourceRates.rates)
-        XCTAssertEqual(try sets(in: target).map { targetRates.rates.maxBpm(of: $0.id) }, [142, nil])
+    }
+
+    func testAnAndroidRecordsCommonPairRestoresAsTheDaysOneSession() throws {
+        // What LIFT for Android writes: the pair on the workout itself, whole
+        // bpm, with no ext.ios at all -- and one half on its own, junk beside it.
+        let full = UUID(), half = UUID()
+        func workout(_ id: UUID, _ pair: [String: Any]) -> [String: Any] {
+            ["id": id.uuidString, "date": "2026-09-20", "name": "Push", "note": "",
+             "startedAt": 1_789_891_200_000,
+             "exercises": [["id": UUID().uuidString, "name": "Bench Press", "equipment": "",
+                            "note": "", "sets": [["id": UUID().uuidString, "reps": 5,
+                                                  "weightLb": 135, "maxBpm": 142]]]]
+            ].merging(pair) { kept, _ in kept }
+        }
+        let file: [String: Any] = [
+            "v": 1, "app": "lift", "saved": "2026-09-20",
+            "data": ["workouts": [
+                workout(full, ["averageBpm": 118, "maxBpm": 156]),
+                workout(half, ["averageBpm": "fast", "maxBpm": 150])
+            ]]
+        ]
+        let target = makeContext()
+        let rates = isolatedHeartRates()
+        _ = BackupStore.restore(context: target,
+                                from: try JSONSerialization.data(withJSONObject: file),
+                                defaults: isolatedDefaults(), heartRates: rates)
+
+        XCTAssertEqual(rates.rates.sessions(on: full),
+                       [WorkoutHeartRates.Session(sessionID: full, averageBpm: 118, maxBpm: 156)])
+        XCTAssertEqual(rates.rates.sessions(on: half),
+                       [WorkoutHeartRates.Session(sessionID: half, averageBpm: nil, maxBpm: 150)])
+
+        // And it goes back out the way it came in.
+        let again = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: try BackupStore.build(context: target, defaults: isolatedDefaults("again"),
+                                        heartRates: rates)) as? [String: Any])
+        let written = try XCTUnwrap((again["data"] as? [String: Any])?["workouts"] as? [[String: Any]])
+        let byID = Dictionary(uniqueKeysWithValues: written.map { ($0["id"] as! String, $0) })
+        XCTAssertEqual(byID[full.uuidString]?["averageBpm"] as? Int, 118)
+        XCTAssertEqual(byID[full.uuidString]?["maxBpm"] as? Int, 156)
+        XCTAssertNil(byID[half.uuidString]?["averageBpm"])
+        XCTAssertEqual(byID[half.uuidString]?["maxBpm"] as? Int, 150)
     }
 
     func testABackupWithNoHeartRateRestoresUnchangedAndWritesNoFile() throws {

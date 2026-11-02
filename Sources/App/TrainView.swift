@@ -329,10 +329,12 @@ private struct DayEditor: View {
                 // with none. Shown, never graded: no zone, no colour.
                 if let day {
                     ForEach(heartRates.rates.sessions(on: day.id), id: \.sessionID) { session in
-                        Text(HeartRateWords.session(SessionHeartRate(averageBpm: session.averageBpm,
-                                                                     maxBpm: session.maxBpm)))
-                            .font(Theme.detail)
-                            .foregroundStyle(Theme.textSecondary)
+                        if let line = HeartRateWords.session(averageBpm: session.averageBpm,
+                                                             maxBpm: session.maxBpm) {
+                            Text(line)
+                                .font(Theme.detail)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
                     }
                 }
 

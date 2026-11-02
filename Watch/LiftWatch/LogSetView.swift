@@ -31,7 +31,8 @@ struct LogSetView: View {
         List {
             if let prescription {
                 Section("Prescribed") {
-                    Text(prescription.summary(unit: session.unit, side: side))
+                    Text(prescription.summary(unit: session.unit, side: side,
+                                              kind: session.suggestedKind(for: exerciseID)))
                         .foregroundStyle(DclTheme.muted)
                 }
             }

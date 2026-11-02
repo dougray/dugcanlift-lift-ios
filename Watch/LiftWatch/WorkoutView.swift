@@ -33,7 +33,8 @@ struct ExerciseListView: View {
                         // this row, so a VoiceOver activation moves it too.
                         LogSetView(exerciseID: exercise.id)
                     } label: {
-                        ExerciseRow(exercise: exercise, unit: session.unit)
+                        ExerciseRow(exercise: exercise, unit: session.unit,
+                                    groupLabel: session.groupLabel(for: exercise.id)?.text)
                     }
                 }
             }
@@ -46,9 +47,18 @@ struct ExerciseListView: View {
 struct ExerciseRow: View {
     let exercise: DraftExercise
     let unit: WeightUnit
+    /// "Superset A · A1" when the plan grouped this exercise, so the list
+    /// shows the rounds the Now page trains.
+    var groupLabel: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
+            if let groupLabel {
+                Text(groupLabel)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(DclTheme.accent2Text)
+                    .lineLimit(1)
+            }
             Text(exercise.displayName)
                 .font(.headline)
                 .lineLimit(1)

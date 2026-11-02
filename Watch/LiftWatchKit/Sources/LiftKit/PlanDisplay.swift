@@ -71,11 +71,18 @@ extension PrescribedSet {
 
     /// Everything the set prescribes, RPE included: "185 x 5 @8", and
     /// "30 x 8 @8 · L" with a side. The side goes last, as it does on the
-    /// phone's own set rows, so the numbers stay together.
-    public func summary(unit: WeightUnit, side: PlanSide? = nil) -> String {
+    /// phone's own set rows, so the numbers stay together; a drop or
+    /// rest-pause set's word follows the side, the order LIFT and Coach
+    /// both read a set in: "30 x 12 · L drop", "65 x 4 · rest-pause".
+    ///
+    /// `kind` is passed in, like `side`, because whether a set is a drop set
+    /// depends on where it stands in its exercise (`PlanExercise.kind(ofSet:)`).
+    public func summary(unit: WeightUnit, side: PlanSide? = nil,
+                        kind: PlanSetKind? = nil) -> String {
         var text = headline(unit: unit)
         if let rpe { text += " @\(PlanFormat.rpe(rpe))" }
-        if let side { text += " · \(side.shortLabel)" }
+        let marks = [side?.shortLabel, kind?.label].compactMap { $0 }
+        if !marks.isEmpty { text += " · " + marks.joined(separator: " ") }
         return text
     }
 }

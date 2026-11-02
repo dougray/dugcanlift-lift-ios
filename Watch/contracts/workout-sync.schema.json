@@ -210,6 +210,11 @@
         "eachSide": {
           "type": "boolean",
           "description": "Every prescribed set is done on both sides (PLAN-FORMAT.md 'Sides', `b: 1`): '3 x 8 each side' stays three entries in `sets` and is six sets to perform, three a side. Omitted, never `false`, so a plan with no sides is byte for byte what a sender that predates this wrote. A receiver that does not know the key ignores it and runs the three sets it can see, with the right weights and reps and no side."
+        },
+        "group": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The superset or circuit this exercise is in (PLAN-FORMAT.md 'Set types', `g`). Adjacent exercises with the same number are one group, done round by round: one set of each in order, then the next round, skipping a member that has run out. Two make a superset, three or more a circuit. Adjacency makes the group, not the number, so a group of one is an ordinary exercise; a sender writes runs numbered 1, 2, 3 in order and never a group of one, but a receiver must not depend on that. Omitted, never 0, when the exercise is not grouped, so a plan with no groups is byte for byte what a sender that predates this wrote. A receiver reads anything that is not a positive integer as not grouped rather than refusing the plan; one that does not know the key runs the exercises in the order listed, which is the right order without the rounds."
         }
       }
     },
@@ -238,6 +243,10 @@
         "side": {
           "enum": ["left", "right"],
           "description": "The one side this set is for (PLAN-FORMAT.md 'Sides', the set tuple's sixth position), spelled as BACKUP-FORMAT and the phone's own store spell it. Omitted -- never 'both', never null -- for an ordinary two-sided set, so a plan with no sides is unchanged. A named side is performed once on that side whether or not its exercise is each side. A receiver reads a value it does not know as two-sided rather than refusing the plan."
+        },
+        "kind": {
+          "enum": ["drop", "restPause"],
+          "description": "How this set follows the one before it (PLAN-FORMAT.md 'Set types', flags bits 3-4), spelled as BACKUP-FORMAT and the phone's own store spell it: 'drop' is done straight after the set before, with no rest, normally lighter; 'restPause' after a short pause, about 15 seconds, normally at the same weight. Omitted -- never 'straight', never null -- for a straight set, so a plan with no set types is unchanged. An exercise's first set has no set before it: a sender never writes a kind there and a receiver reads one there as straight. A receiver reads a value it does not know, case and surrounding space forgiven, as straight rather than refusing the plan; one that does not know the key runs an ordinary set with the right weight and reps."
         }
       }
     },

@@ -166,6 +166,33 @@ public struct WorkoutDraft: Identifiable, Codable, Equatable, Sendable {
         }
     }
 
+    /// Writes figures onto their sets, higher only (see `heartRateUpdates`, in
+    /// `SetHeartRate.swift`).
+    ///
+    /// **Not an edit, so not a revision.** Every change the lifter makes goes
+    /// through `commit` so that the phone sees it; a figure is a reading the
+    /// watch takes on its own, a set at a time across the whole session, and
+    /// a revision for each would queue a `WORKOUT_EDITED` the phone does
+    /// nothing with every time a window closed. It reaches the phone the one
+    /// way the sets do, inside `SESSION_FINISHED`, and a finished draft takes
+    /// no more figures, so the session that is sent is the session that is
+    /// kept.
+    @discardableResult
+    public mutating func recordHeartRates(_ figures: [UUID: Int]) -> Bool {
+        guard !isFinished, !figures.isEmpty else { return false }
+        var changed = false
+        for exerciseIndex in exercises.indices {
+            for setIndex in exercises[exerciseIndex].sets.indices {
+                let set = exercises[exerciseIndex].sets[setIndex]
+                guard let figure = figures[set.id], figure > 0,
+                      figure > (set.maxBpm ?? 0) else { continue }
+                exercises[exerciseIndex].sets[setIndex].maxBpm = figure
+                changed = true
+            }
+        }
+        return changed
+    }
+
     @discardableResult
     public mutating func finish(at date: Date = Date()) -> Bool {
         guard finishedAt == nil else { return false }
@@ -248,6 +275,12 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
     /// written before this decodes with no side and stays two-sided.
     public var side: PlanSide?
     public var completedAt: Date?
+    /// The highest heart rate the watch measured around this set, in whole
+    /// beats per minute (`SetHeartRate`, written by `recordHeartRates`).
+    /// **Absent when nothing was measured, never zero.** It belongs to the
+    /// set, so correcting the weight or the reps keeps it, and a draft
+    /// written before this decodes with none.
+    public var maxBpm: Int?
 
     public init(
         id: UUID = UUID(),
@@ -257,7 +290,8 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
         rpe: Double? = nil,
         isWarmup: Bool = false,
         side: PlanSide? = nil,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        maxBpm: Int? = nil
     ) {
         self.id = id
         self.orderIndex = orderIndex
@@ -267,6 +301,7 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
         self.isWarmup = isWarmup
         self.side = side
         self.completedAt = completedAt
+        self.maxBpm = maxBpm
     }
 
     public var volumeKg: Double {

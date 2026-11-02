@@ -1,0 +1,86 @@
+{
+  "about": "Heart rate per set: the highest heart rate the watch measured around each set. Worked by hand from the rule in LIFT docs/superpowers/plans/2026-10-28-build-plan.md item 16, on 2026-11-02. Checked into lift-ios (Swift) and dugcanlift-lift-watch (Kotlin). Never regenerate it from either port.",
+  "rule": [
+    "Times are seconds. Only ticked sets get a figure; a set with no tick gets null and is not a neighbour to anyone.",
+    "Ticked sets are taken in tick order, whatever order they are listed in and whatever exercise they belong to.",
+    "A set's window ends at its tick + 20, or at the next tick in the session if that is sooner.",
+    "It starts at the previous tick in the session, or at sessionStart for the first set, but never earlier than tick - lookback, where lookback is 300, or durationSec + 30 when a set states a durationSec making that longer.",
+    "Both ends are inclusive.",
+    "A sample of zero or below is not a reading. Samples need not be sorted.",
+    "The figure is the highest reading in the window, rounded to the nearest whole bpm, halves away from zero. A window with no reading is null: never zero, never a neighbour's figure, never interpolated."
+  ],
+  "cases": [
+    {
+      "name": "three sets, each window ending 20 s after its tick",
+      "sessionStart": 0,
+      "samples": [[10, 90], [50, 120], [65, 135], [75, 128], [90, 110], [170, 140], [185, 150], [199, 149], [201, 155], [290, 100], [310, 160], [321, 170]],
+      "sets": [{"id": "a", "tick": 60}, {"id": "b", "tick": 180}, {"id": "c", "tick": 300}],
+      "expected": {"a": 135, "b": 150, "c": 160},
+      "worked": "a: [0, 80] holds 90 120 135 128. b: [60, 200] holds 135 128 110 140 150 149; 155 at 201 is outside. c: [180, 320] holds 150 149 155 100 160; 170 at 321 is outside."
+    },
+    {
+      "name": "a superset: the next tick comes before 20 s are up",
+      "sessionStart": 0,
+      "samples": [[95, 120], [105, 140], [108, 145], [112, 150], [125, 155], [131, 170]],
+      "sets": [{"id": "a", "tick": 100}, {"id": "b", "tick": 110}],
+      "expected": {"a": 145, "b": 155},
+      "worked": "a: [0, 110] (110 is sooner than 120) holds 120 140 145. b: [100, 130] holds 140 145 150 155; 170 at 131 is outside."
+    },
+    {
+      "name": "the first set reaches back five minutes and no further",
+      "sessionStart": 0,
+      "samples": [[100, 160], [250, 150], [299.5, 158], [301, 130], [599, 125], [610, 140]],
+      "sets": [{"id": "a", "tick": 600}],
+      "expected": {"a": 140},
+      "worked": "a: [300, 620] holds 130 125 140. The warm-up walk's 160, 150 and 158 are all before 300."
+    },
+    {
+      "name": "both ends of a window are inclusive",
+      "sessionStart": 0,
+      "samples": [[0, 100], [60, 125], [80, 130], [80.5, 180], [220, 190], [220.5, 200]],
+      "sets": [{"id": "a", "tick": 60}, {"id": "b", "tick": 200}],
+      "expected": {"a": 130, "b": 190},
+      "worked": "a: [0, 80] holds 100 (at the start) 125 (at the tick) 130 (at the end); 180 at 80.5 is outside. b: [60, 220] holds 125 130 180 190 (at the end); 200 at 220.5 is outside."
+    },
+    {
+      "name": "no reading in the window is no figure",
+      "sessionStart": 0,
+      "samples": [[130, 150]],
+      "sets": [{"id": "a", "tick": 60}, {"id": "b", "tick": 120}],
+      "expected": {"a": null, "b": 150},
+      "worked": "a: [0, 80] holds nothing. b: [60, 140] holds 150. a is not given b's figure."
+    },
+    {
+      "name": "zero is not a reading, and the figure rounds to a whole bpm",
+      "sessionStart": 0,
+      "samples": [[10, 0], [20, 141.5], [25, -3], [190, 0], [395, 99.49]],
+      "sets": [{"id": "a", "tick": 30}, {"id": "b", "tick": 200}, {"id": "c", "tick": 400}],
+      "expected": {"a": 142, "b": null, "c": 99},
+      "worked": "a: [0, 50] holds 0 141.5 -3; only 141.5 is a reading, and it rounds to 142. b: [30, 220] holds only the 0 at 190, which is not a reading. c: [200, 420] holds 99.49, which rounds to 99."
+    },
+    {
+      "name": "a long timed set reaches back further; a short one does not",
+      "sessionStart": 0,
+      "samples": [[260, 170], [280, 150], [880, 140], [950, 135]],
+      "sets": [{"id": "a", "tick": 900, "durationSec": 600}, {"id": "b", "tick": 1000, "durationSec": 60}],
+      "expected": {"a": 150, "b": 135},
+      "worked": "a: lookback is 600 + 30 = 630, so [270, 920] holds 150 140; 170 at 260 is outside. b: 60 + 30 is shorter than 300, so lookback is 300 and the previous tick, 900, is later than 700: [900, 1020] holds 135."
+    },
+    {
+      "name": "sets listed out of order, one never ticked",
+      "sessionStart": 0,
+      "samples": [[190, 150], [40, 130], [60, 135], [210, 160]],
+      "sets": [{"id": "c", "tick": 200}, {"id": "a", "tick": 50}, {"id": "b", "tick": null}],
+      "expected": {"a": 135, "b": null, "c": 160},
+      "worked": "In tick order: a at 50, c at 200. a: [0, 70] holds 130 135. c: [50, 220] holds 135 150 160. b has no tick, so no figure, and it does not cut a's or c's window."
+    },
+    {
+      "name": "the session's start bounds the first set",
+      "sessionStart": 1000,
+      "samples": [[990, 170], [1005, 120]],
+      "sets": [{"id": "a", "tick": 1030}],
+      "expected": {"a": 120},
+      "worked": "a: the session started at 1000, later than 1030 - 300, so [1000, 1050] holds 120; 170 at 990 was before the session."
+    }
+  ]
+}

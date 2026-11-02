@@ -85,11 +85,25 @@ enum WatchPlanBuilder {
                 scheduledFor: date,
                 restSeconds: restSeconds,
                 history: history,
-                excludingDayKey: dayKey
+                excludingDayKey: dayKey,
+                sides: PlanSides.load(from: defaults),
+                setTypes: RoutineSetTypes.load(from: defaults)
             )
         )
     }
 
+    /// `sides` is the coach's per-side prescription for this routine
+    /// (`PlanSides`), which lives in `UserDefaults` rather than on LiftKit's
+    /// shared routine models — so it has to be handed in here rather than
+    /// read off the `Routine`. A routine nobody has prescribed sides on
+    /// yields the empty value and a plan identical to the one this built
+    /// before any of this existed.
+    ///
+    /// `setTypes` is the same kind of side-car for supersets, drop sets and
+    /// rest-pause (`RoutineSetTypes`), handed in for the same reason. Groups
+    /// go out renumbered as runs, 1, 2, 3, so a group of one is never sent,
+    /// and a kind never on an exercise's first set (`SetKind.at`, through
+    /// `kinds(of:)`). A routine with neither yields a plan with neither key.
     @MainActor
     static func plan(
         from routine: Routine,
@@ -97,14 +111,19 @@ enum WatchPlanBuilder {
         scheduledFor: Date?,
         restSeconds: Int?,
         history: [WorkoutDay],
-        excludingDayKey: String? = nil
+        excludingDayKey: String? = nil,
+        sides: PlanSides = PlanSides(),
+        setTypes: RoutineSetTypes = RoutineSetTypes()
     ) -> WorkoutPlan {
-        let exercises = routine.orderedExercises.map { exercise -> PlanExercise in
-            PlanExercise(
+        let routineExercises = routine.orderedExercises
+        let groups = ExerciseGrouping.runs(setTypes.storedGroups(routineExercises))
+        let exercises = routineExercises.enumerated().map { index, exercise -> PlanExercise in
+            let kinds = setTypes.kinds(of: exercise)
+            return PlanExercise(
                 name: exercise.name,
                 equipment: exercise.equipment.isEmpty ? nil : exercise.equipment,
                 note: exercise.note,
-                sets: exercise.orderedSets.map { prescribed in
+                sets: exercise.orderedSets.enumerated().map { setIndex, prescribed in
                     // Straight across, nil for nil. A routine's targets are
                     // already kilograms (`RoutinePrescribedSet`'s contract),
                     // and the wire field is `weightKg`, so there is no
@@ -113,7 +132,9 @@ enum WatchPlanBuilder {
                         weightKg: prescribed.targetWeightKg,
                         reps: prescribed.targetReps,
                         rpe: prescribed.targetRPE,
-                        restSeconds: restSeconds
+                        restSeconds: restSeconds,
+                        side: sides.side(of: prescribed)?.planSide,
+                        kind: kinds.indices.contains(setIndex) ? kinds[setIndex]?.planKind : nil
                     )
                 },
                 lastPerformed: lastPerformed(
@@ -121,7 +142,9 @@ enum WatchPlanBuilder {
                     equipment: exercise.equipment,
                     in: history,
                     excludingDayKey: excludingDayKey
-                )
+                ),
+                eachSide: sides.isEachSide(exercise),
+                group: groups[index]
             )
         }
         return WorkoutPlan(
@@ -179,6 +202,26 @@ enum WatchPlanBuilder {
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first
     }
+}
+
+// MARK: - Sides, in the watch's own spelling
+
+extension SetSide {
+    /// The same two words on the watch's wire. Two types rather than one
+    /// because `SetSide` is this app's own (it is in `Sources/Shared`, which
+    /// the widget compiles too) and `PlanSide` is `LiftSync`'s, which both
+    /// apps compile; the raw values are identical, deliberately, so a side
+    /// means one thing in the store, in a backup and on this wire.
+    var planSide: PlanSide { self == .left ? .left : .right }
+}
+
+// MARK: - Set types, in the watch's own spelling
+
+extension SetKind {
+    /// The same two words on the watch's wire, for the reason `planSide`
+    /// gives: `SetKind` is this app's, `PlanSetKind` is `LiftSync`'s, and the
+    /// raw values are identical on purpose.
+    var planKind: PlanSetKind { self == .drop ? .drop : .restPause }
 }
 
 // MARK: - Which routine the lifter sent

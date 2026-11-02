@@ -36,6 +36,8 @@ struct BackupSection: View {
 
             Button("Restore from a backup file") { importing = true }
 
+            WorkoutCSVSection()
+
             if let message {
                 Text(message).font(.footnote).foregroundStyle(.secondary)
             }

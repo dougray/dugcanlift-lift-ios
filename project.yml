@@ -26,11 +26,11 @@ settings:
     # widgets and its watch app. App Store validation rejects an embedded
     # watch app or extension whose CFBundleShortVersionString differs from
     # the app's, so every target's Info.plist reads these two settings rather
-    # than carrying a literal. "1.0" is what the app has always reported:
-    # this said "1.0.0" while XcodeGen wrote a literal "1.0" into
-    # Lift-Info.plist, so the setting reached nothing.
-    MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    # than carrying a literal. 1.0 (1) was the first App Store build
+    # (2026-10-26). CURRENT_PROJECT_VERSION must be higher than every build
+    # ever uploaded, so it only goes up, whatever the version says.
+    MARKETING_VERSION: "1.1"
+    CURRENT_PROJECT_VERSION: "2"
     # SwiftData @Model classes are not Sendable. `complete` buries real errors
     # under concurrency warnings during scaffolding — tighten once it builds.
     SWIFT_STRICT_CONCURRENCY: minimal
@@ -47,7 +47,7 @@ packages:
   # this line, never something that happens on a `swift package update`.
   LiftKit:
     url: https://github.com/dougray/dugcanlift-kit
-    exactVersion: 1.10.0
+    exactVersion: 1.17.0
   # The watch app's own domain package, in this repo (Watch/LiftWatchKit).
   # Its package is named LiftWatchKit, not LiftKit, so Xcode does not take it
   # for a local override of dugcanlift-kit above, whose package is also named
@@ -159,9 +159,14 @@ targets:
             CFBundleURLSchemes:
               - dugcanliftlift
 
-        # The app uses only standard HTTPS (URLSession, fetching a recipe page
-        # the person pastes), which is exempt from export documentation.
+        # LIFT makes no network requests (NoNetworkTests), so it uses no
+        # encryption beyond what iOS itself provides.
         ITSAppUsesNonExemptEncryption: false
+
+        # The rest between sets on the lock screen and in the Dynamic Island
+        # (RestTimer, Sources/Widgets/RestActivityWidget). Started only from
+        # the app, updated only from the app: no push token is ever asked for.
+        NSSupportsLiveActivities: true
 
         # HealthKit — both strings are required or the app is rejected. Each
         # must say exactly what HealthKitManager requests: App Review rejects
@@ -176,7 +181,14 @@ targets:
           Lift saves your strength workouts, and your runs, walks and hikes
           with their route and distance, to Health.
 
-        # No camera usage string: nothing in the app uses the camera.
+        # The camera is used only by food search's barcode scanner (Apple's
+        # on-device VisionKit DataScannerViewController, BarcodeScannerView).
+        # Nothing it sees leaves the phone and no frame is kept: only the
+        # digits it read are, and only when the person saves a food against
+        # them.
+        NSCameraUsageDescription: >-
+          LIFT reads food barcodes with the camera. What the camera sees stays
+          on your iPhone.
 
         # When In Use only. A recording is always started from the open
         # recording screen, and a session started in the foreground keeps
@@ -188,15 +200,14 @@ targets:
           Lift uses your location to record the route of a run, walk or hike
           you start, including while your screen is locked until you finish it.
 
-        # Background refresh for HealthKit sync (BGTaskScheduler), plus
-        # location updates so a recording carries on while the phone is locked
-        # (LocationTracker).
-        # Identifiers MUST match the strings passed to BGTaskScheduler.register.
+        # Location updates so a recording carries on while the phone is locked
+        # (LocationTracker). No `processing` mode: nothing registers a
+        # BGTaskScheduler task -- Health syncs when a session ends, on connect
+        # and on Sync now -- and App Review asks about a declared mode nothing
+        # uses. Add it back with BGTaskSchedulerPermittedIdentifiers only
+        # alongside a real BGTaskScheduler.register call.
         UIBackgroundModes:
-          - processing
           - location
-        BGTaskSchedulerPermittedIdentifiers:
-          - com.dugcanlift.lift.healthsync
 
   # ------------------------------------------------------------- widgets
   LiftWidgets:
@@ -257,10 +268,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dugcanlift.lift.watchkitapp
-        # The product is LIFT.app, not LiftWatch.app: the scheme and the
-        # bundle name differ, which is worth knowing before hand-writing an
-        # install path (Lift.app/Watch/LIFT.app).
-        PRODUCT_NAME: LIFT
+        # LiftWatch.app, named after its target. It was LIFT.app, and an App
+        # Store archive then failed: LIFT.app.dSYM and Lift.app.dSYM are one
+        # name on a case-insensitive disk, and the archive's dSYMs folder
+        # holds both. The watch still shows LIFT (CFBundleDisplayName).
+        PRODUCT_NAME: LiftWatch
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "4"
@@ -298,8 +310,9 @@ targets:
         CFBundleDisplayName: LIFT
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        # Standard HTTPS only, like the app: the watch makes no network
-        # request of its own at all.
+        # Like the app, the watch makes no network request at all
+        # (NoNetworkTests scans Watch/ too), so it uses no encryption beyond
+        # what watchOS itself provides.
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes:
           - location
@@ -339,7 +352,8 @@ targets:
   # Messages, Mail or Notes. It decodes the link to say what plan it is, then
   # queues the fragment in the App Group for the app to open on its next
   # foreground -- see PendingPlanLinks for why it does not open the app, and
-  # why it never writes a routine itself.
+  # why it never writes a routine itself. It also takes a recipe from the page
+  # Safari shares: RecipePage.js hands over the JSON-LD (PendingRecipeImports).
   #
   # A second extension is a second App ID to register, which a free Personal
   # Team rations (ten new ids per seven days). Worth it: without it, and
@@ -351,7 +365,7 @@ targets:
     sources:
       - path: Sources/ShareExtension
       # Only what the extension needs from Shared: no SwiftData, no views, no
-      # models. Listing the three files rather than the folder is what keeps
+      # models. Listing the files rather than the folder is what keeps
       # that true -- a new file in Sources/Shared does not silently join a
       # share sheet with a tight memory limit.
       - path: Sources/Shared/PlanLinkExtractor.swift
@@ -362,7 +376,11 @@ targets:
       # RoadPicks.swift, which writes them, is deliberately NOT here -- the
       # extension still imports nothing.
       - path: Sources/Shared/RoadPickLink.swift
+      # `g`, read off the same fragment for the same reason (set types).
+      - path: Sources/Shared/PlanGroupLink.swift
       - path: Sources/Shared/PendingPlanLinks.swift
+      - path: Sources/Shared/PendingRecipeImports.swift
+      - path: Sources/Shared/RecipePageShare.swift
     dependencies:
       # LiftCore only. LiftReference's GRDB and its reference databases have
       # no business in a share sheet.
@@ -383,17 +401,23 @@ targets:
       path: Config/LiftShare-Info.plist
       properties:
         CFBundleDisplayName: LIFT
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
           NSExtensionAttributes:
+            # Safari runs RecipePage.js on a shared page and hands over its
+            # JSON-LD, so a recipe arrives without LIFT requesting anything.
+            NSExtensionJavaScriptPreprocessingFile: RecipePage
             # A web URL (Safari, Messages' link previews) or text (Notes, Mail,
             # a message body) -- a plan link can arrive as either. Text means
             # LIFT is offered for any text; the extension says plainly when it
             # isn't a plan link.
             NSExtensionActivationRule:
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
               NSExtensionActivationSupportsText: true
 
   # --------------------------------------------------------------- tests

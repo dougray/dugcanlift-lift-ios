@@ -5,12 +5,18 @@ import LiftReference
 
 /// Browse the bundled recipe catalogue and copy one into your own library.
 ///
-/// The third way into COOK, beside writing a recipe and importing a link. This
-/// one needs no network and no typing: 622 recipes ship in `recipes.db`.
+/// The third way into COOK, beside writing a recipe, Safari and pasted text.
+/// None of the four needs a network; this one needs no typing either: 622
+/// recipes ship in `recipes.db`.
 ///
 /// Nothing here is in the library until **Add** is tapped. A catalogue recipe
 /// is reference data, the same as a food or an exercise, and browsing it must
 /// not quietly fill someone's recipe list.
+///
+/// What it shows follows `CatalogDisplay`, the rules every LIFT and Coach
+/// build that ships the catalogue holds: the whole list with no search typed,
+/// whole numbers rounded, and a servings count asked for whenever the source
+/// states no yield.
 struct RecipeCatalogView: View {
 
     @Environment(\.modelContext) private var context
@@ -22,27 +28,34 @@ struct RecipeCatalogView: View {
     @State private var selected: CatalogEntry?
     /// Only consulted for a recipe whose source stated no yield. A published
     /// per-serving figure is never rescaled by it.
-    @State private var servings: Double = 4
+    @State private var servings: Double = CatalogDisplay.defaultServings
     @State private var showingCredits = false
     @State private var credits: [String] = []
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.cardSpacing) {
-                    if let selected {
-                        detail(selected)
-                    } else {
-                        list
+            ScrollViewReader { proxy in
+                ScrollView {
+                    // Lazy: with no search typed the list is the whole catalogue,
+                    // 622 cards, and only the ones on screen should be built.
+                    LazyVStack(alignment: .leading, spacing: Theme.cardSpacing) {
+                        if let selected {
+                            detail(selected)
+                        } else {
+                            list
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .readableContentWidth()
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .readableContentWidth()
+                .onChange(of: selected?.id) { old, new in
+                    reposition(proxy, from: old, to: new)
+                }
             }
-            .appScreen()
+            .liftScreen()
             .background(Theme.background)
-            .navigationTitle(selected == nil ? "Recipe catalogue" : "Add recipe")
+            .navigationTitle(selected == nil ? "Recipe catalog" : "Add recipe")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "Search 600+ recipes")
             .toolbar {
@@ -56,7 +69,7 @@ struct RecipeCatalogView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if let selected {
                         Button("Add") { add(selected) }
-                            .liftFont(.body, weight: .semibold)
+                            .font(Theme.body.weight(.semibold))
                     }
                 }
             }
@@ -70,7 +83,7 @@ struct RecipeCatalogView: View {
     @ViewBuilder
     private var list: some View {
         if loadFailed {
-            card { detailText("The recipe catalogue could not be opened.") }
+            card { detailText("The recipe catalog could not be opened.") }
         } else if entries.isEmpty {
             card {
                 detailText(query.trimmingCharacters(in: .whitespaces).count >= 2
@@ -87,11 +100,11 @@ struct RecipeCatalogView: View {
         // The credit is the CC BY-SA obligation, not decoration, so it sits on
         // the screen that shows the data rather than buried in a settings page.
         if !credits.isEmpty {
-            Button(showingCredits ? "Hide credits" : "Credits and licences") {
+            Button(showingCredits ? "Hide credits" : "Credits and licenses") {
                 showingCredits.toggle()
             }
-            .liftFont(.detail)
-            .foregroundStyle(AppColor.accentText)
+            .font(Theme.detail)
+            .foregroundStyle(Theme.accentText)
             .buttonStyle(.plain)
             .padding(.top, 8)
 
@@ -110,34 +123,25 @@ struct RecipeCatalogView: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(recipe.name)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 Spacer(minLength: 8)
                 if let servings = recipe.servings {
                     Text(CookFormat.servingsLabel(servings))
-                        .liftFont(.detail)
+                        .font(Theme.detail)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
 
-            if let calories = recipe.caloriesPerServing {
-                Text("\(Int(calories)) kcal per serving")
-                    .liftFont(.detail)
-                    .foregroundStyle(Theme.textSecondary)
-            } else if recipe.needsServings {
-                // Said here rather than only in the detail, so a browsing eye
-                // never reads a whole-dish number as a portion.
-                Text("Macros for the whole dish")
-                    .liftFont(.detail)
-                    .foregroundStyle(Theme.textSecondary)
-            } else {
-                Text("No macros")
-                    .liftFont(.detail)
-                    .foregroundStyle(Theme.textSecondary)
-            }
+            // Says "Macros for the whole dish" rather than only leaving it to
+            // the detail, so a browsing eye never reads a whole-dish number as
+            // a portion.
+            Text(CatalogDisplay.listSummary(recipe))
+                .font(Theme.detail)
+                .foregroundStyle(Theme.textSecondary)
 
             Text("\(entry.ingredientLines.count) ingredients")
-                .liftFont(.detail)
+                .font(Theme.detail)
                 .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -154,17 +158,17 @@ struct RecipeCatalogView: View {
         card {
             VStack(alignment: .leading, spacing: 10) {
                 Text(recipe.name)
-                    .liftFont(.cardTitle)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.cardTitle)
+                    .foregroundStyle(Theme.accentText)
                 if let summary = recipe.summary { detailText(summary) }
 
-                if recipe.needsServings {
+                if CatalogDisplay.asksForServings(recipe) {
                     Stepper(value: $servings, in: 1...48, step: 1) {
                         Text(CookFormat.servingsLabel(servings))
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                     }
-                    detailText("This book states no yield, so the macros below are for the whole dish. Set how many it serves and they divide.")
+                    detailText(CatalogDisplay.servingsNote(recipe))
                 } else if let stated = recipe.servings {
                     detailText(CookFormat.servingsLabel(stated))
                 }
@@ -174,22 +178,23 @@ struct RecipeCatalogView: View {
                 }
             }
         }
+        .id(Self.detailTop)
 
         card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Ingredients (\(entry.ingredientLines.count))")
-                    .liftFont(.sectionLabel)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.sectionLabel)
+                    .foregroundStyle(Theme.accentText)
                 ForEach(Array(entry.ingredientLines.enumerated()), id: \.offset) { index, line in
                     let parsed = IngredientParser.parse(line, sortOrder: index)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(parsed.displayText)
-                            .liftFont(.body)
+                            .font(Theme.body)
                             .foregroundStyle(Theme.textPrimary)
                         Spacer(minLength: 0)
                         if parsed.qty == nil {
                             Text("as written")
-                                .liftFont(.detail)
+                                .font(Theme.detail)
                                 .foregroundStyle(Theme.textSecondary)
                         }
                     }
@@ -201,15 +206,15 @@ struct RecipeCatalogView: View {
             card {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Method (\(recipe.stepLines.count))")
-                        .liftFont(.sectionLabel)
-                        .foregroundStyle(AppColor.accentText)
+                        .font(Theme.sectionLabel)
+                        .foregroundStyle(Theme.accentText)
                     ForEach(Array(recipe.stepLines.enumerated()), id: \.offset) { index, step in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("\(index + 1).")
-                                .liftFont(.detail)
-                                .foregroundStyle(AppColor.accentText)
+                                .font(Theme.detail)
+                                .foregroundStyle(Theme.accentText)
                             Text(step)
-                                .liftFont(.body)
+                                .font(Theme.body)
                                 .foregroundStyle(Theme.textPrimary)
                         }
                     }
@@ -220,12 +225,12 @@ struct RecipeCatalogView: View {
         card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Macros")
-                    .liftFont(.sectionLabel)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.sectionLabel)
+                    .foregroundStyle(Theme.accentText)
 
                 if let facts = recipe.nutrition(servings: servings) {
-                    Text("\(Int(facts.calories)) kcal · P \(Int(facts.proteinG)) · C \(Int(facts.carbsG)) · F \(Int(facts.fatG))")
-                        .liftFont(.body)
+                    Text(CatalogDisplay.macroLine(facts))
+                        .font(Theme.body)
                         .foregroundStyle(Theme.textPrimary)
                     detailText(recipe.needsServings
                                ? "Per serving at \(CookFormat.servingsLabel(servings))."
@@ -241,8 +246,8 @@ struct RecipeCatalogView: View {
         card {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Source")
-                    .liftFont(.sectionLabel)
-                    .foregroundStyle(AppColor.accentText)
+                    .font(Theme.sectionLabel)
+                    .foregroundStyle(Theme.accentText)
                 detailText(recipe.attribution)
                 detailText(recipe.license)
             }
@@ -251,10 +256,26 @@ struct RecipeCatalogView: View {
 
     // MARK: - Behaviour
 
+    private static let detailTop = "catalogue-detail-top"
+
+    /// Opening a recipe starts it at its top, and Back returns to the row it
+    /// was opened from. The list and the detail share one scroll view, so
+    /// without this a recipe opened from far down the whole catalogue opened
+    /// scrolled past its own name and stepper, and Back landed at a random row.
+    private func reposition(_ proxy: ScrollViewProxy, from old: String?, to new: String?) {
+        Task { @MainActor in
+            if new != nil {
+                proxy.scrollTo(Self.detailTop, anchor: .top)
+            } else if let old {
+                proxy.scrollTo(old, anchor: .center)
+            }
+        }
+    }
+
     private func open(_ entry: CatalogEntry) {
         // Seeded from the source when it stated one, so the stepper starts
         // somewhere sensible rather than at a default the reader must undo.
-        servings = entry.recipe.servings ?? 4
+        servings = CatalogDisplay.startingServings(entry.recipe)
         selected = entry
     }
 
@@ -272,7 +293,7 @@ struct RecipeCatalogView: View {
         do {
             let found = trimmed.count >= 2
                 ? try await ReferenceDatabase.shared.searchRecipes(trimmed)
-                : try await ReferenceDatabase.shared.browseRecipes()
+                : try await ReferenceDatabase.shared.browseRecipes(limit: CatalogDisplay.browseLimit)
             guard !Task.isCancelled else { return }
             entries = found
             loadFailed = false
@@ -288,7 +309,8 @@ struct RecipeCatalogView: View {
     /// the order `RecipeEditorView.save()` uses. No widget reload: a `Recipe`
     /// is not widget content, only a `PlannedMeal` logged from one is.
     private func add(_ entry: CatalogEntry) {
-        let (recipe, ingredients) = entry.makeRecipe(servings: entry.recipe.servings ?? servings)
+        let (recipe, ingredients) = entry.makeRecipe(
+            servings: CatalogDisplay.servingsToSave(entry.recipe, chosen: servings))
         context.insert(recipe)
         for ingredient in ingredients {
             ingredient.recipe = recipe
@@ -309,7 +331,7 @@ struct RecipeCatalogView: View {
 
     private func detailText(_ text: String) -> some View {
         Text(text)
-            .liftFont(.detail)
+            .font(Theme.detail)
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

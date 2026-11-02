@@ -39,6 +39,9 @@ struct StartWorkoutView: View {
                     Text("Your \(failed.activityType.displayName.lowercased()) is saved on the watch, but didn't reach Health.")
                         .font(.caption2)
                         .foregroundStyle(DclTheme.accentText)
+                        // Explicit ground so the caption's contrast is the verified
+                        // 4.69:1 on surface, not whatever the system platter is.
+                        .listRowBackground(DclTheme.surface)
                     Button(retrying ? "Trying…" : "Try Again") {
                         retrying = true
                         Task {
@@ -66,8 +69,10 @@ struct StartWorkoutView: View {
                             .foregroundStyle(DclTheme.muted)
                         Text(plan.source.displayName)
                             .font(.caption2)
-                            .foregroundStyle(DclTheme.accent2)
+                            .foregroundStyle(DclTheme.accent2Text)
                     }
+                    // Readable sage is 5.03:1 on surface; pin the row to it.
+                    .listRowBackground(DclTheme.surface)
                     Button("Start Plan") {
                         session.startPlannedWorkout()
                     }

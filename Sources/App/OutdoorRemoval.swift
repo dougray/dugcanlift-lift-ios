@@ -12,7 +12,7 @@ import LiftCore
 ///
 /// **What goes.** The `OutdoorActivity` row, and with it the route — every
 /// `RoutePoint` is encoded into `routePointsData` on the row itself rather
-/// than stored as its own model, so the line on the map goes when the row
+/// than stored as its own model, so the drawn route goes when the row
 /// does, with nothing to sweep. Nothing else in the store names an activity:
 /// there is no relationship to it and no id of one held as a plain value, so
 /// unlike a `Routine` this delete leaves no orphan behind.

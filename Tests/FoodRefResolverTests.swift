@@ -121,4 +121,24 @@ final class FoodRefResolverTests: XCTestCase {
 
         XCTAssertNil(result)
     }
+
+    // MARK: - Remembered food (barcode:)
+
+    @MainActor
+    func testABarcodeRefResolvesToTheRememberedFood() async {
+        let context = makeContext()
+        RememberedFoods.remember(code: "36000291452", name: "Corn flakes",
+                                 per100g: NutritionFacts(calories: 357, proteinG: 7, carbsG: 84, fatG: 0.4),
+                                 in: context)
+        let resolved = await FoodRefResolver.nutrition(for: "barcode:36000291452", grams: 30, context: context)
+        XCTAssertEqual(resolved?.name, "Corn flakes")
+        XCTAssertEqual(resolved?.nutrition.calories ?? 0, 107.1, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testAForgottenBarcodeResolvesToNothingAndDoesNotTouchTheLibrary() async {
+        let context = makeContext()
+        let resolved = await FoodRefResolver.nutrition(for: "barcode:36000291452", grams: 30, context: context)
+        XCTAssertNil(resolved, "a forgotten code resolves to nothing; the entry keeps its own stored nutrition")
+    }
 }

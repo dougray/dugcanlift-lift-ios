@@ -35,6 +35,7 @@ struct RestTimerView: View {
             } else {
                 Button("Start Rest") { session.restTimer.start() }
                     .buttonStyle(.borderedProminent)
+                    .tint(DclTheme.accent)
             }
         }
         .padding(.horizontal)

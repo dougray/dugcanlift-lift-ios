@@ -58,9 +58,31 @@ final class SchemaConformanceTests: XCTestCase {
                     name: "Bench Press",
                     equipment: "barbell",
                     note: "Pause the first rep",
-                    sets: [PrescribedSet(weightKg: 83.9, reps: 5, rpe: 8, restSeconds: 120)],
+                    // Every key on every object, so this one set carries a
+                    // kind: a sender never writes one on a first set, but the
+                    // type carries what arrives and the schema has no notion
+                    // of position.
+                    sets: [PrescribedSet(weightKg: 83.9, reps: 5, rpe: 8, restSeconds: 120,
+                                         side: .left, kind: .drop)],
                     lastPerformed: LastPerformed(weightKg: 81.6, reps: 6, rpe: 8.5,
-                                                 performedOn: "2026-09-13")
+                                                 performedOn: "2026-09-13"),
+                    eachSide: true,
+                    group: 1
+                )]
+            ),
+            session: FinishedSession(
+                name: "Push",
+                focus: "bodybuilding",
+                performedOn: "2026-09-20",
+                startedAt: Date(timeIntervalSince1970: 1_758_355_200),
+                finishedAt: Date(timeIntervalSince1970: 1_758_358_800),
+                exercises: [PerformedExercise(
+                    name: "Bench Press",
+                    equipment: "barbell",
+                    note: "Pause the first rep",
+                    sets: [PerformedSet(weightKg: 83.9, reps: 5, rpe: 8, isWarmup: true,
+                                        side: .left,
+                                        completedAt: Date(timeIntervalSince1970: 1_758_356_000))]
                 )]
             ),
             heartRate: SessionHeartRate(averageBpm: 128.5, maxBpm: 171)
@@ -86,6 +108,18 @@ final class SchemaConformanceTests: XCTestCase {
         let schema = try Schema(file: "workout-sync.schema.json")
         let document = try XCTUnwrap(schema.sample() as? [String: Any])
         XCTAssertEqual(schema.violations(of: document, requireEveryProperty: true), [])
+    }
+
+    func testEverySetKindTheSwiftTypeKnowsIsInTheSchemaAndViceVersa() throws {
+        let schema = try Schema(file: "workout-sync.schema.json")
+        XCTAssertEqual(
+            Set(PlanSetKind.allCases.map(\.rawValue)),
+            try schema.enumValues(at: ["$defs", "prescribedSet", "properties", "kind"])
+        )
+        XCTAssertEqual(
+            Set(PlanSide.allCases.map(\.rawValue)),
+            try schema.enumValues(at: ["$defs", "prescribedSet", "properties", "side"])
+        )
     }
 
     func testTheSchemaCatchesADriftedKey() throws {
@@ -265,7 +299,12 @@ private struct Schema {
             return
         }
 
-        if let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+        if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+            if !types.contains("boolean") { found.append("\(path): a boolean is not allowed here") }
+            return
+        }
+
+        if let number = value as? NSNumber {
             let double = number.doubleValue
             if types.contains("integer") {
                 if double != double.rounded() { found.append("\(path): \(double) is not an integer") }
@@ -315,6 +354,12 @@ private struct Schema {
             }
             if node["pattern"] != nil { return "2026-09-20" }
             return "Bench Press"
+        }
+        if types.contains("boolean") {
+            // `true`, because every boolean on these contracts is a flag
+            // that is omitted when false: a sample of `false` would be a
+            // document no sender ever writes.
+            return true
         }
         if types.contains("integer") {
             let minimum = node["minimum"] as? Int ?? 0

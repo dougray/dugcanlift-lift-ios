@@ -11,11 +11,16 @@ struct RootView: View {
             // `start(type:)` is called, `activity` stays non-nil (even right
             // after `finish()`, until `OutdoorActivityView` resets it) so
             // this is the state that should own the screen.
-            if outdoorRecorder.activity != nil {
+            //
+            // Routed through `WatchRoute` so a finished workout always lands
+            // back on the start screen (tested in LiftKit's WatchRouteTests).
+            switch WatchRoute.resolve(draft: session.draft,
+                                      isRecordingOutdoor: outdoorRecorder.activity != nil) {
+            case .outdoorActivity:
                 OutdoorActivityView()
-            } else if session.draft == nil {
+            case .start:
                 StartWorkoutView()
-            } else {
+            case .workout:
                 WorkoutView()
             }
         }

@@ -305,6 +305,119 @@ final class WatchPlanBuilderTests: XCTestCase {
                                           contentHash: WatchPlanRevisions.contentHash(of: after)), 2)
     }
 
+    // MARK: - Set types
+
+    /// Coach web's own set-types link, accepted through LIFT's real doors and
+    /// sent to the watch: the groups and kinds the watch receives are the
+    /// ones the coach wrote, and the sides ride beside them untouched.
+    @MainActor
+    func testCoachWebsSetTypesReachTheWatchAsTheCoachWroteThem() throws {
+        let context = makeContext()
+        let outcome = PlanLinkIntake.read("From Doug: " + (try SetTypesTests.fixtureLink()),
+                                          expectedLifterID: "a1b2c3d4")
+        guard case .plan(let incoming) = outcome else {
+            return XCTFail("the fixture should open, got \(outcome)")
+        }
+        try PlanImporter.accept(incoming, hash: PlanImporter.hash(of: incoming),
+                                in: context, defaults: defaults)
+        let routine = try XCTUnwrap(try context.fetch(FetchDescriptor<Routine>()).first)
+        WatchPlanPin.save(routineID: routine.id, to: defaults)
+
+        let plan = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+        XCTAssertEqual(plan.exercises.map(\.group), [nil, 1, 1, 2, 2, 2, nil, nil, nil])
+        XCTAssertEqual(plan.exercises.map { $0.sets.map(\.kind) }, [
+            [nil, nil, nil], [nil, nil, nil], [nil, nil, nil],
+            [nil, nil, nil], [nil, nil, nil], [nil, nil],
+            [nil, nil, .drop, .drop], [nil, .restPause], [nil, nil, .drop]])
+        // Left *and* drop: the side and the kind are separate keys here, so
+        // neither can be read through the other.
+        XCTAssertTrue(plan.exercises[8].eachSide)
+        XCTAssertEqual(plan.exercises[8].sets.map(\.side), [nil, nil, .left])
+
+        // And on the wire, in the contract's words.
+        let envelope = SyncEnvelope(event: .planPushed, workoutID: routine.id, revision: 1,
+                                    updatedAt: .now, origin: .ios, plan: plan)
+        let data = try SyncEnvelope.encoder.encode(envelope)
+        XCTAssertEqual(try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data).plan, plan)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let exercises = try XCTUnwrap((object["plan"] as? [String: Any])?["exercises"] as? [[String: Any]])
+        XCTAssertFalse(exercises[0].keys.contains("group"))
+        XCTAssertEqual(exercises[3]["group"] as? Int, 2)
+        let pushdown = try XCTUnwrap(exercises[6]["sets"] as? [[String: Any]])
+        XCTAssertFalse(pushdown[0].keys.contains("kind"))
+        XCTAssertEqual(pushdown[2]["kind"] as? String, "drop")
+        let curl = try XCTUnwrap(exercises[7]["sets"] as? [[String: Any]])
+        XCTAssertEqual(curl[1]["kind"] as? String, "restPause")
+    }
+
+    @MainActor
+    func testARoutineWithNoSetTypesSendsNeitherKey() throws {
+        // The byte-for-byte rule again: no group, no kind, so the hash -- and
+        // the revision -- of every plan already on a watch stays put.
+        let context = makeContext()
+        let routine = insertRoutine(named: "Upper A", in: context, sets: [
+            RoutinePrescribedSet(orderIndex: 0, targetWeightKg: 100, targetReps: 5),
+            RoutinePrescribedSet(orderIndex: 1, targetWeightKg: 100, targetReps: 5)
+        ])
+        WatchPlanPin.save(routineID: routine.id, to: defaults)
+
+        let plan = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let json = String(decoding: try encoder.encode(plan), as: UTF8.self)
+        XCTAssertFalse(json.contains("group"))
+        XCTAssertFalse(json.contains("kind"))
+    }
+
+    @MainActor
+    func testALoneGroupAndAFirstSetKindAreNeverSent() throws {
+        // A side-car can hold either -- a group of one left by an exercise
+        // deleted from the routine, a kind on a set that became first -- and
+        // neither means anything, so neither goes out.
+        let context = makeContext()
+        let routine = insertRoutine(named: "Arms", in: context, sets: [
+            RoutinePrescribedSet(orderIndex: 0, targetReps: 12),
+            RoutinePrescribedSet(orderIndex: 1, targetReps: 10)
+        ], exerciseName: "Triceps Pushdown", equipment: "cable")
+        let exercise = try XCTUnwrap(routine.orderedExercises.first)
+        var types = RoutineSetTypes()
+        types.groups[exercise.id] = 5
+        types.kinds[exercise.orderedSets[0].id] = .drop
+        types.kinds[exercise.orderedSets[1].id] = .restPause
+
+        let plan = WatchPlanBuilder.plan(from: routine, source: .routine, scheduledFor: nil,
+                                         restSeconds: nil, history: [], setTypes: types)
+        XCTAssertNil(plan.exercises[0].group)
+        XCTAssertEqual(plan.exercises[0].sets.map(\.kind), [nil, .restPause])
+    }
+
+    @MainActor
+    func testGroupingAnExerciseChangesTheRevision() throws {
+        let context = makeContext()
+        let routine = Routine(name: "Upper B")
+        routine.exercises = ["Bench", "Rows"].enumerated().map { index, name in
+            let exercise = RoutineExercise(name: name, equipment: "", orderIndex: index)
+            exercise.prescribedSets = [RoutinePrescribedSet(orderIndex: 0, targetReps: 10)]
+            return exercise
+        }
+        context.insert(routine)
+        try context.save()
+        WatchPlanPin.save(routineID: routine.id, to: defaults)
+        let before = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+
+        var types = RoutineSetTypes()
+        types.setGroupedWithNext(true, at: 0, in: routine.orderedExercises)
+        types.save(to: defaults)
+        let after = try XCTUnwrap(WatchPlanBuilder.todaysPlan(in: context, defaults: defaults)).plan
+        XCTAssertEqual(after.exercises.map(\.group), [1, 1])
+
+        var revisions = WatchPlanRevisions()
+        XCTAssertEqual(revisions.revision(for: routine.id,
+                                          contentHash: WatchPlanRevisions.contentHash(of: before)), 1)
+        XCTAssertEqual(revisions.revision(for: routine.id,
+                                          contentHash: WatchPlanRevisions.contentHash(of: after)), 2)
+    }
+
     // MARK: - Last time's actual
 
     @MainActor

@@ -7,6 +7,7 @@ import LiftCore
 struct LiftWidgetBundle: WidgetBundle {
     var body: some Widget {
         TodayWidget()
+        RestActivityWidget()
     }
 }
 

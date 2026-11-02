@@ -48,11 +48,23 @@ enum LiftTab: String, CaseIterable, Identifiable, Hashable {
 /// width keeps the top bar.
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.appIsPresenting) private var appIsPresenting
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: LiftTab = .home
     @State private var visited: Set<LiftTab> = [.home]
     @State private var showingSettings = false
     @State private var undo = UndoToastCenter.shared
+
+    /// The gear button and Command-comma. A hardware shortcut can reach this
+    /// view while something `LiftApp` presents covers it -- a recipe review,
+    /// a plan preview or a refusal alert -- and SwiftUI drops a second
+    /// presentation beside the first, which would leave `showingSettings` true
+    /// with nothing on screen, so Settings would not open again. Command-comma
+    /// waits until it closes, as Coach's Shift-Command-V does.
+    private func openSettings() {
+        guard !appIsPresenting else { return }
+        showingSettings = true
+    }
 
     var body: some View {
         // Measured, not asked of the device: an iPad window in Split View is
@@ -96,7 +108,7 @@ struct RootView: View {
             }
         }
         .background(Theme.background)
-        .tint(AppColor.accentText)
+        .tint(Theme.accentText)
         .overlay(alignment: .bottom) {
             if let toast = undo.current {
                 UndoToastBar(toast: toast, center: undo)
@@ -107,9 +119,10 @@ struct RootView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: undo.current?.id)
         .liftAppearance()
+        .keepsScreenOnDuringLiveSession()
         .sheet(isPresented: $showingSettings) {
             SettingsView()
-                .tint(AppColor.accentText)
+                .tint(Theme.accentText)
                 .liftAppearance()
         }
         .task { FoodEntryGramMigration.run(context: context) }
@@ -158,19 +171,19 @@ struct RootView: View {
                             .tracking(0.5)
                         Spacer(minLength: 0)
                     }
-                    .foregroundStyle(tab == item ? AppColor.accentText : Theme.textSecondary)
+                    .foregroundStyle(tab == item ? Theme.accentText : Theme.textSecondary)
                     .padding(.vertical, 10)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(item.shortcut, modifiers: .command)
-                .accessibilitySelected(tab == item)
+                .accessibilityAddTraits(tab == item ? .isSelected : [])
             }
 
             Spacer(minLength: 0)
 
             Button {
-                showingSettings = true
+                openSettings()
             } label: {
                 HStack(spacing: 12) {
                     Color.clear.frame(width: 3, height: 22)
@@ -213,7 +226,7 @@ struct RootView: View {
                             .tracking(1.0)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
-                            .foregroundStyle(tab == item ? AppColor.accentText : Theme.textSecondary)
+                            .foregroundStyle(tab == item ? Theme.accentText : Theme.textSecondary)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity)
                         Rectangle()
@@ -224,7 +237,7 @@ struct RootView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(item.shortcut, modifiers: .command)
-                .accessibilitySelected(tab == item)
+                .accessibilityAddTraits(tab == item ? .isSelected : [])
                 .accessibilityShowsLargeContentViewer()
             }
 
@@ -232,7 +245,7 @@ struct RootView: View {
             // button existed nothing in the app presented SettingsView, so
             // both were unreachable however far you dug.
             Button {
-                showingSettings = true
+                openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .scaledFont(size: 15, weight: .semibold)
@@ -255,5 +268,21 @@ struct RootView: View {
         // Five labels share one row; past this size they would shrink to
         // illegibility. The Large Content Viewer (long-press) covers the rest.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+}
+
+// MARK: - Something LiftApp presents
+
+private struct AppIsPresentingKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True while `LiftApp` has a recipe review, a plan preview or a refusal
+    /// alert up, so nothing a keyboard shortcut raises tries to present
+    /// beside it.
+    var appIsPresenting: Bool {
+        get { self[AppIsPresentingKey.self] }
+        set { self[AppIsPresentingKey.self] = newValue }
     }
 }

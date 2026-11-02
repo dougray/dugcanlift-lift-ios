@@ -21,7 +21,8 @@ follows it back through the subtree merge).
     reconciliation (`WorkoutStore`), the offline edit queue (`SyncOutbox`),
     `RestTimer`, the guided session (`GuidedSession`, `PlanDisplay`), the
     food library, the standalone food log and its QR export, outdoor
-    activities, and `PlanRequestGate`.
+    activities, `PlanRequestGate`, and `WatchRoute` (which top-level screen
+    shows, so a finished workout always returns to the start screen).
 
   Unit tested with `swift test`, no simulator (`make watch-test`).
 - `docs/` — the watch-face complications design and plan (2026-09-13,

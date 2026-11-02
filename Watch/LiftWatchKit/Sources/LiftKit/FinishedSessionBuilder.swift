@@ -14,8 +14,8 @@ extension WorkoutDraft {
     /// This workout as the phone will store it.
     ///
     /// Everything the draft holds travels: every exercise in order, every set
-    /// with its weight, reps, RPE, warmup flag and **side**, and when it was
-    /// completed. Nothing is filtered — an incomplete set (entered, never
+    /// with its weight, reps, RPE, warmup flag and **side**, when it was
+    /// completed, and the highest heart rate measured around it. Nothing is filtered — an incomplete set (entered, never
     /// completed) is still a set somebody typed, and dropping it here would
     /// be the watch deciding on its own that part of a session did not
     /// happen.
@@ -54,7 +54,8 @@ extension WorkoutDraft {
                                     rpe: set.rpe,
                                     isWarmup: set.isWarmup,
                                     side: set.side,
-                                    completedAt: set.completedAt
+                                    completedAt: set.completedAt,
+                                    maxBpm: set.maxBpm
                                 )
                             }
                     )

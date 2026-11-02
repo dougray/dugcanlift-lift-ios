@@ -159,6 +159,11 @@
           "type": "string",
           "format": "date-time",
           "description": "When the set was logged. Omitted for a set that was entered but never completed."
+        },
+        "maxBpm": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "The highest heart rate the watch measured around this set, in whole beats per minute: the highest reading from the previous tick (or the session's start, never more than 5 minutes back) to 20 seconds after this set's tick (or the next tick, if sooner). Omitted -- never 0 -- when nothing was recorded, so a session with no figures is unchanged, and a receiver that predates this key ignores it. A receiver reads anything but a positive integer as not recorded."
         }
       }
     },

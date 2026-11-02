@@ -357,3 +357,29 @@ public struct SessionHeartRate: Codable, Equatable, Sendable {
         self.maxBpm = maxBpm
     }
 }
+
+/// How heart rate is said, on the watch and on the phone: both compile this
+/// one copy, so the two cannot drift. LIFT for Android and its Wear OS watch
+/// say the same words; change them in every build or in none.
+///
+/// **Shown, never graded.** A number and its unit, with nothing beside it:
+/// no zone, no colour, no threshold, no percentage of a maximum heart rate
+/// (that needs an age-based guess no build is qualified to make), and nothing
+/// about being recovered or ready.
+public enum HeartRateWords {
+
+    /// "max 142 bpm", muted, beside a set that has a figure.
+    public static func set(maxBpm: Int) -> String {
+        "max \(maxBpm) bpm"
+    }
+
+    /// "Heart rate: average 118 · max 156 bpm", for a session. Whole beats,
+    /// halves away from zero, as a set's figure is rounded.
+    public static func session(_ heartRate: SessionHeartRate) -> String {
+        "Heart rate: average \(whole(heartRate.averageBpm)) · max \(whole(heartRate.maxBpm)) bpm"
+    }
+
+    private static func whole(_ bpm: Double) -> Int {
+        Int(bpm.rounded(.toNearestOrAwayFromZero))
+    }
+}

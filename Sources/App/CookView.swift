@@ -52,17 +52,19 @@ struct RecipeListView: View {
 
     @State private var editing: Recipe?
     @State private var creatingNew = false
-    @State private var importingFromLink = false
+    @State private var showingFromSafari = false
+    @State private var showingFromBrowser = false
     @State private var browsingCatalogue = false
     @State private var pasting = false
     @Environment(\.pageWidth) private var pageWidth
 
     private var contentWidth: CGFloat { AdaptiveLayout.contentWidth(forPage: pageWidth) }
 
-    /// One, two or four across: never three over one.
+    /// Five actions: one, two, three over two, or five across -- never four
+    /// over one.
     private var actionColumns: Int {
-        let fit = AdaptiveLayout.columns(for: contentWidth, minWidth: 220, maxColumns: 4)
-        return fit == 3 ? 2 : fit
+        let fit = AdaptiveLayout.columns(for: contentWidth, minWidth: 220, maxColumns: 5)
+        return fit == 4 ? 3 : fit
     }
 
     var body: some View {
@@ -81,12 +83,12 @@ struct RecipeListView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Third, and the only one that needs neither typing nor a
-                    // network: 600+ recipes ship in the app.
+                    // Third, and the only one that needs no typing: 600+
+                    // recipes ship in the app. None of the five needs a network.
                     Button {
                         browsingCatalogue = true
                     } label: {
-                        Label("Browse the catalogue", systemImage: "books.vertical")
+                        Label("Browse the catalog", systemImage: "books.vertical")
                             .font(Theme.body.weight(.semibold))
                             .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -96,12 +98,12 @@ struct RecipeListView: View {
                     .buttonStyle(.plain)
 
                     // Second, not first: typing in a recipe you already cook is
-                    // the normal way in, and an import always lands in the same
-                    // editor afterwards anyway.
+                    // the normal way in. A recipe on the web arrives from
+                    // Safari's share sheet; this says how.
                     Button {
-                        importingFromLink = true
+                        showingFromSafari = true
                     } label: {
-                        Label("Import from a link", systemImage: "link")
+                        Label("Import from Safari", systemImage: "safari")
                             .font(Theme.body.weight(.semibold))
                             .foregroundStyle(Theme.accentText)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,9 +112,24 @@ struct RecipeListView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Last of the four: a link reads a page properly wherever one
-                    // exists, so this is what is left when no page does -- a video
-                    // caption, an email, a card off the fridge.
+                    // Safari's share sheet does not reach every browser: Chrome
+                    // on iPhone runs the kit's bookmarklet instead, which hands
+                    // over the same recipe through `dugcanliftlift://recipe`.
+                    Button {
+                        showingFromBrowser = true
+                    } label: {
+                        Label("Send recipes from your browser", systemImage: "bookmark")
+                            .font(Theme.body.weight(.semibold))
+                            .foregroundStyle(Theme.accentText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.cardPadding)
+                            .liftCardBackground()
+                    }
+                    .buttonStyle(.plain)
+
+                    // Last: Safari reads a page properly wherever one
+                    // publishes a recipe, so this is what is left when no page does --
+                    // a video caption, an email, a card off the fridge.
                     Button {
                         pasting = true
                     } label: {
@@ -159,9 +176,8 @@ struct RecipeListView: View {
         .sheet(isPresented: $creatingNew) {
             RecipeEditorView(recipe: nil).liftAppearance()
         }
-        .sheet(isPresented: $importingFromLink) {
-            RecipeImportView().liftAppearance()
-        }
+        .sheet(isPresented: $showingFromSafari) { FromSafariView().liftAppearance() }
+        .sheet(isPresented: $showingFromBrowser) { FromBrowserView().liftAppearance() }
         .sheet(isPresented: $browsingCatalogue) {
             RecipeCatalogView().liftAppearance()
         }

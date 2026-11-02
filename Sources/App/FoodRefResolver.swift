@@ -4,7 +4,8 @@ import LiftCore
 import LiftReference
 
 /// Resolves an arbitrary `foodRefID` (whatever its source — a reference-
-/// database food or a recipe) into a name and gram-scaled nutrition.
+/// database food, a recipe or a remembered food kept against a barcode) into
+/// a name and gram-scaled nutrition.
 /// Neither existing logging path needs this: `FoodSearchView` already
 /// holds a `FoodRecord` from search, `PlannedMeal.toFoodEntry()` already
 /// holds a `Recipe`. A watch-originated request only ever hands over the
@@ -50,8 +51,39 @@ enum FoodRefResolver {
             return (recipe.name, perGram.scaled(by: grams))
         }
 
+        if foodRefID.hasPrefix("barcode:") {
+            let code = String(foodRefID.dropFirst("barcode:".count))
+            guard let food = RememberedFoods.find(code: code, in: context) else { return nil }
+            return (food.name, food.per100g.scaled(by: grams / 100))
+        }
+
         guard let record = try? await ReferenceDatabase.shared.food(id: foodRefID)
         else { return nil }
         return (record.name, record.nutrition(grams: grams))
+    }
+
+    /// What a ref resolves to when nothing else knows it: the newest entry
+    /// already logged against it, scaled to `grams`. A remembered food that
+    /// was forgotten leaves its entries (and so Recent, and the watch's list)
+    /// behind, and an entry is a snapshot of its own name and nutrition, so
+    /// the food can still be logged again from those. `nil` when no entry
+    /// has a usable gram amount to scale from.
+    @MainActor
+    static func storedNutrition(
+        for foodRefID: String,
+        grams: Double,
+        context: ModelContext
+    ) -> (name: String, nutrition: NutritionFacts)? {
+        guard !foodRefID.isEmpty, grams.isFinite, grams > 0 else { return nil }
+        var descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.foodRefID == foodRefID },
+            sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 20
+        guard let entries = try? context.fetch(descriptor),
+              let entry = entries.first(where: { ($0.amountGrams ?? 0) > 0 }),
+              let eaten = entry.amountGrams
+        else { return nil }
+        return (entry.name, entry.nutrition.scaled(by: grams / eaten))
     }
 }

@@ -105,7 +105,7 @@ struct PlanPreviewView: View {
 
     private func accept() {
         do {
-            let hash = try PlanImporter.hash(of: plan.payload, roadPickIDs: plan.roadPickIDs)
+            let hash = try PlanImporter.hash(of: plan)
             try PlanImporter.accept(plan, hash: hash, in: context)
             didImport = true
             // A coach's plan can book a session for today; if it just did,

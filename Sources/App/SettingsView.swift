@@ -11,6 +11,9 @@ struct SettingsView: View {
     @AppStorage("servingUnit") private var servingUnitRaw = ServingUnit.grams.rawValue
     @AppStorage(WatchPlanSettings.restSecondsKey) private var watchRestSeconds =
         WatchPlanSettings.defaultRestSeconds
+    @AppStorage(LiveSessionScreen.enabledKey) private var keepsScreenOn =
+        LiveSessionScreen.defaultEnabled
+    @AppStorage(ProgressionRule.enabledKey) private var suggestsNextWeight = true
 
     @Query(filter: #Predicate<WorkoutDay> { $0.healthKitUUID == nil })
     private var unsynced: [WorkoutDay]
@@ -78,10 +81,18 @@ struct SettingsView: View {
                         LabeledContent("Rest between sets",
                                        value: SetMetrics.clock(watchRestSeconds))
                     }
+                    Toggle("Keep the screen on", isOn: $keepsScreenOn)
+                    Toggle("Suggest the next weight", isOn: $suggestsNextWeight)
+                    NavigationLink("Plates and bars") {
+                        PlateSettingsView()
+                    }
+                    NavigationLink("My equipment") {
+                        MyEquipmentView()
+                    }
                 } header: {
-                    Text("Apple Watch")
+                    Text("Training")
                 } footer: {
-                    Text("Sent with every prescribed set, so the watch starts resting on its own when you log one. A routine itself carries no rest time.")
+                    Text("In a live session, tick a set done to start your rest. If you allow notifications, LIFT tells you when it's over, even with your phone locked. Your Apple Watch rests for the same time. While a live session is running, the screen doesn't lock. Plates and bars work out what to load for a set on a bar. My equipment narrows exercise search to what you have. For an exercise from one of your own routines, LIFT suggests the next weight from your last session: up a step when every set reached its reps, the same again when one didn't, and a little lighter after two short sessions in a row.")
                 }
 
                 CoachSection()

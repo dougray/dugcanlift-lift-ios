@@ -249,6 +249,11 @@ struct RoadFoodPlaceView: View {
     @State private var meal = MealType.forHour(Calendar.current.component(.hour, from: .now))
     @State private var category: String?
     @State private var note: String?
+    /// Allergens avoided, kept across places (`RoadFoodAllergens`).
+    @State private var avoiding = RoadFoodAllergens.load()
+    /// Items put together before ordering (`RoadFoodMeal`). Not kept: it is
+    /// the order in front of you, and a new place is a new order.
+    @State private var plate = RoadFoodMeal()
 
     init(catalog: RoadFoodCatalog, source: RoadFoodSource, place: RoadFoodPlace) {
         self.catalog = catalog
@@ -268,6 +273,18 @@ struct RoadFoodPlaceView: View {
     private var items: [RoadFoodItem] {
         if let chain { return chain.items }
         return catalog.snacks.filter { category == nil || $0.category == category }
+    }
+
+    private var covered: [String] { chain?.allergensCovered ?? [] }
+
+    /// Every item at this place, whatever category is on screen: the meal
+    /// tray totals against this, so switching category never drops an item
+    /// that is already in it.
+    private var placeItems: [RoadFoodItem] { chain?.items ?? catalog.snacks }
+
+    /// What is left on screen once avoided allergens are hidden.
+    private var allergenFiltered: RoadFoodAllergens.Filtered {
+        RoadFoodAllergens.filter(items, covered: covered, avoiding: avoiding)
     }
 
     /// Home's number, from the same type Home reads it from.
@@ -309,7 +326,8 @@ struct RoadFoodPlaceView: View {
         // same order among themselves, and the same ones are left out.
         let picks = RoadPicks.decode(picksData)
         let ranked = RoadFoodRanking.withPicks(
-            RoadFoodRanking.rank(items, remainingCalories: remaining.map { Double($0.wholeCalories) }),
+            RoadFoodRanking.rank(allergenFiltered.shown,
+                                 remainingCalories: remaining.map { Double($0.wholeCalories) }),
             ids: picks?.ids ?? [])
 
         RoadFoodPage { contentWidth in
@@ -319,6 +337,8 @@ struct RoadFoodPlaceView: View {
                 if source == .developmentSample { RoadFoodSampleNotice() }
 
                 if isGasStation, catalog.snackCategories.count > 1 { categoryChips }
+
+                avoidChips
 
                 fitCard(remaining: remaining, ranked: ranked, picks: picks)
 
@@ -349,6 +369,8 @@ struct RoadFoodPlaceView: View {
         // Pinned to the bottom rather than placed in the page, so it is seen
         // wherever the row that was logged had been scrolled to.
         .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+            if !plate.isEmpty { plateTray(remaining: remaining) }
             if let note {
                 Text(note)
                     .font(Theme.body)
@@ -362,8 +384,10 @@ struct RoadFoodPlaceView: View {
                     .accessibilityAddTraits(.isStaticText)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            }
         }
         .animation(.easeOut(duration: 0.2), value: note)
+        .animation(.easeOut(duration: 0.2), value: plate)
         .navigationTitle(chain?.name ?? "Gas station")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -424,6 +448,37 @@ struct RoadFoodPlaceView: View {
                         category = c
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: Allergens
+
+    private var avoidChips: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Avoid")
+                .font(Theme.sectionLabel)
+                .foregroundStyle(Theme.textSecondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(RoadFoodAllergens.all, id: \.self) { allergen in
+                        LiftChip(label: RoadFoodAllergens.label(allergen), isSelected: avoiding.contains(allergen)) {
+                            if avoiding.contains(allergen) { avoiding.remove(allergen) } else { avoiding.insert(allergen) }
+                            RoadFoodAllergens.save(avoiding)
+                        }
+                    }
+                }
+            }
+            if !avoiding.isEmpty {
+                let hidden = allergenFiltered.hiddenCount
+                Text((hidden == 0 ? "Nothing here is listed as containing what you avoid. "
+                      : hidden == 1 ? "1 item is hidden because its chart says it contains something you avoid. "
+                      : "\(hidden) items are hidden because their chart says they contain something you avoid. ")
+                     + RoadFoodAllergens.sourceNote(chainName: chain?.name, hasChart: chain?.allergenSource != nil,
+                                                    statesCoverage: !covered.isEmpty))
+                    .font(Theme.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -563,6 +618,13 @@ struct RoadFoodPlaceView: View {
                 if let modification = item.modification {
                     Text(modification).font(Theme.detail).foregroundStyle(Theme.textSecondary)
                 }
+                if let contains = RoadFoodAllergens.containsLine(item) {
+                    Text(contains).font(Theme.detail).foregroundStyle(Theme.textSecondary)
+                }
+                if let unknown = RoadFoodAllergens.notStatedLine(
+                    RoadFoodAllergens.verdict(item, covered: covered, avoiding: avoiding)) {
+                    Text(unknown).font(Theme.detail).foregroundStyle(Theme.textPrimary)
+                }
                 if let barcode = item.barcode {
                     Text("Barcode \(barcode)").font(Theme.detail).foregroundStyle(Theme.textSecondary)
                 }
@@ -573,6 +635,7 @@ struct RoadFoodPlaceView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if RoadFoodRanking.cannotLogReason(item) == nil {
+                plateButtons(item)
                 Button { log(item) } label: {
                     Text("Log it")
                         .scaledFont(size: 14, weight: .semibold)
@@ -606,6 +669,82 @@ struct RoadFoodPlaceView: View {
         }
         if let serving = item.serving { parts.append(serving) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    // MARK: Build a meal
+
+    /// "+" adds one to the meal being put together; once there is one, the
+    /// count and "−" show beside it.
+    private func plateButtons(_ item: RoadFoodItem) -> some View {
+        let count = plate.count(of: item.id)
+        return HStack(spacing: 6) {
+            if count > 0 {
+                Button { plate.remove(item) } label: { Image(systemName: "minus.circle") }
+                    .accessibilityLabel("One less \(item.displayName) in the meal")
+                Text("\(count)")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.textPrimary)
+            }
+            Button { plate.add(item) } label: { Image(systemName: "plus.circle") }
+                .accessibilityLabel("Add \(item.displayName) to the meal")
+        }
+        .font(.system(size: 22))
+        .foregroundStyle(Theme.accentText)
+        .buttonStyle(.plain)
+        .frame(minHeight: 36)
+    }
+
+    private func plateTray(remaining: RemainingMacros?) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Your meal")
+                    .font(Theme.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                Text(plate.line(from: placeItems, remaining: remaining))
+                    .font(Theme.body)
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button("Clear") { plate.clear() }
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundStyle(Theme.accentText)
+            Button { logPlate() } label: {
+                Text("Log meal")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Theme.onAccent)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Theme.accent))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: AdaptiveLayout.readableWidth, alignment: .leading)
+        .padding(Theme.cardPadding)
+        .liftCardBackground()
+        .padding(.horizontal, AdaptiveLayout.pageGutter)
+        .padding(.bottom, 8)
+    }
+
+    /// Each item as its own entry, as "Log it" would write it.
+    private func logPlate() {
+        let chosen = plate.items(from: placeItems)
+        let entries = chosen.compactMap { RoadFoodRanking.entry(for: $0, chainName: chain?.name, mealType: meal) }
+        guard !entries.isEmpty else { return }
+        let before = todaysFood.totalNutrition
+        entries.forEach(context.insert)
+        try? context.save()
+        WidgetCenter.shared.reloadAllTimelines()
+        WatchSyncReceiver.shared?.pushRecentFoodsSnapshot()
+        var text = "Logged \(entries.count == 1 ? "1 item" : "\(entries.count) items") to \(meal.displayName)."
+        let eaten = entries.reduce(before) { $0 + $1.nutrition }
+        if let left = RemainingMacros.forDay(goalIsSet: goalIsSet, goalCalories: goalCalories,
+                                             goalProteinG: goalProtein, eaten: eaten) {
+            text += " \(left.calorieHeadline) today."
+        }
+        plate.clear()
+        note = text
     }
 
     // MARK: Log it

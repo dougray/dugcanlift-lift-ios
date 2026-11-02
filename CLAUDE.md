@@ -394,7 +394,8 @@ Otherwise the next not-ticked set decides: a drop set is no rest and "Drop set
 next", rest-pause is 15 seconds (fixed, not a setting). A tick with no rest ends
 a rest still running. Rest turned off in Settings is still nothing at all.
 `RestTimer.cue` is the no-rest line: not persisted, not on the lock screen. The
-watch's `WorkoutPlan` carries no set types yet, as it carries no sides. Nothing
+watch carries set types too (see "A coach's set types travel to the watch"
+below). Nothing
 here reaches a coach: SHARE-FORMAT has no set type, so a drop set goes to them as
 an ordinary set. `Tests/Fixtures/web-plan-set-types.txt` is Coach web's own;
 never regenerate it from Swift.
@@ -418,6 +419,25 @@ them from `PlanSides`, `SetSide.planSide` maps this app's own side onto
 store, in a backup and on this wire), and the watch's `GuidedSession` is a port
 of `Prescription`'s rules, so an each-side exercise is twice the sets and
 alternates the way Add set does here.
+
+**A coach's set types travel to the watch as well.** `PLAN_PUSHED` carries
+`group` (a positive integer) on an exercise and `kind` (`"drop"` /
+`"restPause"`, `SetKind`'s raw values, which `SetKind.planKind` maps onto
+`LiftSync`'s `PlanSetKind`) on a prescribed set, both **omitted** when they say
+nothing -- never `0`, never `"straight"` -- so a plan without them hashes as
+before. `WatchPlanBuilder` fills them from `RoutineSetTypes`: groups renumbered
+as runs, so a group of one is never sent, and no kind on a first set. The watch
+reads both leniently (anything but a positive integer is ungrouped, an unknown
+word is straight), reads a first set as straight whatever arrived, and labels
+with `ExerciseGrouping`'s own words through its port, `PlanGrouping` ("Superset
+A · A1", "Circuit B"). **The order and the rest are `SessionRest`'s**, ported
+into `GuidedSession`: round by round across a group, skipping a member that has
+run out; no rest inside a round ("Next: Seated Cable Rows" on the Now screen),
+none before a drop set ("Drop set next"), 15 seconds before rest-pause. One
+difference, decided: the watch's round is one *prescribed row* of each member,
+so an each-side member does both its sides in its round (left, right, partner,
+rest), where the phone, which logs a sided set as it is done, counts each sided
+set as its own place. Nothing is graded on the wrist either.
 
 **The watch is told what to lift, in kilograms, with blanks left blank.**
 `PLAN_PUSHED` carries today's plan to the watch app: the routine a coach's

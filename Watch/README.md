@@ -164,6 +164,24 @@ the free-entry flow unchanged**.
   named-side set on an exercise that is not each side stops asking about sides
   once it is logged. `GuidedSessionTests` pins all of it, including that a
   plan with no sides behaves exactly as before.
+- **So do a coach's set types** (PLAN-FORMAT.md "Set types"). A `PlanExercise`
+  can carry a `group` -- adjacent exercises with the same positive integer are
+  a superset (two) or a circuit (three or more), done round by round -- and a
+  `PrescribedSet` a `kind`, `drop` or `restPause`. Both are **omitted** when
+  they say nothing, so a plan without them is byte for byte unchanged. Both are
+  read leniently: anything but a positive integer is not grouped, an unknown
+  kind is straight, and an exercise's first set is straight whatever arrived
+  (`PlanExercise.kind(ofSet:)`). The Now screen heads a grouped exercise
+  "Superset A · A1" (also on the exercise list), and the position line reads
+  `2/4 - drop` or `5/6 - L rest-pause` (with middle dots): side then kind, as
+  the phone reads a set. The order and the rest are LIFT for iPhone's
+  `SessionRest`, ported into `GuidedSession`: one prescribed row of each member
+  per round, skipping one that has run out; no rest inside a round, with "Next:
+  Seated Cable Rows" on the Now screen; none before a drop set ("Drop set
+  next"); 15 seconds before rest-pause; otherwise the rest the set prescribed.
+  An each-side member does both sides in its round. `PlanGrouping` is the
+  port of the phone's `ExerciseGrouping` labels, and `SetTypesSessionTests`
+  pins it all.
 - `LiftingSessionRecorder` runs an `HKWorkoutSession` of
   `.traditionalStrengthTraining` with an `HKLiveWorkoutBuilder`, which
   surfaces current, average and maximum heart rate and saves the workout with

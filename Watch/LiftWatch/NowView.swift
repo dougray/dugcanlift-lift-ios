@@ -39,9 +39,28 @@ struct NowView: View {
                     .monospacedDigit()
             }
 
+            // "Superset A · A1": the same words LIFT and Coach use, over an
+            // exercise a coach grouped with its neighbors. Nothing over one
+            // that is not grouped.
+            if let group = guided.currentGroupLabel {
+                Text(group.text)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(DclTheme.accent2Text)
+                    .lineLimit(1)
+            }
+
             Text(exercise.displayName)
                 .font(.headline)
                 .lineLimit(2)
+
+            // The set just logged started no rest: say why, in the phone's
+            // words -- "Next: Seated Cable Rows", "Drop set next".
+            if let cue = session.restCue {
+                Text(cue)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(DclTheme.accentText)
+                    .lineLimit(2)
+            }
 
             // The prescription, in the size the spec draws it. A blank field
             // is never a zero here: "5 reps" is a set with no weight

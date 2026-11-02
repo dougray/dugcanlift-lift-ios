@@ -59,6 +59,11 @@ final class WorkoutSessionModel: ObservableObject {
     /// Where the lifter is inside that plan. Non-nil only while a planned
     /// workout is actually being trained.
     @Published private(set) var guided: GuidedSession?
+    /// What the Now screen says when the set just logged starts no rest:
+    /// "Next: Seated Cable Rows" inside a superset round, "Drop set next"
+    /// before a drop set (`GuidedSession.Rest`). `nil` whenever a rest did
+    /// start, and before any set.
+    @Published private(set) var restCue: String?
 
     /// The plan's identity and revision, straight off the envelope — the
     /// same reconciliation rule `WorkoutStore` applies to a workout: a newer
@@ -192,6 +197,7 @@ final class WorkoutSessionModel: ObservableObject {
         draft = workout
         store.store(workout)
         guided = GuidedSession(plan: plan)
+        restCue = nil
         heartRate?.start()
     }
 
@@ -226,6 +232,25 @@ final class WorkoutSessionModel: ObservableObject {
         return guided?.currentSide
     }
 
+    /// "Superset A · A1" for a draft exercise built from a grouped plan
+    /// exercise, or `nil` -- for an ungrouped one, one added off plan, and
+    /// everything when no plan is being trained.
+    func groupLabel(for exerciseID: UUID) -> PlanGroupLabel? {
+        guard let guided, let draft,
+              let index = draft.exercises.firstIndex(where: { $0.id == exerciseID }),
+              draft.exercises[index].exerciseRefID == "plan:\(index)"
+        else { return nil }
+        let labels = guided.plan.groupLabels
+        return labels.indices.contains(index) ? labels[index] : nil
+    }
+
+    /// Whether the next set against `exerciseID` is a drop or rest-pause set,
+    /// or `nil` for a straight one and for anything not the guided exercise.
+    func suggestedKind(for exerciseID: UUID) -> PlanSetKind? {
+        guard guidedExerciseID == exerciseID else { return nil }
+        return guided?.currentKind
+    }
+
     /// Moves the guided session to whichever exercise the lifter opened, so
     /// training out of order is a tap rather than a wrong prescription.
     func focusGuidedSession(on exerciseID: UUID) {
@@ -256,12 +281,29 @@ final class WorkoutSessionModel: ObservableObject {
         // Rest is the one the set just performed prescribed — not the next
         // set's, and not the next exercise's. `recordSet(on:)` also advances
         // the position, and the next exercise when this one's sets are done.
+        // Set types change the rest, not where it comes from: none inside a
+        // superset round or before a drop set, 15 seconds before rest-pause
+        // (LIFT for iPhone's `SessionRest`, ported into `GuidedSession`).
         var prescribedRest: Int?
+        var rest = GuidedSession.Rest.full
         if guidedExerciseID == exerciseID {
             prescribedRest = guided?.recordSet(on: side)?.restSeconds
+            rest = guided?.restAfterLastSet ?? .full
         }
-        restTimer.interval = TimeInterval(prescribedRest ?? Self.defaultRestSeconds)
-        restTimer.start()
+        restCue = nil
+        switch rest {
+        case .full:
+            restTimer.interval = TimeInterval(prescribedRest ?? Self.defaultRestSeconds)
+            restTimer.start()
+        case .short(let seconds):
+            restTimer.interval = TimeInterval(seconds)
+            restTimer.start()
+        case .none(let cue):
+            // A set with no rest after it also ends a rest still running,
+            // as on the phone: the lifter is already on the next set.
+            restTimer.stop()
+            restCue = cue
+        }
     }
 
     func finishWorkout() {
@@ -280,6 +322,7 @@ final class WorkoutSessionModel: ObservableObject {
                     session: draft.finishedSession(), heartRate: sessionHeartRate)
         }
         guided = nil
+        restCue = nil
         // Back to the start screen. `RootView` shows the workout for as long
         // as there is a draft, and this used to leave it set: after Finish
         // the watch stayed on the Summary page, with no way back to Start

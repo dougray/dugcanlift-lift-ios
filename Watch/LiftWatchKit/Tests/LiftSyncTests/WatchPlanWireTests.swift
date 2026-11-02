@@ -368,4 +368,136 @@ final class WatchPlanWireTests: XCTestCase {
         XCTAssertEqual(decoded.plan?.name, "Upper A")
         XCTAssertEqual(decoded.plan?.exercises.first?.sets.first?.reps, 8)
     }
+
+    // MARK: - Set types
+
+    private func decodePlan(_ planJSON: String) throws -> WorkoutPlan {
+        let data = Data("""
+        {"event":"PLAN_PUSHED","workoutId":"6A2A8B6E-3D2F-4E77-9B4E-2C6A5E8C1D01",
+         "revision":1,"updatedAt":"1970-01-01T00:00:00Z","origin":"ios","plan":\(planJSON)}
+        """.utf8)
+        return try XCTUnwrap(try SyncEnvelope.decoder.decode(SyncEnvelope.self, from: data).plan)
+    }
+
+    /// A plan with no groups and no kinds must encode exactly as it did
+    /// before set types existed, for the reason the sides test gives:
+    /// `WatchPlanRevisions` hashes these bytes. The same frozen string, from
+    /// a plan that also went through a decode, so a `"group": 0` or
+    /// `"kind": null` written on the way out would show here.
+    func testAPlanWithNoSetTypesIsByteForByteWhatTheBuildBeforeSetTypesWrote() throws {
+        let roundTripped = try XCTUnwrap(try SyncEnvelope.decoder.decode(
+            SyncEnvelope.self, from: try SyncEnvelope.encoder.encode(planEnvelope(fullPlan))).plan)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let expected = [
+            #"{"exercises":[{"equipment":"barbell","#,
+            #""lastPerformed":{"performedOn":"2026-09-13","reps":5,"rpe":8,"weightKg":83.9146},"#,
+            #""name":"Bench Press","note":"Two second pause","#,
+            #""sets":[{"reps":5,"restSeconds":120,"rpe":8,"weightKg":83.9146},"#,
+            #"{"reps":5,"restSeconds":120}]}],"#,
+            #""name":"Upper A","scheduledFor":"2026-09-20","source":"COACH_PLAN"}"#
+        ].joined()
+        XCTAssertEqual(String(decoding: try encoder.encode(roundTripped), as: UTF8.self), expected)
+    }
+
+    func testAGroupAndAKindTravelUnderTheContractsNames() throws {
+        // The design's own example, in kilograms: a superset of bench and
+        // rows, then a pushdown with two drop sets and a curl with a
+        // rest-pause set.
+        let plan = WorkoutPlan(
+            name: "Upper B", source: .coachPlan, scheduledFor: "2026-10-28",
+            exercises: [
+                PlanExercise(name: "Dumbbell Bench Press", equipment: "dumbbell",
+                             sets: [PrescribedSet(reps: 10), PrescribedSet(reps: 10)], group: 1),
+                PlanExercise(name: "Seated Cable Rows", equipment: "cable",
+                             sets: [PrescribedSet(reps: 12), PrescribedSet(reps: 12)], group: 1),
+                PlanExercise(name: "Triceps Pushdown", equipment: "cable",
+                             sets: [PrescribedSet(reps: 12), PrescribedSet(reps: 12),
+                                    PrescribedSet(reps: 10, kind: .drop),
+                                    PrescribedSet(reps: 10, kind: .drop)]),
+                PlanExercise(name: "Barbell Curl", equipment: "barbell",
+                             sets: [PrescribedSet(reps: 8), PrescribedSet(reps: 4, kind: .restPause)])
+            ])
+        let object = try json(planEnvelope(plan))
+        let exercises = try XCTUnwrap((object["plan"] as? [String: Any])?["exercises"] as? [[String: Any]])
+
+        XCTAssertEqual(exercises.map { $0["group"] as? Int }, [1, 1, nil, nil])
+        XCTAssertFalse(exercises[2].keys.contains("group"), "not grouped is no key, never 0")
+        let pushdown = try XCTUnwrap(exercises[2]["sets"] as? [[String: Any]])
+        XCTAssertEqual(pushdown.map { $0["kind"] as? String }, [nil, nil, "drop", "drop"])
+        XCTAssertEqual(Set(pushdown[0].keys), ["reps"], "a straight set writes no kind")
+        let curl = try XCTUnwrap(exercises[3]["sets"] as? [[String: Any]])
+        XCTAssertEqual(curl[1]["kind"] as? String, "restPause")
+
+        let decoded = try SyncEnvelope.decoder.decode(
+            SyncEnvelope.self, from: try SyncEnvelope.encoder.encode(planEnvelope(plan)))
+        XCTAssertEqual(decoded.plan, plan)
+    }
+
+    func testAPlanWrittenBeforeSetTypesDecodesUngroupedAndStraight() throws {
+        let plan = try decodePlan("""
+        {"name":"Upper A","source":"ROUTINE","exercises":[
+          {"name":"Row","sets":[{"weightKg":60,"reps":8},{"reps":8}]},
+          {"name":"Curl","sets":[{"reps":10}]}]}
+        """)
+        XCTAssertEqual(plan.exercises.map(\.group), [nil, nil])
+        XCTAssertEqual(plan.exercises[0].sets.map(\.kind), [nil, nil])
+        XCTAssertEqual(plan.exercises[0].sets[0].weightKg, 60)
+    }
+
+    func testAGroupThatIsNotAPositiveIntegerIsNotGrouped() throws {
+        // Only a JSON positive integer is a group. Everything else costs the
+        // lifter the rounds, never the plan.
+        let plan = try decodePlan("""
+        {"name":"Upper A","source":"ROUTINE","exercises":[
+          {"name":"A","group":"1","sets":[{"reps":8}]},
+          {"name":"B","group":1.5,"sets":[{"reps":8}]},
+          {"name":"C","group":true,"sets":[{"reps":8}]},
+          {"name":"D","group":0,"sets":[{"reps":8}]},
+          {"name":"E","group":-2,"sets":[{"reps":8}]},
+          {"name":"F","group":null,"sets":[{"reps":8}]},
+          {"name":"G","group":2,"sets":[{"reps":8}]}]}
+        """)
+        XCTAssertEqual(plan.exercises.map(\.group), [nil, nil, nil, nil, nil, nil, 2])
+        XCTAssertEqual(plan.exercises.map { $0.sets.first?.reps }, Array(repeating: 8, count: 7))
+        XCTAssertNil(PlanExercise(name: "X", sets: [], group: 0).group, "never 0, from code either")
+    }
+
+    func testAKindThisBuildDoesNotKnowReadsAsStraight() throws {
+        let plan = try decodePlan("""
+        {"name":"Upper A","source":"ROUTINE","exercises":[
+          {"name":"Pushdown","sets":[{"reps":12},{"reps":10,"kind":"cluster"},
+            {"reps":10,"kind":" DROP "},{"reps":10,"kind":"restpause"},
+            {"reps":10,"kind":8},{"reps":10,"kind":null}]}]}
+        """)
+        let sets = try XCTUnwrap(plan.exercises.first?.sets)
+        XCTAssertEqual(sets.map(\.kind), [nil, nil, .drop, .restPause, nil, nil],
+                       "case and space forgiven; an unknown word, a number or null is straight")
+        XCTAssertEqual(sets.map(\.reps), [12, 10, 10, 10, 10, 10])
+    }
+
+    func testAFirstSetSayingDropIsReadAsStraight() throws {
+        // Carried as it arrived, read by its place: there is no set before
+        // the first to drop from.
+        let plan = try decodePlan("""
+        {"name":"Upper A","source":"ROUTINE","exercises":[
+          {"name":"Pushdown","sets":[{"reps":12,"kind":"drop"},{"reps":10,"kind":"drop"}]}]}
+        """)
+        let exercise = try XCTUnwrap(plan.exercises.first)
+        XCTAssertEqual(exercise.sets[0].kind, .drop)
+        XCTAssertNil(exercise.kind(ofSet: 0))
+        XCTAssertEqual(exercise.kind(ofSet: 1), .drop)
+        XCTAssertEqual(exercise.plannedSets.map(\.kind), [nil, .drop])
+    }
+
+    func testBothSidesOfAnEachSideDropSetAreDropSets() {
+        let exercise = PlanExercise(
+            name: "Split Squat",
+            sets: [PrescribedSet(reps: 8), PrescribedSet(reps: 8, kind: .drop),
+                   PrescribedSet(reps: 6, side: .left, kind: .drop)],
+            eachSide: true)
+        XCTAssertEqual(exercise.plannedSets.map(\.side), [.left, .right, .left, .right, .left])
+        XCTAssertEqual(exercise.plannedSets.map(\.kind), [nil, nil, .drop, .drop, .drop])
+        XCTAssertEqual(exercise.plannedSets.map(\.row), [0, 0, 1, 1, 2])
+    }
 }

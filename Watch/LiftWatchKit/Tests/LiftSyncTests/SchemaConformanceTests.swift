@@ -58,11 +58,16 @@ final class SchemaConformanceTests: XCTestCase {
                     name: "Bench Press",
                     equipment: "barbell",
                     note: "Pause the first rep",
+                    // Every key on every object, so this one set carries a
+                    // kind: a sender never writes one on a first set, but the
+                    // type carries what arrives and the schema has no notion
+                    // of position.
                     sets: [PrescribedSet(weightKg: 83.9, reps: 5, rpe: 8, restSeconds: 120,
-                                         side: .left)],
+                                         side: .left, kind: .drop)],
                     lastPerformed: LastPerformed(weightKg: 81.6, reps: 6, rpe: 8.5,
                                                  performedOn: "2026-09-13"),
-                    eachSide: true
+                    eachSide: true,
+                    group: 1
                 )]
             ),
             session: FinishedSession(
@@ -103,6 +108,18 @@ final class SchemaConformanceTests: XCTestCase {
         let schema = try Schema(file: "workout-sync.schema.json")
         let document = try XCTUnwrap(schema.sample() as? [String: Any])
         XCTAssertEqual(schema.violations(of: document, requireEveryProperty: true), [])
+    }
+
+    func testEverySetKindTheSwiftTypeKnowsIsInTheSchemaAndViceVersa() throws {
+        let schema = try Schema(file: "workout-sync.schema.json")
+        XCTAssertEqual(
+            Set(PlanSetKind.allCases.map(\.rawValue)),
+            try schema.enumValues(at: ["$defs", "prescribedSet", "properties", "kind"])
+        )
+        XCTAssertEqual(
+            Set(PlanSide.allCases.map(\.rawValue)),
+            try schema.enumValues(at: ["$defs", "prescribedSet", "properties", "side"])
+        )
     }
 
     func testTheSchemaCatchesADriftedKey() throws {

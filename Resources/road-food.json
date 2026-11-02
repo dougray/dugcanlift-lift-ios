@@ -7,6 +7,18 @@
       "kind": "burgers",
       "checkedOn": "2026-09-20",
       "source": "https://api.app.prd.wendys.digital/web-client-gateway/NutritionServices/rest/nutritionalData",
+      "allergenSource": "https://api.app.prd.wendys.digital/web-client-gateway/NutritionServices/rest/nutritionalData",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
       "items": [
         {
           "id": "wendys-grilled-chicken-ranch-wrap",
@@ -19,7 +31,12 @@
           "fiberG": 1,
           "saturatedFatG": 5,
           "sugarG": 2,
-          "sodiumMg": 1100
+          "sodiumMg": 1100,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
         },
         {
           "id": "wendys-4-pc-tenders",
@@ -32,7 +49,10 @@
           "fiberG": 1,
           "saturatedFatG": 5,
           "sugarG": 0,
-          "sodiumMg": 1390
+          "sodiumMg": 1390,
+          "allergens": [
+            "wheat"
+          ]
         },
         {
           "id": "wendys-large-chili",
@@ -45,7 +65,12 @@
           "fiberG": 4,
           "saturatedFatG": 7,
           "sugarG": 8,
-          "sodiumMg": 1390
+          "sodiumMg": 1390,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "wendys-chili-small",
@@ -58,7 +83,12 @@
           "fiberG": 3,
           "saturatedFatG": 4.5,
           "sugarG": 6,
-          "sodiumMg": 1050
+          "sodiumMg": 1050,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "wendys-double-stack",
@@ -71,7 +101,14 @@
           "fiberG": 1,
           "saturatedFatG": 9,
           "sugarG": 5,
-          "sodiumMg": 770
+          "sodiumMg": 770,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "wendys-bacon-double-stack",
@@ -84,7 +121,14 @@
           "fiberG": 1,
           "saturatedFatG": 10,
           "sugarG": 6,
-          "sodiumMg": 880
+          "sodiumMg": 880,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "wendys-daves-single",
@@ -98,7 +142,14 @@
           "saturatedFatG": 14,
           "sugarG": 9,
           "sodiumMg": 1170,
-          "modification": "Hold the mayo to save 50 kcal"
+          "modification": "Hold the mayo to save 50 kcal",
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         }
       ]
     },
@@ -108,6 +159,18 @@
       "kind": "burgers",
       "checkedOn": "2026-09-20",
       "source": "https://assets.ctfassets.net/whnlxz6bna9d/665Hn9SdgyT53pJgF9cmkK/090ae5fe05d8cd9643fb98fcde32ef1a/61667-1_FEE_0926_NUTBRO_SEPTEMBER_FA_rg_WCAG.pdf",
+      "allergenSource": "https://assets.ctfassets.net/whnlxz6bna9d/3NjTwdHq4GWH4nsiA9MzUz/d5ba77ec9d7733a1dc6f2577771133fb/61667-2_FEE_0926_ALLERGEN_SEPTEMBER_FA4_rg_WCAG.pdf",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
       "items": [
         {
           "id": "sonic-crispy-tenders-3-pc",
@@ -120,7 +183,12 @@
           "fiberG": 2,
           "saturatedFatG": 1,
           "sugarG": 0,
-          "sodiumMg": 730
+          "sodiumMg": 730,
+          "allergens": [
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "sonic-premium-chicken-bites-medium",
@@ -133,7 +201,11 @@
           "fiberG": 2,
           "saturatedFatG": 3,
           "sugarG": 0,
-          "sodiumMg": 1320
+          "sodiumMg": 1320,
+          "allergens": [
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "sonic-jr-double-cheeseburger",
@@ -146,7 +218,13 @@
           "fiberG": 2,
           "saturatedFatG": 8,
           "sugarG": 6,
-          "sodiumMg": 870
+          "sodiumMg": 870,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "sonic-original-sonic-smasher-double",
@@ -159,7 +237,14 @@
           "fiberG": 1,
           "saturatedFatG": 14,
           "sugarG": 8,
-          "sodiumMg": 1530
+          "sodiumMg": 1530,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "sonic-all-american-sonic-smasher-double",
@@ -172,7 +257,14 @@
           "fiberG": 2,
           "saturatedFatG": 14,
           "sugarG": 8,
-          "sodiumMg": 1650
+          "sodiumMg": 1650,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "sonic-breakfast-burrito-bacon",
@@ -185,7 +277,13 @@
           "fiberG": 1,
           "saturatedFatG": 11,
           "sugarG": 1,
-          "sodiumMg": 1540
+          "sodiumMg": 1540,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "sonic-1-percent-white-milk",
@@ -198,7 +296,10 @@
           "fiberG": 0,
           "saturatedFatG": 1.5,
           "sugarG": 12,
-          "sodiumMg": 125
+          "sodiumMg": 125,
+          "allergens": [
+            "milk"
+          ]
         }
       ]
     },
@@ -459,11 +560,415 @@
       ]
     },
     {
+      "id": "culvers",
+      "name": "Culver's",
+      "kind": "burgers",
+      "publishedOn": "2026-10-16",
+      "checkedOn": "2026-10-28",
+      "source": "https://www.culvers.com/nutrition-and-allergen-guide",
+      "allergenSource": "https://www.culvers.com/nutrition-and-allergen-guide",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
+      "items": [
+        {
+          "id": "culvers-grilled-chicken-sandwich",
+          "name": "Grilled Chicken Sandwich",
+          "serving": "1 sandwich",
+          "kcal": 480,
+          "proteinG": 36,
+          "fatG": 19,
+          "carbsG": 40,
+          "fiberG": 2,
+          "saturatedFatG": 6,
+          "sugarG": 9,
+          "sodiumMg": 1280,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
+        },
+        {
+          "id": "culvers-chicken-cashew-salad",
+          "name": "Chicken Cashew Salad",
+          "serving": "1 salad with grilled chicken, dressing listed separately",
+          "kcal": 430,
+          "proteinG": 41,
+          "fatG": 23,
+          "carbsG": 17,
+          "fiberG": 6,
+          "saturatedFatG": 8,
+          "sugarG": 5,
+          "sodiumMg": 1020,
+          "allergens": [
+            "milk",
+            "tree-nuts"
+          ]
+        },
+        {
+          "id": "culvers-cranberry-bacon-bleu-salad",
+          "name": "Cranberry Bacon Bleu Salad",
+          "serving": "1 salad with grilled chicken, dressing listed separately",
+          "kcal": 390,
+          "proteinG": 46,
+          "fatG": 16,
+          "carbsG": 18,
+          "fiberG": 5,
+          "saturatedFatG": 8,
+          "sugarG": 12,
+          "sodiumMg": 1490,
+          "allergens": [
+            "milk"
+          ]
+        },
+        {
+          "id": "culvers-garden-fresco-salad",
+          "name": "Garden Fresco Salad",
+          "serving": "1 salad with grilled chicken, dressing listed separately",
+          "kcal": 330,
+          "proteinG": 39,
+          "fatG": 12,
+          "carbsG": 19,
+          "fiberG": 5,
+          "saturatedFatG": 6,
+          "sugarG": 4,
+          "sodiumMg": 1090,
+          "allergens": [
+            "milk",
+            "wheat"
+          ]
+        },
+        {
+          "id": "culvers-butterburger-single",
+          "name": "ButterBurger, Single",
+          "serving": "1 burger, bun and patty only",
+          "kcal": 390,
+          "proteinG": 20,
+          "fatG": 17,
+          "carbsG": 38,
+          "fiberG": 1,
+          "saturatedFatG": 7,
+          "sugarG": 6,
+          "sodiumMg": 480,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "culvers-butterburger-double",
+          "name": "ButterBurger, Double",
+          "serving": "1 burger, bun and two patties only",
+          "kcal": 560,
+          "proteinG": 34,
+          "fatG": 30,
+          "carbsG": 38,
+          "fiberG": 1,
+          "saturatedFatG": 12,
+          "sugarG": 6,
+          "sodiumMg": 580,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "culvers-beef-pot-roast-sandwich",
+          "name": "Beef Pot Roast",
+          "serving": "1 sandwich",
+          "kcal": 410,
+          "proteinG": 31,
+          "fatG": 13,
+          "carbsG": 40,
+          "fiberG": 1,
+          "saturatedFatG": 6,
+          "sugarG": 8,
+          "sodiumMg": 740,
+          "allergens": [
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "culvers-georges-chili-medium",
+          "name": "George's Chili, Medium",
+          "serving": "1 medium, with crackers",
+          "kcal": 310,
+          "proteinG": 18,
+          "fatG": 13,
+          "carbsG": 31,
+          "fiberG": 6,
+          "saturatedFatG": 4.5,
+          "sugarG": 6,
+          "sodiumMg": 1490,
+          "allergens": [
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "culvers-original-chicken-tenders-2-piece",
+          "name": "Original Chicken Tenders, 2 Piece",
+          "serving": "2 tenders, no dipping sauce",
+          "kcal": 260,
+          "proteinG": 19,
+          "fatG": 11,
+          "carbsG": 21,
+          "fiberG": 1,
+          "saturatedFatG": 1,
+          "sugarG": 0,
+          "sodiumMg": 780,
+          "allergens": [
+            "wheat"
+          ]
+        },
+        {
+          "id": "culvers-white-milk",
+          "name": "White Milk",
+          "serving": "1 milk (1%, 227 g)",
+          "kcal": 110,
+          "proteinG": 8,
+          "fatG": 2.5,
+          "carbsG": 13,
+          "fiberG": 0,
+          "saturatedFatG": 1.5,
+          "sugarG": 12,
+          "sodiumMg": 130,
+          "allergens": [
+            "milk"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jackinthebox",
+      "name": "Jack in the Box",
+      "kind": "burgers",
+      "checkedOn": "2026-10-28",
+      "source": "https://cdn.sanity.io/files/j2jr32rk/content-production/5cbdb27f7f3cd5978732e01d566d4e11e064f0e4.pdf",
+      "allergenSource": "https://cdn.sanity.io/files/j2jr32rk/content-production/5cbdb27f7f3cd5978732e01d566d4e11e064f0e4.pdf",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
+      "items": [
+        {
+          "id": "jackinthebox-sourdough-grilled-chicken-club",
+          "name": "Sourdough Grilled Chicken Club",
+          "serving": "1 sandwich",
+          "kcal": 500,
+          "proteinG": 33,
+          "fatG": 23,
+          "carbsG": 40,
+          "fiberG": 3,
+          "saturatedFatG": 4.5,
+          "sugarG": 7,
+          "sodiumMg": 1440,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "jackinthebox-southwest-salad-with-grilled-chicken",
+          "name": "Southwest Salad with Grilled Chicken",
+          "serving": "1 salad, no dressing or crunchy toppings",
+          "kcal": 290,
+          "proteinG": 30,
+          "fatG": 9,
+          "carbsG": 25,
+          "fiberG": 7,
+          "saturatedFatG": 4.5,
+          "sugarG": 5,
+          "sodiumMg": 800,
+          "allergens": [
+            "milk"
+          ]
+        },
+        {
+          "id": "jackinthebox-garden-salad-with-grilled-chicken",
+          "name": "Garden Salad with Grilled Chicken",
+          "serving": "1 salad, no dressing or crunchy toppings",
+          "kcal": 210,
+          "proteinG": 25,
+          "fatG": 8,
+          "carbsG": 9,
+          "fiberG": 3,
+          "saturatedFatG": 4.5,
+          "sugarG": 2,
+          "sodiumMg": 800,
+          "allergens": [
+            "milk"
+          ]
+        },
+        {
+          "id": "jackinthebox-teriyaki-grilled-chicken-bowl",
+          "name": "Teriyaki Grilled Chicken Bowl",
+          "serving": "1 bowl, white rice",
+          "kcal": 590,
+          "proteinG": 28,
+          "fatG": 8,
+          "carbsG": 100,
+          "fiberG": 3,
+          "saturatedFatG": 2,
+          "sugarG": 26,
+          "sodiumMg": 1910,
+          "allergens": [
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "jackinthebox-jack-wrap-classic-grilled",
+          "name": "Jack Wrap - Classic Grilled",
+          "serving": "1 wrap",
+          "kcal": 270,
+          "proteinG": 15,
+          "fatG": 12,
+          "carbsG": 25,
+          "fiberG": 1,
+          "saturatedFatG": 4,
+          "sugarG": 1,
+          "sodiumMg": 980,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
+        },
+        {
+          "id": "jackinthebox-jack-wrap-spicy-grilled",
+          "name": "Jack Wrap - Spicy Grilled",
+          "serving": "1 wrap",
+          "kcal": 270,
+          "proteinG": 15,
+          "fatG": 12,
+          "carbsG": 25,
+          "fiberG": 1,
+          "saturatedFatG": 4,
+          "sugarG": 1,
+          "sodiumMg": 850,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
+        },
+        {
+          "id": "jackinthebox-crispy-chicken-strips-3-pc",
+          "name": "Crispy Chicken Strips (3 pc.)",
+          "serving": "3 strips, no dipping sauce",
+          "kcal": 470,
+          "proteinG": 33,
+          "fatG": 23,
+          "carbsG": 32,
+          "fiberG": 3,
+          "saturatedFatG": 2.5,
+          "sugarG": 2,
+          "sodiumMg": 1760,
+          "allergens": [
+            "milk",
+            "wheat"
+          ]
+        },
+        {
+          "id": "jackinthebox-jumbo-jack",
+          "name": "Jumbo Jack",
+          "serving": "1 burger",
+          "kcal": 520,
+          "proteinG": 23,
+          "fatG": 33,
+          "carbsG": 32,
+          "fiberG": 2,
+          "saturatedFatG": 10,
+          "sugarG": 6,
+          "sodiumMg": 700,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "jackinthebox-hamburger",
+          "name": "Hamburger",
+          "serving": "1 burger",
+          "kcal": 330,
+          "proteinG": 13,
+          "fatG": 18,
+          "carbsG": 30,
+          "fiberG": 1,
+          "saturatedFatG": 5,
+          "sugarG": 4,
+          "sodiumMg": 680,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "jackinthebox-milk",
+          "name": "Milk",
+          "serving": "1 milk (214 g)",
+          "kcal": 110,
+          "proteinG": 9,
+          "fatG": 2,
+          "carbsG": 12,
+          "fiberG": 0,
+          "saturatedFatG": 1.5,
+          "sugarG": 12,
+          "sodiumMg": 130,
+          "allergens": [
+            "milk"
+          ]
+        }
+      ]
+    },
+    {
       "id": "chickfila",
       "name": "Chick-fil-A",
       "kind": "chicken",
-      "checkedOn": "2026-09-20",
+      "checkedOn": "2026-10-28",
       "source": "https://www.chick-fil-a.com/nutrition-allergens",
+      "allergenSource": "https://www.chick-fil-a.com/nutrition-allergens",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
       "items": [
         {
           "id": "chickfila-8-ct-grilled-nuggets",
@@ -476,7 +981,8 @@
           "fiberG": 0,
           "saturatedFatG": 0.5,
           "sugarG": 1,
-          "sodiumMg": 440
+          "sodiumMg": 440,
+          "allergens": []
         },
         {
           "id": "chickfila-12-ct-grilled-nuggets",
@@ -489,7 +995,8 @@
           "fiberG": 0,
           "saturatedFatG": 1,
           "sugarG": 1,
-          "sodiumMg": 660
+          "sodiumMg": 660,
+          "allergens": []
         },
         {
           "id": "chickfila-grilled-filet",
@@ -502,7 +1009,8 @@
           "fiberG": 0,
           "saturatedFatG": 0,
           "sugarG": 1,
-          "sodiumMg": 370
+          "sodiumMg": 370,
+          "allergens": []
         },
         {
           "id": "chickfila-grilled-chicken-sandwich",
@@ -515,7 +1023,11 @@
           "fiberG": 3,
           "saturatedFatG": 2.5,
           "sugarG": 11,
-          "sodiumMg": 765
+          "sodiumMg": 765,
+          "allergens": [
+            "egg",
+            "wheat"
+          ]
         },
         {
           "id": "chickfila-grilled-chicken-club-w-colby-jack",
@@ -528,7 +1040,12 @@
           "fiberG": 3,
           "saturatedFatG": 8,
           "sugarG": 12,
-          "sodiumMg": 1055
+          "sodiumMg": 1055,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
         },
         {
           "id": "chickfila-egg-white-grill",
@@ -541,7 +1058,13 @@
           "fiberG": 1,
           "saturatedFatG": 4,
           "sugarG": 2,
-          "sodiumMg": 990
+          "sodiumMg": 990,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "chickfila-hash-brown-scramble-bowl-w-grilled-filet",
@@ -554,7 +1077,12 @@
           "fiberG": 2,
           "saturatedFatG": 8,
           "sugarG": 2,
-          "sodiumMg": 1200
+          "sodiumMg": 1200,
+          "allergens": [
+            "milk",
+            "egg",
+            "soy"
+          ]
         },
         {
           "id": "chickfila-8-ct-chick-fil-a-nuggets",
@@ -567,20 +1095,31 @@
           "fiberG": 0,
           "saturatedFatG": 2.5,
           "sugarG": 1,
-          "sodiumMg": 1210
+          "sodiumMg": 1210,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
         },
         {
           "id": "chickfila-chicken-tortilla-soup",
           "name": "Chicken Tortilla Soup",
           "serving": "1 serving (265 g)",
-          "kcal": 280,
-          "proteinG": 24,
-          "fatG": 7,
-          "carbsG": 31,
-          "fiberG": 17,
+          "kcal": 350,
+          "proteinG": 25,
+          "fatG": 11,
+          "carbsG": 39,
+          "fiberG": 18,
           "saturatedFatG": 2.5,
           "sugarG": 4,
-          "sodiumMg": 1060
+          "sodiumMg": 1115,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "chickfila-1-percent-milk",
@@ -593,7 +1132,10 @@
           "fiberG": 0,
           "saturatedFatG": 1.5,
           "sugarG": 10,
-          "sodiumMg": 105
+          "sodiumMg": 105,
+          "allergens": [
+            "milk"
+          ]
         }
       ]
     },
@@ -601,9 +1143,21 @@
       "id": "popeyes",
       "name": "Popeyes",
       "kind": "chicken",
-      "publishedOn": "2026-08",
-      "checkedOn": "2026-09-20",
+      "publishedOn": "2026-09",
+      "checkedOn": "2026-10-28",
       "source": "https://plk-use1-prod.sites.rbictg.com/nutrition/PLK_Nutrition.pdf",
+      "allergenSource": "https://plk-use1-prod.sites.rbictg.com/nutrition/Popeyes_US_Allergen.pdf",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
       "items": [
         {
           "id": "popeyes-blackened-tenders-3-piece",
@@ -616,7 +1170,8 @@
           "fiberG": 1,
           "saturatedFatG": 2,
           "sugarG": 0,
-          "sodiumMg": 860
+          "sodiumMg": 860,
+          "allergens": []
         },
         {
           "id": "popeyes-blackened-tenders-5-piece",
@@ -629,7 +1184,8 @@
           "fiberG": 1,
           "saturatedFatG": 4,
           "sugarG": 0,
-          "sodiumMg": 1430
+          "sodiumMg": 1430,
+          "allergens": []
         },
         {
           "id": "popeyes-tender-classic-1-piece",
@@ -642,7 +1198,13 @@
           "fiberG": 0,
           "saturatedFatG": 3,
           "sugarG": 0,
-          "sodiumMg": 570
+          "sodiumMg": 570,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "popeyes-tenders-classic-or-spicy-3-piece",
@@ -655,7 +1217,13 @@
           "fiberG": 1,
           "saturatedFatG": 9,
           "sugarG": 0,
-          "sodiumMg": 1700
+          "sodiumMg": 1700,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "popeyes-signature-chicken-breast",
@@ -668,7 +1236,13 @@
           "fiberG": 2,
           "saturatedFatG": 16,
           "sugarG": 1,
-          "sodiumMg": 1780
+          "sodiumMg": 1780,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "popeyes-signature-chicken-leg",
@@ -681,7 +1255,13 @@
           "fiberG": 1,
           "saturatedFatG": 6,
           "sugarG": 0,
-          "sodiumMg": 540
+          "sodiumMg": 540,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         }
       ]
     },
@@ -689,8 +1269,8 @@
       "id": "tacobell",
       "name": "Taco Bell",
       "kind": "mexican",
-      "publishedOn": "2026-09-24",
-      "checkedOn": "2026-09-24",
+      "publishedOn": "2026-10-26",
+      "checkedOn": "2026-10-28",
       "source": "https://www.tacobell.com/nutrition/info",
       "items": [
         {
@@ -962,6 +1542,18 @@
       "publishedOn": "2026-01",
       "checkedOn": "2026-09-20",
       "source": "https://media.subway.com/dam/urn:aaid:aem:2278372c-147b-42f2-8edc-7d8d94d1f07e/original/as/us-nutrition-en.pdf",
+      "allergenSource": "https://media.subway.com/dam/urn:aaid:aem:359a9f3d-2719-453b-9395-030f54968cbe/original/as/us-allergens-en.pdf",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
       "items": [
         {
           "id": "subway-6-grilled-chicken-fresh-avocado",
@@ -1052,7 +1644,10 @@
           "fiberG": 0,
           "saturatedFatG": 2,
           "sugarG": 1,
-          "sodiumMg": 210
+          "sodiumMg": 210,
+          "allergens": [
+            "soy"
+          ]
         },
         {
           "id": "subway-rotisserie-style-chicken-portion",
@@ -1065,7 +1660,208 @@
           "fiberG": 0,
           "saturatedFatG": 1,
           "sugarG": 0,
-          "sodiumMg": 400
+          "sodiumMg": 400,
+          "allergens": []
+        }
+      ]
+    },
+    {
+      "id": "arbys",
+      "name": "Arby's",
+      "kind": "sandwiches",
+      "publishedOn": "2026-10",
+      "checkedOn": "2026-10-28",
+      "source": "https://assets.ctfassets.net/30q5w5l98nbx/6CplhZeKpu7X9ts2pSE3Lg/624b24407875e1dbdf6f07f0da28897e/Arbys_Nutritional_and_Allergen_NOV_2026.pdf",
+      "allergenSource": "https://assets.ctfassets.net/30q5w5l98nbx/6CplhZeKpu7X9ts2pSE3Lg/624b24407875e1dbdf6f07f0da28897e/Arbys_Nutritional_and_Allergen_NOV_2026.pdf",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "fish",
+        "shellfish",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
+      "items": [
+        {
+          "id": "arbys-classic-roast-beef",
+          "name": "Classic Roast Beef",
+          "serving": "1 sandwich (Arby's Sauce and Horsey Sauce not counted)",
+          "kcal": 360,
+          "proteinG": 23,
+          "fatG": 14,
+          "carbsG": 37,
+          "fiberG": 2,
+          "saturatedFatG": 5,
+          "sugarG": 5,
+          "sodiumMg": 970,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "arbys-double-roast-beef",
+          "name": "Double Roast Beef",
+          "serving": "1 sandwich (Arby's Sauce and Horsey Sauce not counted)",
+          "kcal": 510,
+          "proteinG": 38,
+          "fatG": 24,
+          "carbsG": 38,
+          "fiberG": 2,
+          "saturatedFatG": 9,
+          "sugarG": 5,
+          "sodiumMg": 1610,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "arbys-half-pound-roast-beef",
+          "name": "Half Pound Roast Beef",
+          "serving": "1 sandwich (Arby's Sauce and Horsey Sauce not counted)",
+          "kcal": 610,
+          "proteinG": 48,
+          "fatG": 30,
+          "carbsG": 38,
+          "fiberG": 2,
+          "saturatedFatG": 12,
+          "sugarG": 5,
+          "sodiumMg": 2040,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "arbys-classic-french-dip-swiss-au-jus",
+          "name": "Classic French Dip & Swiss",
+          "serving": "1 sandwich, with au jus",
+          "kcal": 530,
+          "proteinG": 34,
+          "fatG": 21,
+          "carbsG": 50,
+          "fiberG": 2,
+          "saturatedFatG": 10,
+          "sugarG": 3,
+          "sodiumMg": 2540,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "arbys-ham-swiss-melt",
+          "name": "Ham & Swiss Melt",
+          "serving": "1 sandwich",
+          "kcal": 380,
+          "proteinG": 26,
+          "fatG": 13,
+          "carbsG": 40,
+          "fiberG": 2,
+          "saturatedFatG": 5,
+          "sugarG": 5,
+          "sodiumMg": 1370,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "sesame"
+          ]
+        },
+        {
+          "id": "arbys-chicken-tenders-3",
+          "name": "Chicken Tenders (3)",
+          "serving": "3 tenders (dipping sauce not counted)",
+          "kcal": 370,
+          "proteinG": 23,
+          "fatG": 18,
+          "carbsG": 28,
+          "fiberG": 2,
+          "saturatedFatG": 3,
+          "sugarG": 0,
+          "sodiumMg": 1190,
+          "allergens": [
+            "wheat"
+          ]
+        },
+        {
+          "id": "arbys-chicken-tenders-5",
+          "name": "Chicken Tenders (5)",
+          "serving": "5 tenders (dipping sauce not counted)",
+          "kcal": 610,
+          "proteinG": 39,
+          "fatG": 30,
+          "carbsG": 47,
+          "fiberG": 3,
+          "saturatedFatG": 4.5,
+          "sugarG": 0,
+          "sodiumMg": 1990,
+          "allergens": [
+            "wheat"
+          ]
+        },
+        {
+          "id": "arbys-roast-beef-slider",
+          "name": "Roast Beef Slider",
+          "serving": "1 slider",
+          "kcal": 180,
+          "proteinG": 11,
+          "fatG": 7,
+          "carbsG": 18,
+          "fiberG": 1,
+          "saturatedFatG": 3,
+          "sugarG": 4,
+          "sodiumMg": 520,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "arbys-ham-slider",
+          "name": "Ham Slider",
+          "serving": "1 slider",
+          "kcal": 170,
+          "proteinG": 11,
+          "fatG": 6,
+          "carbsG": 19,
+          "fiberG": 0,
+          "saturatedFatG": 2,
+          "sugarG": 4,
+          "sodiumMg": 600,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "arbys-shamrock-farms-lowfat-white-milk",
+          "name": "Shamrock Farms Lowfat White Milk",
+          "serving": "1 kids' milk (214 g)",
+          "kcal": 90,
+          "proteinG": 7,
+          "fatG": 2,
+          "carbsG": 10,
+          "fiberG": 0,
+          "saturatedFatG": 1.5,
+          "sugarG": 10,
+          "sodiumMg": 105,
+          "allergens": [
+            "milk"
+          ]
         }
       ]
     },
@@ -1075,6 +1871,7 @@
       "kind": "coffee",
       "checkedOn": "2026-09-20",
       "source": "https://www.starbucks.com/menu/product/2122117/single/nutrition",
+      "allergenSource": "https://www.starbucks.com/apiproxy/v1/ordering/",
       "items": [
         {
           "id": "starbucks-egg-white-roasted-red-pepper-egg-bites",
@@ -1087,7 +1884,11 @@
           "fiberG": 0,
           "saturatedFatG": 5,
           "sugarG": 3,
-          "sodiumMg": 470
+          "sodiumMg": 470,
+          "allergens": [
+            "milk",
+            "egg"
+          ]
         },
         {
           "id": "starbucks-bacon-gruyere-egg-bites",
@@ -1100,7 +1901,11 @@
           "fiberG": 0,
           "saturatedFatG": 12,
           "sugarG": 2,
-          "sodiumMg": 680
+          "sodiumMg": 680,
+          "allergens": [
+            "milk",
+            "egg"
+          ]
         },
         {
           "id": "starbucks-turkey-bacon-cheddar-egg-white-sandwich",
@@ -1113,7 +1918,12 @@
           "fiberG": 2,
           "saturatedFatG": 3.5,
           "sugarG": 2,
-          "sodiumMg": 600
+          "sodiumMg": 600,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
         },
         {
           "id": "starbucks-spinach-feta-egg-white-wrap",
@@ -1126,7 +1936,14 @@
           "fiberG": 3,
           "saturatedFatG": 3.5,
           "sugarG": 5,
-          "sodiumMg": 840
+          "sodiumMg": 840,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "starbucks-chicken-bacon-protein-pocket",
@@ -1139,7 +1956,13 @@
           "fiberG": 4,
           "saturatedFatG": 5,
           "sugarG": 3,
-          "sodiumMg": 880
+          "sodiumMg": 880,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "starbucks-jalapeno-chicken-pocket",
@@ -1152,7 +1975,11 @@
           "fiberG": 1,
           "saturatedFatG": 4,
           "sugarG": 3,
-          "sodiumMg": 460
+          "sodiumMg": 460,
+          "allergens": [
+            "milk",
+            "wheat"
+          ]
         },
         {
           "id": "starbucks-country-archer-hickory-smoke-turkey-jerky",
@@ -1189,6 +2016,16 @@
       "publishedOn": "2026-09-02",
       "checkedOn": "2026-09-20",
       "source": "https://www.panerabread.com/content/dam/panerabread/documents/c8-26-nutrition-guide.pdf",
+      "allergenSource": "https://www.panerabread.com/content/dam/panerabread/documents/c8-26-allergen-guide.pdf",
+      "allergensCovered": [
+        "milk",
+        "egg",
+        "tree-nuts",
+        "peanuts",
+        "wheat",
+        "soy",
+        "sesame"
+      ],
       "items": [
         {
           "id": "panera-green-goddess-cobb-salad-with-chicken-whole",
@@ -1201,7 +2038,11 @@
           "fiberG": 7,
           "saturatedFatG": 7,
           "sugarG": 15,
-          "sodiumMg": 1980
+          "sodiumMg": 1980,
+          "allergens": [
+            "milk",
+            "egg"
+          ]
         },
         {
           "id": "panera-green-goddess-chicken-wrap",
@@ -1214,7 +2055,13 @@
           "fiberG": 14,
           "saturatedFatG": 3,
           "sugarG": 10,
-          "sodiumMg": 1340
+          "sodiumMg": 1340,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "panera-chicken-caesar-wrap",
@@ -1240,7 +2087,14 @@
           "fiberG": 12,
           "saturatedFatG": 6,
           "sugarG": 6,
-          "sodiumMg": 1170
+          "sodiumMg": 1170,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "panera-turkey-cheddar-wrap",
@@ -1253,7 +2107,14 @@
           "fiberG": 12,
           "saturatedFatG": 6,
           "sugarG": 6,
-          "sodiumMg": 1160
+          "sodiumMg": 1160,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "panera-steak-wake-on-ciabatta",
@@ -1266,7 +2127,12 @@
           "fiberG": 2,
           "saturatedFatG": 9,
           "sugarG": 2,
-          "sodiumMg": 1000
+          "sodiumMg": 1000,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
         },
         {
           "id": "panera-hard-boiled-eggs",
@@ -1279,7 +2145,10 @@
           "fiberG": 0,
           "saturatedFatG": 3.5,
           "sugarG": 1,
-          "sodiumMg": 125
+          "sodiumMg": 125,
+          "allergens": [
+            "egg"
+          ]
         },
         {
           "id": "panera-homestyle-chicken-noodle-soup-bowl",
@@ -1292,7 +2161,170 @@
           "fiberG": 0,
           "saturatedFatG": 1.5,
           "sugarG": 3,
-          "sodiumMg": 1570
+          "sodiumMg": 1570,
+          "allergens": [
+            "egg",
+            "wheat"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dunkin",
+      "name": "Dunkin'",
+      "kind": "coffee",
+      "publishedOn": "2026-09-21",
+      "checkedOn": "2026-10-28",
+      "source": "https://assets.ctfassets.net/ubkcphxhphh0/3qEP8wMU2IFmLsLyEeWLuc/7bdae361f785d1611d25c4d859f8c721/DD_W7_nutrition_guide.pdf",
+      "allergenSource": "https://assets.ctfassets.net/ubkcphxhphh0/4M2wXyC5B3yPyD5DlI4MHA/84696105765eb3f1b77160de9f70da36/DD_W7_allergy_ingredient_guide.pdf",
+      "items": [
+        {
+          "id": "dunkin-egg-and-cheese-on-english-muffin",
+          "name": "Egg and Cheese on English Muffin",
+          "serving": "1 sandwich",
+          "kcal": 340,
+          "proteinG": 14,
+          "fatG": 15,
+          "carbsG": 38,
+          "fiberG": 1,
+          "saturatedFatG": 5,
+          "sugarG": 4,
+          "sodiumMg": 650,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "dunkin-bacon-egg-and-cheese-on-english-muffin",
+          "name": "Bacon, Egg and Cheese on English Muffin",
+          "serving": "1 sandwich",
+          "kcal": 420,
+          "proteinG": 19,
+          "fatG": 21,
+          "carbsG": 39,
+          "fiberG": 1,
+          "saturatedFatG": 7,
+          "sugarG": 4,
+          "sodiumMg": 900,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "dunkin-turkey-sausage-sandwich-on-english-muffin",
+          "name": "Turkey Sausage Sandwich on English Muffin",
+          "serving": "1 sandwich",
+          "kcal": 460,
+          "proteinG": 22,
+          "fatG": 24,
+          "carbsG": 39,
+          "fiberG": 1,
+          "saturatedFatG": 8,
+          "sugarG": 4,
+          "sodiumMg": 1040,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "dunkin-sourdough-breakfast-sandwich",
+          "name": "Sourdough Breakfast Sandwich",
+          "serving": "1 sandwich",
+          "kcal": 630,
+          "proteinG": 30,
+          "fatG": 31,
+          "carbsG": 58,
+          "fiberG": 3,
+          "saturatedFatG": 10,
+          "sugarG": 2,
+          "sodiumMg": 1300,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat"
+          ]
+        },
+        {
+          "id": "dunkin-turkey-sausage-wake-up-wrap",
+          "name": "Turkey Sausage Wake-Up Wrap",
+          "serving": "1 wrap",
+          "kcal": 230,
+          "proteinG": 11,
+          "fatG": 15,
+          "carbsG": 15,
+          "fiberG": 0,
+          "saturatedFatG": 5,
+          "sugarG": 1,
+          "sodiumMg": 660,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "dunkin-bacon-egg-and-cheese-wake-up-wrap",
+          "name": "Bacon, Egg and Cheese Wake-Up Wrap",
+          "serving": "1 wrap",
+          "kcal": 220,
+          "proteinG": 10,
+          "fatG": 13,
+          "carbsG": 15,
+          "fiberG": 0,
+          "saturatedFatG": 5,
+          "sugarG": 1,
+          "sodiumMg": 590,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "dunkin-egg-and-cheese-wake-up-wrap",
+          "name": "Egg and Cheese Wake-Up Wrap",
+          "serving": "1 wrap",
+          "kcal": 180,
+          "proteinG": 7,
+          "fatG": 10,
+          "carbsG": 14,
+          "fiberG": 0,
+          "saturatedFatG": 4,
+          "sugarG": 1,
+          "sodiumMg": 470,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "dunkin-hot-latte-with-skim-milk-large",
+          "name": "Hot Latte with Skim Milk (Large)",
+          "serving": "Large, skim milk, no sugar or swirl",
+          "kcal": 130,
+          "proteinG": 12,
+          "fatG": 0,
+          "carbsG": 20,
+          "fiberG": 0,
+          "saturatedFatG": 0,
+          "sugarG": 18,
+          "sodiumMg": 170,
+          "allergens": [
+            "milk"
+          ]
         }
       ]
     },
@@ -1300,8 +2332,8 @@
       "id": "sheetz",
       "name": "Sheetz",
       "kind": "gas-station-kitchen",
-      "publishedOn": "2026-09-23",
-      "checkedOn": "2026-09-24",
+      "publishedOn": "2026-10-23",
+      "checkedOn": "2026-10-28",
       "source": "https://www.sheetz.com/nutrition",
       "items": [
         {
@@ -1346,7 +2378,7 @@
         },
         {
           "id": "sheetz-skinny-grilled-chicken-half",
-          "name": "Skinny Grilled Chicken - Half",
+          "name": "Premium Chicken - Half",
           "serving": "1 half sub",
           "kcal": 510,
           "proteinG": 38,
@@ -1430,6 +2462,7 @@
       "kind": "gas-station-kitchen",
       "checkedOn": "2026-09-20",
       "source": "https://www.quiktrip.com/app/uploads/2025/09/nutritional-facts.pdf",
+      "allergenSource": "https://www.quiktrip.com/app/uploads/2025/09/nutritional-facts.pdf",
       "items": [
         {
           "id": "quiktrip-roast-beef-grab-go-wrap",
@@ -1442,7 +2475,12 @@
           "fiberG": 2,
           "saturatedFatG": 11,
           "sugarG": 2,
-          "sodiumMg": 1590
+          "sodiumMg": 1590,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "quiktrip-turkey-grab-go-wrap",
@@ -1455,7 +2493,12 @@
           "fiberG": 2,
           "saturatedFatG": 7,
           "sugarG": 2,
-          "sodiumMg": 1730
+          "sodiumMg": 1730,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "quiktrip-ham-grab-go-wrap",
@@ -1468,7 +2511,12 @@
           "fiberG": 2,
           "saturatedFatG": 8,
           "sugarG": 3,
-          "sodiumMg": 2070
+          "sodiumMg": 2070,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "quiktrip-stack-grab-go-wrap",
@@ -1481,7 +2529,12 @@
           "fiberG": 2,
           "saturatedFatG": 9,
           "sugarG": 2,
-          "sodiumMg": 1830
+          "sodiumMg": 1830,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "quiktrip-southwest-chicken-wrap",
@@ -1494,7 +2547,13 @@
           "fiberG": 3,
           "saturatedFatG": 12,
           "sugarG": 4,
-          "sodiumMg": 2000
+          "sodiumMg": 2000,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
         },
         {
           "id": "quiktrip-roast-beef-grab-go-wheat-half",
@@ -1507,7 +2566,13 @@
           "fiberG": 3,
           "saturatedFatG": 6,
           "sugarG": 5,
-          "sodiumMg": 780
+          "sodiumMg": 780,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "quiktrip-turkey-grab-go-wheat-half",
@@ -1520,7 +2585,13 @@
           "fiberG": 3,
           "saturatedFatG": 4.5,
           "sugarG": 5,
-          "sodiumMg": 890
+          "sodiumMg": 890,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         },
         {
           "id": "quiktrip-chicken-tenders-3",
@@ -1533,7 +2604,345 @@
           "fiberG": 3,
           "saturatedFatG": 4.5,
           "sugarG": 0,
-          "sodiumMg": 1490
+          "sodiumMg": 1490,
+          "allergens": [
+            "wheat",
+            "soy"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "loves",
+      "name": "Love's",
+      "kind": "gas-station-kitchen",
+      "checkedOn": "2026-10-28",
+      "source": "https://edge.sitecorecloud.io/lovestravela9dd-loves2161-lovesprod042a-cf5a/media/images/store-promotions/fda-list/loves-fresh-food-fda-master8242026.pdf",
+      "allergenSource": "https://edge.sitecorecloud.io/lovestravela9dd-loves2161-lovesprod042a-cf5a/media/images/store-promotions/fda-list/loves-fresh-food-fda-master8242026.pdf",
+      "items": [
+        {
+          "id": "loves-hot-and-spicy-chicken-drumsticks",
+          "name": "Hot & Spicy Chicken Drumsticks",
+          "serving": "1 serving (10 oz, 291g)",
+          "kcal": 510,
+          "proteinG": 51,
+          "fatG": 33,
+          "carbsG": 6,
+          "fiberG": 0,
+          "saturatedFatG": 8,
+          "sugarG": 0,
+          "sodiumMg": 1770,
+          "allergens": [
+            "wheat"
+          ]
+        },
+        {
+          "id": "loves-chicken-caesar-salad",
+          "name": "Chicken Caesar Salad",
+          "serving": "1 salad (9.7 oz, 274g)",
+          "kcal": 210,
+          "proteinG": 23,
+          "fatG": 8,
+          "carbsG": 12,
+          "fiberG": 4,
+          "saturatedFatG": 3.5,
+          "sugarG": 3,
+          "sodiumMg": 800,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "loves-southwest-chicken-salad",
+          "name": "Southwest Chicken Salad",
+          "serving": "1 salad (12.4 oz, 352g)",
+          "kcal": 370,
+          "proteinG": 27,
+          "fatG": 18,
+          "carbsG": 26,
+          "fiberG": 6,
+          "saturatedFatG": 6,
+          "sugarG": 8,
+          "sodiumMg": 770,
+          "allergens": [
+            "milk",
+            "soy"
+          ]
+        },
+        {
+          "id": "loves-chef-salad",
+          "name": "Chef Salad",
+          "serving": "1 salad (9.2 oz, 261g)",
+          "kcal": 260,
+          "proteinG": 20,
+          "fatG": 17,
+          "carbsG": 6,
+          "fiberG": 2,
+          "saturatedFatG": 8,
+          "sugarG": 1,
+          "sodiumMg": 890,
+          "allergens": [
+            "milk",
+            "egg"
+          ]
+        },
+        {
+          "id": "loves-ham-egg-and-cheese-omelet-bowl",
+          "name": "Ham Egg & Cheese Omelet Bowl",
+          "serving": "1 bowl (6.5 oz, 184g)",
+          "kcal": 320,
+          "proteinG": 23,
+          "fatG": 23,
+          "carbsG": 4,
+          "fiberG": 0,
+          "saturatedFatG": 9,
+          "sugarG": 4,
+          "sodiumMg": 1080,
+          "allergens": [
+            "milk",
+            "egg"
+          ]
+        },
+        {
+          "id": "loves-hard-boiled-eggs",
+          "name": "Hard-Boiled Eggs",
+          "serving": "1 serving (3.14 oz, 89g); the chart lists 2 servings per pack",
+          "kcal": 120,
+          "proteinG": 12,
+          "fatG": 8,
+          "carbsG": 0,
+          "fiberG": 0,
+          "saturatedFatG": 3,
+          "sugarG": 0,
+          "sodiumMg": 130,
+          "allergens": [
+            "egg"
+          ]
+        },
+        {
+          "id": "loves-chicken-taco",
+          "name": "Chicken Taco",
+          "serving": "1 taco (4.6 oz, 130g)",
+          "kcal": 280,
+          "proteinG": 17,
+          "fatG": 12,
+          "carbsG": 23,
+          "fiberG": 0,
+          "saturatedFatG": 5,
+          "sugarG": 1,
+          "sodiumMg": 900,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "loves-club-wrap",
+          "name": "Club Wrap",
+          "serving": "1 serving (5.7 oz, 162g); the chart lists 2 servings per container",
+          "kcal": 330,
+          "proteinG": 18,
+          "fatG": 15,
+          "carbsG": 29,
+          "fiberG": 1,
+          "saturatedFatG": 5,
+          "sugarG": 2,
+          "sodiumMg": 1160,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "loves-spicy-chicken-sandwich",
+          "name": "Spicy Chicken Sandwich",
+          "serving": "1 sandwich (6.5 oz, 184g)",
+          "kcal": 400,
+          "proteinG": 23,
+          "fatG": 11,
+          "carbsG": 56,
+          "fiberG": 2,
+          "saturatedFatG": 2,
+          "sugarG": 7,
+          "sodiumMg": 1490,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pilotflyingj",
+      "name": "Pilot Flying J",
+      "kind": "gas-station-kitchen",
+      "checkedOn": "2026-10-28",
+      "source": "https://pilotcompany.com/file/nutrition-facts",
+      "allergenSource": "https://pilotcompany.com/file/nutrition-facts",
+      "items": [
+        {
+          "id": "pilotflyingj-roasted-half-chicken",
+          "name": "Roasted Half Chicken",
+          "serving": "1 half chicken (252g)",
+          "kcal": 540,
+          "proteinG": 60,
+          "fatG": 30,
+          "carbsG": 6,
+          "fiberG": 0,
+          "saturatedFatG": 8,
+          "sugarG": 3,
+          "sodiumMg": 1830,
+          "allergens": [
+            "milk"
+          ]
+        },
+        {
+          "id": "pilotflyingj-chicken-bacon-ranch-wrap",
+          "name": "Chicken Bacon Ranch Wrap",
+          "serving": "1 wrap (305g)",
+          "kcal": 710,
+          "proteinG": 43,
+          "fatG": 36,
+          "carbsG": 52,
+          "fiberG": 3,
+          "saturatedFatG": 15,
+          "sugarG": 3,
+          "sodiumMg": 2070,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "pilotflyingj-smoked-turkey-and-cheddar-sandwich",
+          "name": "Smoked Turkey & Cheddar Sandwich",
+          "serving": "1 sandwich (236g)",
+          "kcal": 600,
+          "proteinG": 38,
+          "fatG": 26,
+          "carbsG": 57,
+          "fiberG": 4,
+          "saturatedFatG": 9,
+          "sugarG": 14,
+          "sodiumMg": 1200,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "pilotflyingj-classic-ham-and-cheddar-sandwich",
+          "name": "Classic Ham & Cheddar Sandwich",
+          "serving": "1 sandwich (259g)",
+          "kcal": 610,
+          "proteinG": 42,
+          "fatG": 27,
+          "carbsG": 53,
+          "fiberG": 4,
+          "saturatedFatG": 11,
+          "sugarG": 8,
+          "sodiumMg": 1590,
+          "allergens": [
+            "milk",
+            "wheat"
+          ]
+        },
+        {
+          "id": "pilotflyingj-chef-salad",
+          "name": "Chef Salad",
+          "serving": "1 salad (418g), dressing listed separately",
+          "kcal": 360,
+          "proteinG": 36,
+          "fatG": 21,
+          "carbsG": 11,
+          "fiberG": 3,
+          "saturatedFatG": 10,
+          "sugarG": 7,
+          "sodiumMg": 1140,
+          "allergens": [
+            "milk",
+            "egg",
+            "soy"
+          ]
+        },
+        {
+          "id": "pilotflyingj-chicken-tender-salad",
+          "name": "Chicken Tender Salad",
+          "serving": "1 salad (382g), dressing listed separately",
+          "kcal": 510,
+          "proteinG": 40,
+          "fatG": 32,
+          "carbsG": 17,
+          "fiberG": 3,
+          "saturatedFatG": 13,
+          "sugarG": 6,
+          "sodiumMg": 1670,
+          "allergens": [
+            "milk",
+            "egg",
+            "wheat",
+            "soy"
+          ]
+        },
+        {
+          "id": "pilotflyingj-boiled-egg-cup",
+          "name": "Boiled Egg Cup",
+          "serving": "1 cup (180g)",
+          "kcal": 280,
+          "proteinG": 24,
+          "fatG": 20,
+          "carbsG": 4,
+          "fiberG": 0,
+          "saturatedFatG": 6,
+          "sugarG": 4,
+          "sodiumMg": 220
+        },
+        {
+          "id": "pilotflyingj-spicy-chicken-sandwich",
+          "name": "Spicy Chicken Sandwich",
+          "serving": "1 sandwich (259g)",
+          "kcal": 630,
+          "proteinG": 36,
+          "fatG": 31,
+          "carbsG": 51,
+          "fiberG": 1,
+          "saturatedFatG": 9,
+          "sugarG": 5,
+          "sodiumMg": 1840,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
+        },
+        {
+          "id": "pilotflyingj-classic-steak-burger",
+          "name": "Classic Steak Burger",
+          "serving": "1 burger (159g)",
+          "kcal": 460,
+          "proteinG": 27,
+          "fatG": 26,
+          "carbsG": 32,
+          "fiberG": 0,
+          "saturatedFatG": 10,
+          "sugarG": 6,
+          "sodiumMg": 880,
+          "allergens": [
+            "milk",
+            "wheat",
+            "soy",
+            "sesame"
+          ]
         }
       ]
     }

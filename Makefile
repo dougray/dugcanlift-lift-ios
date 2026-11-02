@@ -20,8 +20,9 @@ DEST        := platform=iOS Simulator,name=$(SIM)
 # --- The watch app -----------------------------------------------------------
 #
 # LIFT for Apple Watch is a target of this project (Watch/, scheme LiftWatch),
-# embedded in Lift.app at Lift.app/Watch/LIFT.app. The product is LIFT.app,
-# not LiftWatch.app.
+# embedded in Lift.app at Lift.app/Watch/LiftWatch.app. Its product is named
+# after its target, not LIFT.app: that name and Lift.app collide in an
+# archive's dSYMs folder on a case-insensitive disk.
 #
 # The watch simulator is the one paired with $(SIM), because the watch app
 # only reaches the phone app through WatchConnectivity, and that only runs
@@ -41,7 +42,7 @@ WATCH_DEST  := platform=watchOS Simulator,name=$(WATCH_SIM)
 # Built inside the iPhone app by `make build`. The simulator does not install
 # an embedded watch app on the paired watch the way a real iPhone's Watch app
 # does, so watch-run installs it by hand, as Xcode itself does.
-EMBEDDED_WATCH_APP := $(APP)/Watch/LIFT.app
+EMBEDDED_WATCH_APP := $(APP)/Watch/LiftWatch.app
 
 # --- Real hardware -----------------------------------------------------------
 #
@@ -52,7 +53,7 @@ DEVICE_DERIVED := .build/DerivedData-device
 DEVICE_APP     := $(DEVICE_DERIVED)/Build/Products/Debug-iphoneos/Lift.app
 
 # The watch app a device build embeds, for installing on a real watch.
-DEVICE_WATCH_APP := $(DEVICE_APP)/Watch/LIFT.app
+DEVICE_WATCH_APP := $(DEVICE_APP)/Watch/LiftWatch.app
 
 # The paired Apple Watch, as devicectl identifies it. Override for a specific
 # one:  make watch-device WATCH=4D719BE4-2671-5442-9549-24676B854EB2

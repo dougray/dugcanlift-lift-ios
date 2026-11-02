@@ -5,12 +5,12 @@ import LiftCore
 /// Import a recipe by pasting the text of one — a video caption, an email, a
 /// card off the fridge retyped.
 ///
-/// The fourth way into COOK, and the second that needs no connection. It
-/// exists because `RecipeImportView` can only read a page that labelled its
-/// own ingredients: social video never does. TikTok, Instagram and Reels
-/// publish no schema.org `Recipe` at all, YouTube publishes a `VideoObject`,
-/// and all of them hand a plain fetch a JavaScript shell. The recipe in those
-/// is prose in a caption, so this reads the prose.
+/// The fourth way into COOK, and none of them needs LIFT to reach the network.
+/// It exists because `RecipeImportView` can only review a recipe whose page
+/// labelled its own ingredients, which is all Safari's share sheet can hand
+/// over: social video never does. TikTok, Instagram and Reels publish no
+/// schema.org `Recipe` at all, and YouTube publishes a `VideoObject`. The
+/// recipe in those is prose in a caption, so this reads the prose.
 ///
 /// **An editor, not a review, and that difference is the safety argument.**
 /// `RecipeImportView` reviews because JSON-LD is labelled — the publisher
@@ -111,9 +111,10 @@ struct RecipePasteImportView: View {
 
                 // Says plainly where this is the wrong tool, so a recipe site
                 // does not get pasted in as one long ingredient.
+                // The second sentence is the kit's shared bookmarklet wording.
                 detail("For a recipe written out as text — a video caption, an email, a "
-                       + "handwritten card. For a recipe website, \"Import from a link\" "
-                       + "reads the page itself and gets more of it.")
+                       + "handwritten card. A recipe website's address will not work here. "
+                       + "Use Send recipes from your browser for a website instead.")
             }
         }
     }
@@ -190,7 +191,7 @@ struct RecipePasteImportView: View {
         case .labelled:
             return "One per line. Split on the headings in the text — check it read them right."
         case .inferred:
-            return "One per line. The text labelled one section and this worked out the rest, "
+            return "One per line. The text labeled one section and this worked out the rest, "
                  + "so check the division before saving."
         case .unsorted, .none:
             return "One per line. The text had no headings, so everything landed here — cut "

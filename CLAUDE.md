@@ -29,7 +29,8 @@ entitlements, Info.plist keys or capabilities, edit `project.yml` and run
   local `Sources/Reference/` — that directory no longer exists here.
 - **`Sources/Widgets/`** — WidgetKit extension and Live Activities.
 - **`Sources/ShareExtension/`** — the `LiftShare` share extension (see "A
-  coach's plan link, and why Universal Links are not the answer" below).
+  coach's plan link, and why Universal Links are not the answer" below, and
+  "LIFT makes no network calls" for how a recipe arrives from Safari).
 - **`Watch/`** — LIFT for Apple Watch, this app's companion: the `LiftWatch`
   target (`Watch/LiftWatch`), its `LiftWatchKit` package, and the sync
   contracts (`Watch/contracts`). See "The Apple Watch app" below and
@@ -62,7 +63,8 @@ so a link that opens one way opens every way and one that fails, fails alike:
    push, not a sheet: Settings is itself a sheet, and a second `.sheet` on
    `CoachSection` opened the screen and closed both again.
 3. **The share extension** (`LiftShare`, `Sources/ShareExtension/`). "LIFT"
-   appears in the share sheet for a URL or text; it says what the plan is
+   appears in the share sheet for a URL or text, or a web page in Safari (where
+   a page with no plan link may offer its recipe instead); it says what the plan is
    ("Plan from Doug · 1 workout · 1 scheduled day") or why it will not take it,
    and on Add queues the *fragment* in the existing App Group
    `group.com.dugcanlift.lift` (`PendingPlanLinks`). `LiftApp` drains the queue
@@ -77,9 +79,12 @@ The extension in particular **does not open the app and does not write
 SwiftData** -- iOS gives a share extension no supported way to open its
 containing app, and a routine appearing in someone's library from a share
 sheet is not a decision the share sheet gets to make. It compiles only
-`PlanLinkExtractor.swift`, `PlanLinkIntake.swift` and `PendingPlanLinks.swift`
+`PlanLinkExtractor.swift`, `PlanLinkIntake.swift`, `RoadPickLink.swift`,
+`PendingPlanLinks.swift`, `PendingRecipeImports.swift` and `RecipePageShare.swift`
 from `Sources/Shared`, listed file by file, and links `LiftCore` only: never
-SwiftData models, never `LiftReference`. It has its own
+SwiftData models, never `LiftReference`. The recipe path is decided before the
+lifter-id gate, because a recipe needs no id; a plan link always wins over a
+recipe. It has its own
 `PrivacyInfo.xcprivacy`, because an extension is its own bundle. It is a new
 bundle id, `com.dugcanlift.lift.share`, so the next free-team device build
 registers one more App ID (ten per seven days is the cap).
@@ -106,7 +111,11 @@ queueing a plan it could not check.
 fragment with `history.replaceState` as soon as it has read it, exactly as the
 Coach web app does, so sharing from Safari after the page loaded sends
 `https://www.dugcanlift.com/lift/`. `isLiftPageWithoutPlan` recognises that and
-says to share from the message it arrived in instead.
+says to share from the message it arrived in instead. Safari may pass only the
+page, with no URL of its own, so `RecipeShareDecision.useLinkFlow` carries the
+page's address to the link flow beside the shared text, and
+`PlanLinkExtractor.isLink` is the one predicate both the decision and its tests
+use.
 
 ## Conventions that matter
 
@@ -119,12 +128,107 @@ read time.
 **Weights are always kilograms.** Every stored weight is metric. `WeightUnit`
 handles display conversion at the view layer only. Never persist pounds.
 
+The one exception is the rack, and it is not a weight anyone lifted.
+`PlateSetup` (Settings › Training › Plates and bars) keeps a 45 lb plate as 45
+under `plateSetup.pounds` and a 20 kg plate as 20 under `plateSetup.kilograms`:
+those are the sizes stamped on the equipment, one rack per unit, never mixed
+and never converted. Stored as kilograms a 45 would come back as 44.9999 and
+miss its own pair. A set's weight is still kilograms, and `PlateLine` converts
+it for display before asking which plates make it.
+
+## Live sessions
+
+**A live session is the "training now" overlay** (`WorkoutDay.liveStartedAt`
+set, `liveEndedAt` nil). Three things follow it, and nothing else does:
+
+- **The screen stays on** (`LiveSessionScreen`, attached once at the root so it
+  holds on every tab). A session nobody ended stops holding after eight hours,
+  as long as iOS keeps a Live Activity, and the modifier *waits* for that
+  moment: a screen held awake never changes scene phase, so nothing else
+  would ask again.
+- **Each set gets a done tick**, which is the set's own `completedAt` (already
+  in backups). Ticking starts a rest of `WatchPlanSettings` "Rest between
+  sets", the watch's own setting, so the two never disagree.
+- **The rest is `RestTimer`**: one at a time; the next tick restarts it;
+  unticking or deleting the set that started it takes it back; End ends it.
+  Kept in `UserDefaults` so iOS ending LIFT mid-rest loses nothing. Its outlets
+  are a local notification at the end (scheduled on the main actor after
+  permission is answered, and only if that rest is still the one wanted) and a
+  Live Activity (`Sources/Widgets/RestActivityWidget.swift`, state
+  `RestCountdown` in `Sources/Shared`). The activity is only ever started and
+  updated by the app, with no push token.
+
+**What the app cannot do: end a finished rest's activity while suspended.**
+Past its end the activity is stale and reads "Rest over", and it goes the next
+time LIFT is opened or the session is ended. Ending it from the device without
+the app running would take a push, and LIFT has no server.
+
 **Set `dayKey` whenever you set a date.** Day-scoped queries use the normalised
 string key, not date-range predicates. The two must stay consistent.
 
 **HealthKit writes must be idempotent.** Check `healthKitUUID` before writing;
 set it after. Background sync retries, and duplicated Health entries are very
 visible to users.
+
+**LIFT makes no network calls.** Nothing in the app, its share extension, its
+widget or its watch app requests anything from any server — the in-house rule
+(LIFT superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
+`NoNetworkTests`, which fails `make test` on `URLSession`, `URLRequest`,
+`NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
+`AsyncImage(` in any Swift file under `Sources/`, `Watch/LiftWatch` or
+`Watch/LiftWatchKit/Sources` (the watch is outside `Sources/`, and the phone
+compiles `LiftSync` from there too), and on `fetch(`, `XMLHttpRequest`,
+`WebSocket`, `sendBeacon` or `import(` in any JavaScript file there
+(`RecipePage.js`). WatchConnectivity is the phone and watch talking to each
+other, and HealthKit is the OS's own local store; neither is a request to a
+server. A target added outside those folders must be added to
+`NoNetworkTests.shippedRoots`. A recipe on the web arrives **from Safari**:
+the share extension's `RecipePage.js` hands over the page's JSON-LD, the
+extension queues the raw block (`PendingRecipeImports`), and `RecipeImportView`
+re-reads it with `LiftCore.RecipeJSONLD` for review. LIFT never fetches the
+page.
+
+**A shared recipe opens through `RecipeReviewQueue`, one at a time.** A recipe
+drained from the App Group is gone from disk, and SwiftUI shows one
+presentation at a time on a view and silently drops a second: presenting a
+review beside `LiftApp`'s plan sheet or refusal alert could strand it, with
+nothing left to retry from. So the queue holds the rules, as a value type with
+no view in it for the reason `PlanLinkIntake` is one. One review at a time. A
+review waits for the plan sheet and the refusal alert, and Command-comma does
+not open Settings while `LiftApp` has a review, a plan or a refusal up. A
+review whose sheet never appeared (`markAppeared` never came) was dropped, and
+is retried on the next activation as a new item, so the sheet sees something
+new to present. A plan or refusal
+arriving mid-review is held, and every held one is shown in order, before the
+next recipe. The same recipe queued twice is one review. The sheet closes only
+by Cancel or Save -- no swipe. `RecipeReviewQueueTests` pins the queue's rules,
+and the queue is Coach iOS's, kept in step with it. Do not simplify back to
+binding the sheet to the first waiting item: that is the version that loses a
+recipe whenever anything else is on screen.
+
+**The loss window is accepted, and it is this one.** The App Group queue is
+emptied when it is drained, not when a review is saved, so Cancel, or the app
+being killed mid-review, means sharing the page from Safari again -- the step
+the lifter took the first time. Accepted, not an oversight to work around.
+
+**A recipe also arrives from a bookmark**, for the browsers Safari's share
+sheet does not reach (Chrome on iPhone). The "Send to LIFT" bookmarklet reads
+the page's JSON-LD in the browser and opens `dugcanliftlift://recipe#r1...`;
+the contract, the wire format and the rules every build follows are
+dugcanlift-kit's `bookmarklet/README.md`. `RecipeLink` is a port of the kit's
+`recipe-link.mjs`, refusal for refusal, and decodes to the same
+`SharedRecipePage` Safari produces. `IncomingLink` sends the `recipe` host to
+it and every other `dugcanliftlift://` URL to `PlanLinkIntake` as before, so a
+plan and a recipe are never read as each other. The recipe joins the App Group
+queue a Safari share fills (`RecipeIntake.received`) and opens the same
+`RecipeImportView`, one at a time. Cook's "Send recipes from your browser"
+shows the kit's `liftApp` string. Its words, and the two refusals ("That recipe
+link could not be read, so nothing was added. ..." and "That page has no recipe
+LIFT can read. ..."), are the wording shared by every build: change them in all
+or in none. `Resources/bookmarklets.json` and `bookmarklets.sha256` are
+copied from the kit together and `BookmarkletTests` hashes what the bundle
+holds, as `RoadFoodDataTests` does; `Tests/Fixtures/recipe-link*.{txt,json}`
+are the kit's fixture pair. Never edit or regenerate any of them here.
 
 **A pasted recipe is edited, not reviewed.** `RecipeImportView` can review
 because a page's JSON-LD is labelled — the publisher said which strings are
@@ -135,8 +239,8 @@ or none) and its yield rule (a line must open with a yield word and carry a
 number) are both pinned in the kit, and the looser versions silently removed a
 real line or halved every macro in a dish. Social video is out of reach by
 design — no site among TikTok, Instagram, Reels or YouTube publishes a
-schema.org `Recipe` — so pasting the caption is the supported path, not a
-workaround waiting on a better scraper.
+schema.org `Recipe` — so pasting the caption is the supported path, not a gap
+to close: LIFT never fetches a page.
 
 **A shared route is opt-in and trimmed.** Send to Coach always carries runs,
 walks and hikes as times, distances and bests (`o`, `ob`), but the newest
@@ -260,9 +364,61 @@ plan (as two-sided sets, weights intact) against Coach web's fixture
 watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
 companion move.
 
+**A coach's plan can carry set types** (PLAN-FORMAT.md "Set types"; the LIFT
+superproject's `2026-10-28-set-types-design.md`): `g`, a positive integer on
+adjacent exercises done round by round (two a superset, three or more a
+circuit), and bits 3-4 of a set tuple's sixth position, `1` drop and `2`
+rest-pause. **`g` is read app-side** by `PlanGroupLink`, off the same fragment,
+for the reason `rf` is -- `PlanWorkoutExercise` is LiftKit's and has no `g` --
+and rides in `PlanLinkIntake.IncomingPlan.exerciseGroups`; it is in
+`PlanImporter.hash` and an ungrouped plan writes no key, so it hashes as before.
+The kind needs no reader: `SetKind(planTuple:)` masks the tuple `PlanPayload`
+already decodes, and `PlanSetFlags.sideBits` still reads a left drop set (10) as
+left. **Only a JSON positive integer is a group, adjacency makes the group, a
+group of one is none, and an exercise's first set is always straight**
+(`SetKind.at`). The rules are `ExerciseGrouping`, Coach web's `prescriptions.js`
+and Coach iPhone's `PrescriptionTypes.swift` rule for rule: storage is
+renumbered 1, 2, 3; "Superset with next" joining onto a group takes the whole
+group, splitting keeps what is before the split; labels "Superset A" / "Circuit
+A" with members A1, A2; a set reads side then kind ("30 x 12 L drop").
+
+**Kept in `RoutineSetTypes`, a `UserDefaults` side-car** like `PlanSides` and for
+its reason: groups by `RoutineExercise.id`, kinds by `RoutinePrescribedSet.id`.
+`startSession` copies them onto the day by `ExerciseEntry.id` / `SetEntry.id`,
+offsetting a second routine's group numbers so two supersets started on one day
+never merge into a circuit by being neighbours; a sided set, logged by Add set
+rather than pre-filled, takes its kind from `CoachPrescribedSet.kind` in
+`PlanSides.logged`. `RoutineRemoval` sweeps the routine's entries and leaves the
+logged copies. The routine's exercises open from its name on Routines
+(`RoutineDetailView`): the set types are editable there, the numbers are not --
+this build has never had a routine editor for them. Under an exercise's name
+there, **"set 3 drop, set 4 rest-pause"** names its kinded sets by number from
+1, and says nothing when every set is straight (`SetKindLine`): LIFT Android's
+`RoutineExercise.summary` line and LIFT web's `routineSetKindsLine`, word for
+word. Change it in all three LIFT builds or in none. **Not in the backup**: this
+build writes no `routines[]` at all (a file's `routines` section is held and
+written back untouched, `group` and `kind` included), so there is nowhere for
+BACKUP-FORMAT's two fields to go until it does.
+
+**The rest follows the round** (`SessionRest`, a value type with tests; Train's
+day decides, because the next set may be another exercise's). The order is
+round by round across a group, skipping a member that has run out. Ticking a set
+while another set of its round is not ticked starts no rest and the banner says
+"Next: Seated Cable Rows"; the round's last tick starts the Settings rest.
+Otherwise the next not-ticked set decides: a drop set is no rest and "Drop set
+next", rest-pause is 15 seconds (fixed, not a setting). A tick with no rest ends
+a rest still running. Rest turned off in Settings is still nothing at all.
+`RestTimer.cue` is the no-rest line: not persisted, not on the lock screen. The
+watch's `WorkoutPlan` carries no set types yet, as it carries no sides. Nothing
+here reaches a coach: SHARE-FORMAT has no set type, so a drop set goes to them as
+an ordinary set. `Tests/Fixtures/web-plan-set-types.txt` is Coach web's own;
+never regenerate it from Swift.
+
 **A struct a model stores is part of the schema.** SwiftData flattens
-`NutritionFacts` into one column per field on FoodEntry, Recipe and
-PlannedMeal, so a new field in LiftKit is a schema change here. LiftKit 1.9.0's
+`NutritionFacts` into one column per field on FoodEntry, Recipe, PlannedMeal
+and `RememberedFood.per100g`, so a new field in LiftKit is a schema change
+here, and the version that adds it must freeze `RememberedFood`'s V10 shape
+alongside the others. LiftKit 1.9.0's
 `saturatedFatG` needed `LiftSchemaV7` and a frozen seven-field copy; without it
 every existing install failed to open its store (134504). Verify any schema
 change by installing over a store the previous build wrote, not only in tests —
@@ -290,6 +446,31 @@ inside `#if DEBUG`) and a release build hides Road Food entirely. Blank stays
 blank: a missing fibre, saturated fat, sugar or sodium logs as nil, and an item
 missing one of the four core macros is not logged at all, because
 `NutritionFacts` would store it as zero. No location, ever.
+
+**A meal can be put together before it is ordered** (`RoadFoodMeal`, build
+plan item 3). The "+" on a row adds that item to a tray pinned to the bottom of
+the screen. The tray reads "2 items · 520 kcal · 40 g protein · fits, 380 kcal
+to spare" against Home's number, and "Log meal" logs each item as its own
+entry, exactly as "Log it" would.
+- Only items that can be logged can be added, so a total is never a partial
+  sum passed off as a whole.
+- The tray isn't kept: a new place is a new order.
+- It needs no course field in the data. It is a LIFT-only feature, and nothing
+  goes on the wire.
+
+**Avoiding allergens is one-sided on purpose** (`RoadFoodAllergens`, build
+plan item 2). The data is what each chain's own allergen chart says an item
+**contains**, and a chain's `allergensCovered` is set only where the chart
+says what it covers.
+- An item containing something avoided is hidden and counted.
+- An item the chart is silent on, or a chart that doesn't cover the allergen,
+  stays on screen with "Milk not stated". A list that hid only what it knew
+  about would read as safe when it isn't.
+- Nothing says "safe".
+- The Avoid row says the chart is the chain's own and that cross-contact isn't
+  covered.
+- The avoid list is `roadFoodAvoid` in `UserDefaults`, shared by every place;
+  avoiding nothing removes the key.
 
 **The copy is pinned to the kit's bytes.** `Resources/road-food.sha256` is the
 kit's checksum of `road-food.json`, copied across with it, and
@@ -414,6 +595,207 @@ as readily as a recording from ten seconds ago.
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.
+
+## Programming: equipment, rotations, the next weight
+
+From openGym's list (LIFT superproject,
+`docs/superpowers/plans/2026-10-28-build-plan.md`). All three are this app's
+own: no schema change, nothing in LiftKit, nothing on the wire.
+
+- **My equipment** (`MyEquipment`, Settings → Training) is stored as what the
+  lifter does *not* have, so an untouched phone hides nothing, and owning
+  everything removes the key. An exercise with no equipment listed is never
+  hidden. Search says how many it left out and offers "Show all". It searches
+  deeper when filtering, or the first 30 matches could all be ones it then
+  throws away. `MyEquipmentTests` fails if `exercises.db` gains an equipment
+  value with no switch.
+- **A folder is a rotation** (`RoutineRotation`). Up next is the routine after
+  the last one started from that folder, by the `routine:<exercise id>` refs
+  `startSession` writes; its order is the order routines were added, names
+  breaking a tie, and Routines lists a named folder in that order. The default folder is not a rotation and stays newest first. Train offers today's
+  up next only while today is empty and no coach booked it, and only from a
+  rotation someone has started.
+- **The next weight** (`ProgressionRule`, shown by `ProgressionHint`) is double
+  progression: every working set at last session's top weight reached the
+  routine's reps, as many sets as it asks for, is up one step (drop and
+  rest-pause sets count on neither side, and "Use" leaves them be, so a top
+  set and its drops progresses as a one-set routine); short is the
+  same again; short at the same weight two sessions running backs off about
+  10%. It works in the lifter's unit, so a step is a real plate pair (two of the
+  smallest plate owned for a bar, otherwise 5 lb or 2.5 kg). It is a line with
+  its reason and a "Use" button that fills only sets not ticked done. **None
+  for a routine a coach scheduled**: the coach programmes those numbers. None
+  for a lift logged a side at a time, a bodyweight lift, or a lift with no
+  earlier session.
+
+## Progress: the year, muscles, body weight, photos
+
+LIFT superproject `docs/superpowers/plans/2026-10-28-build-plan.md`, items
+9-12. The rules are `ProgressRules.swift` and are pinned by
+`ProgressRulesTests`. **Counting, never grading**: an empty week is a column
+of empty squares, and "No sets yet" lists muscles with nothing said about
+them.
+
+- **Your year** (Train) shows every day of the last 53 weeks as a square.
+  - The square's level comes from that day's working sets in fixed steps:
+    1-9, 10-19, 20 or more. Fixed steps, not quartiles, so a day reads the same
+    next month.
+  - Days after today draw as nothing, never as rest days.
+- **Muscles this week** (Train) counts working sets per primary muscle.
+  - A muscle comes from the logged exercise first, then from `exercises.db` by
+    name and equipment, then by name alone. A routine-started exercise is
+    logged with no muscle, which is why the fallbacks exist.
+  - An exercise that can't be placed is counted as unplaced and said in words,
+    never guessed.
+  - It is a list with bars, not a body drawing: a drawing needs artwork LIFT
+    can license.
+- **Body weight** (Home) is `BodyMeasurement` rows, the ones backups and Send to
+  Coach already carry.
+  - One weigh-in a day: logging again replaces today's entry.
+  - The chart covers the last 90 days.
+  - The goal is `bodyWeightGoalKg` in `UserDefaults`, drawn as a dashed line;
+    0 means no goal.
+- **Progress photos** (Home → Body weight → Photos) are files in Application
+  Support/ProgressPhotos. **Never rows, never in a backup, never sent.**
+  - A photo is megabytes and the store is copied whole into every backup.
+  - They are picked with `PhotosPicker`, which needs no photo-library
+    permission.
+  - Each is re-encoded to at most 2048 px, which also drops location metadata,
+    and written with complete file protection.
+  - The screen says in its own words that photos stay on the phone.
+## Training history in and out as CSV
+
+Settings → Your data → "Import from Strong, Hevy or FitNotes" and "Export
+training as a spreadsheet (CSV)". The code is `WorkoutCSV` and
+`WorkoutCSVTests` pins it (build plan item 13).
+
+**None of the three apps publishes its export format.** Their help pages say
+only where the button is. The shapes the reader accepts were read from real
+exports people have published, and the fixtures in `Tests/Fixtures/csv-*.csv`
+are built from those shapes, not copied from a maker. So the reader is strict:
+a file it can't place is refused, never half-read.
+
+- **Strong** comes in two layouts.
+  - The semicolon one is fully quoted, has a `Workout #` column and says
+    `Weight (kg)`.
+  - The comma one names **no unit at all**, so the import sheet asks for one
+    and builds nothing until it is answered. A guess would be 2.2x wrong either
+    way.
+  - `Set Order` `W` is a warm-up. `D` and `F` are working sets. `Note` and
+    `Rest Timer` rows are not sets.
+- **Hevy** says its unit in the header (`weight_kg` or `weight_lbs`,
+  `distance_km` or `distance_miles`). It writes dates as locale text in one of
+  two shapes. `set_type` `warmup` is a warm-up.
+- **FitNotes** says the unit on every row, and one file can mix units. It
+  keeps one workout a day, with the date only. Its category becomes the
+  primary muscle, except "Cardio".
+- **Numbers are digits and a point only**, as every export seen writes them.
+  Weights become kilograms on the way in.
+- Times carry no zone in any of the files, and are read as local time.
+- "Bench Press (Barbell)" splits into a name and equipment.
+- **A day LIFT already has training on is left alone and counted**, never
+  merged into: an imported session can't be told apart from the same one
+  logged by hand. That also makes a second import of the same file add
+  nothing.
+- Two workouts on one day become one LIFT day.
+- **Blank stays blank, on the way in.** RPE, seconds and distance are optional
+  on `SetEntry`, and an empty cell is nil. A 0 in seconds or distance (and in
+  Strong's RPE) is also nil: Strong fills every column a set did not use with
+  0, so keeping it would put "0:00 0 m" on every bench set. Hevy's RPE keeps a
+  0 it writes, as LIFT web does. Weight and reps are not optional, and an empty
+  one is 0, which on `SetEntry` is the absence (see `SetEntry.display`).
+  Making them optional is a schema change (see `LiftSchemaVersions.swift`).
+- The export is one row per set, always in kilograms, with blanks left blank:
+  nil is an empty cell, and so is a weight or reps of 0, as LIFT web writes
+  them. Numbers have at most two decimals with trailing zeros dropped, and the
+  point with them, so 59.999 is `60` (`WorkoutCSV.exportNumber`).
+- The delimiter is counted on the header line alone, up to any line break.
+  Swift reads CR LF as one `Character`, which a check for `"\n"` alone misses.
+
+## Barcodes
+
+The food search can scan a barcode (`BarcodeScannerView`, VisionKit's
+`DataScannerViewController`: EAN-13, EAN-8 and UPC-E, read **on the device**).
+The camera is used for nothing else, and what it sees never leaves the phone:
+only the digits are kept, and only when the person enters a food against them.
+Food search puts the search field first, then "Scan a barcode" (shown only
+where scanning is supported), then "Add food by hand". A typed barcode takes
+the same road as a scanned one (`BarcodeQuery`). `ScanAvailability` has a
+`.needsPermission` case that asks for camera access (`AVCaptureDevice
+.requestAccess`) on the first tap rather than at launch, and a refusal says
+"LIFT can't use the camera right now. You can allow it in Settings."
+
+**`Barcode` is the one rule for what a code is.** `Sources/Shared/Barcode.swift`,
+in the code's order: anything but digits (spaces and hyphens aside) is refused;
+the GS1 check digit is verified on 8, 12, 13 or 14 digits; then leading zeros
+are stripped so UPC-A, EAN-13 and GTIN-14 spellings meet; all zeros fails. With
+no symbology an 8-digit code is EAN-8 only; UPC-E is expanded only when the
+scanner says it read UPC-E, because the same eight digits can be either and
+guessing would file a food under another product's code.
+What the form shows is `printed`: the digits as given, except that a scanned
+EAN-13 of thirteen digits starting "0" shows its last twelve
+(`Barcode.printedDigits`), because Vision reports a UPC-A that way and the packet
+prints twelve. Display only; `normalised` is the same either way.
+`Tests/Fixtures/barcodes.json` is hand-written and shared with the other
+builds. Never regenerate it from Swift: a fixture the code wrote proves only
+that the code agrees with itself.
+
+**A remembered food is the person's own entry, stored per 100 g.**
+`RememberedFood` (`.unique` on `code`) is schema V10, a lightweight migration
+(`v9ToV10`). **`RememberedFoods` (`Sources/App/RememberedFoods.swift`) is the one
+read and write path**: `find`, `remember`, `forget`. The scanner, the form,
+Edit and Forget and `FoodRefResolver` all go through it, so they cannot
+disagree. `remember` upserts in place and keeps `rememberedAt`; a correction
+moves `updatedAt`, which is what a backup's newest-wins merge compares.
+**Backups are the one deliberate exception.** `BackupStore` reads and writes
+`RememberedFood` directly: `remember()` stamps `updatedAt` with now, which would
+defeat the newest-wins merge, and `BackupStore` lives in `Sources/Shared` (the
+widget compiles it) and cannot see `Sources/App`. Don't route backups through
+`remember()`.
+`BarcodeLookup.look` asks remembered foods first. **The barcode bundle (project
+2) slots in behind that same call, after them**, so a food the person entered
+always wins over a bundled one.
+
+**Logged entries stand alone.** An entry snapshots its own name and nutrition
+(the first rule under "Conventions"), so forgetting a remembered food leaves
+every entry already logged exactly as it was. The ref a barcode-found entry
+carries is `barcode:<normalised code>`. `FoodRefResolver` resolves it through
+`RememberedFoods`, and a **forgotten code resolves to nothing**. Recent and the
+watch's list are built from entries, so a forgotten food can still be offered
+there: the watch's food-logged path falls back to the newest entry's own stored
+values for a `barcode:` ref only (`FoodRefResolver.storedNutrition`). A deleted
+recipe or an unknown id stays a food this phone declines.
+A `barcode:` entry is corrected like any food you typed, and correcting it never
+changes the remembered food.
+
+**The wording is shared by three builds.** These strings are the same on iPhone,
+Android and web, so they change in all three or in none:
+"That barcode didn't scan cleanly. Try again.", "LIFT doesn't know this barcode
+yet. Enter it once and LIFT will remember it.", "A food you entered." and
+the camera usage string in `project.yml`. "LIFT can't use the camera right now.
+You can allow it in Settings." is this build's own wording, not one of them.
+Edit and Forget (with its confirmation) read from `RememberedFoodWords`, so the
+two places they appear cannot drift.
+
+**In a backup** it is `data.rememberedBarcodes` (BACKUP-FORMAT.md), merged **by
+code, newest wins**, comparing `updatedAt` in whole milliseconds. Restoring never
+deletes a remembered food, the library rule, not the roster's. Codes are stored
+normalised, so they have lost their leading zeros (an 11-digit UPC-A, a 7-digit
+EAN-8), and `Barcode.read` would refuse that as a length. `backupCode` pads a
+code to 14 digits before validating, which restores a valid length without
+changing the check sum. A date that cannot be read is treated as absent rather
+than crashing the restore. `droppedHeldSections` names the held foreign copies a
+restore removes rather than carries (only `rememberedBarcodes` today), so an
+older build's copy of the section is never written back in place of this
+phone's own.
+
+**A remembered food never goes to a coach.** `CoachShare` reads names and
+nutrition off entries and never `foodRefID`, so the share carries the food by
+name like any other and no code. `CoachShareRememberedFoodTests` pins it on an
+itemised share, the one that lists each food, where a leaked ref would show. If
+the share ever starts to carry a ref, remove it for `barcode:` refs. A
+remembered food is the person's own library, and a barcode is a fact about a
+product on their shelf, not something a coach asked for.
 
 ## The coach's week, beside your own log
 
@@ -576,7 +958,7 @@ here from `dugcanlift-lift-watch` (history kept, by `git subtree`) in 2026-09;
 that repo is Wear OS only now. `Watch/README.md` has the detail.
 
 - **Layout.** `Watch/LiftWatch` is the watchOS target `LiftWatch` (scheme
-  `LiftWatch`, product `LIFT.app`). `Watch/LiftWatchKit` is its Swift package,
+  `LiftWatch`, product `LiftWatch.app`, shown as LIFT). `Watch/LiftWatchKit` is its Swift package,
   named `LiftWatchKit` because dugcanlift-kit's package is already `LiftKit` and
   Xcode takes a local package with a remote one's name for an override of it.
   Its products are `LiftKit` (the watch's domain; the module name the watch
@@ -592,7 +974,7 @@ that repo is Wear OS only now. `Watch/README.md` has the detail.
   both directions; update the schema in the same change.
 - **Bundle ids.** `com.dugcanlift.lift.watchkitapp`, companion of
   `com.dugcanlift.lift` (`WKCompanionAppBundleIdentifier`), embedded at
-  `Lift.app/Watch/LIFT.app`. `WKRunsIndependentlyOfCompanionApp` keeps it
+  `Lift.app/Watch/LiftWatch.app`. `WKRunsIndependentlyOfCompanionApp` keeps it
   usable with no phone. Being the companion is what makes the two `WCSession`
   peers; the old `WKWatchOnly` `com.dugcanlift.watch` never was, and nothing
   either side sent it arrived.

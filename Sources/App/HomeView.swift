@@ -152,6 +152,8 @@ struct HomeView: View {
                         }
                     }
 
+                    BodyWeightCard()
+
                     LiftCard(title: "Fuel so far today") {
                         VStack(spacing: 9) {
                             StatRow(label: "Calories", value: "\(Int(totals.calories)) kcal")

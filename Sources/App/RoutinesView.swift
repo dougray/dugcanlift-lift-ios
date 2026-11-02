@@ -7,7 +7,11 @@ import LiftCore
 struct RoutinesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
+    @Query(RoutineRotation.recentDays) private var recentDays: [WorkoutDay]
     @State private var isCreatingRoutine = false
+    /// The routine whose exercises are open (`RoutineDetailView`).
+    @State private var opened: Routine?
+    @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
     /// Read so that a change of interface style invalidates this body, which
     /// is what re-applies the navigation bar's colours. See the note on
     /// `.toolbarColorScheme` below.
@@ -23,16 +27,52 @@ struct RoutinesView: View {
     private var groupedByFolder: [(folder: String, routines: [Routine])] {
         Dictionary(grouping: routines, by: \.folder)
             .sorted { $0.key < $1.key }
-            .map { (folder: $0.key.isEmpty ? "Routines" : $0.key, routines: $0.value) }
+            .map { folder, routines in
+                // A named folder is a rotation, so it reads in rotation order
+                // (`RoutineRotation.ordered`); the default folder stays newest
+                // first.
+                guard !folder.isEmpty else { return (folder: "Routines", routines: routines) }
+                let order = RoutineRotation.ordered(routines.map(RoutineRotation.member)).map(\.id)
+                return (folder: folder,
+                        routines: routines.sorted { order.firstIndex(of: $0.id)! < order.firstIndex(of: $1.id)! })
+            }
+    }
+
+    /// Each folder's next routine, by id.
+    private var upNext: Set<UUID> {
+        let days = recentDays.map(RoutineRotation.day)
+        return Set(RoutineRotation.folders(routines).compactMap {
+            RoutineRotation.upNext(folder: $0.folder, members: $0.members, days: days)?.routineID
+        })
+    }
+
+    private func firstRotation(_ upNext: Set<UUID>) -> String? {
+        groupedByFolder.first { group in
+            group.routines.contains { upNext.contains($0.id) }
+        }?.folder
     }
 
     var body: some View {
+        let upNext = upNext
+        let firstRotation = firstRotation(upNext)
+        let setTypes = RoutineSetTypes.decode(setTypesData)
         NavigationStack {
             List {
                 ForEach(groupedByFolder, id: \.folder) { group in
-                    Section(group.folder) {
+                    Section {
                         ForEach(group.routines) { routine in
-                            RoutineRow(routine: routine)
+                            RoutineRow(routine: routine, isUpNext: upNext.contains(routine.id),
+                                       groups: ExerciseGrouping.summary(
+                                           setTypes.storedGroups(routine.orderedExercises))) {
+                                opened = routine
+                            }
+                        }
+                    } header: {
+                        Text(group.folder)
+                    } footer: {
+                        // Said once, under the first folder it applies to.
+                        if group.folder == firstRotation {
+                            Text("A folder is a rotation: Up next is the routine after the last one you started from it.")
                         }
                     }
                 }
@@ -84,6 +124,12 @@ struct RoutinesView: View {
                     Button("New", systemImage: "plus") { isCreatingRoutine = true }
                 }
             }
+            // A button in the row opens it rather than a `NavigationLink`
+            // row: a link would make the whole row one tap target, over the
+            // row's own Start, Send and Delete.
+            .navigationDestination(item: $opened) { routine in
+                RoutineDetailView(routine: routine)
+            }
             .sheet(isPresented: $isCreatingRoutine) {
                 NewRoutineView()
                     .liftAppearance()
@@ -107,17 +153,46 @@ struct RoutinesView: View {
 private struct RoutineRow: View {
     @Environment(\.modelContext) private var context
     let routine: Routine
+    var isUpNext = false
+    /// "Superset A · Circuit B", or empty when nothing is grouped.
+    var groups = ""
+    let onOpen: () -> Void
     @State private var didSendToWatch = false
     @State private var confirmingDelete = false
     @State private var summary = RoutineRemoval.Summary()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(routine.name).font(.headline)
+            HStack(spacing: 8) {
+                // The name opens the routine's exercises, sets and set types.
+                Button(action: onOpen) {
+                    HStack(spacing: 4) {
+                        Text(routine.name).font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .accessibilityHint("Shows its exercises and sets, and their supersets and drop sets")
+                if isUpNext {
+                    Text("Up next")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.accentText)
+                }
+            }
             Text("\(routine.orderedExercises.count) exercise\(routine.orderedExercises.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if !groups.isEmpty {
+                Text(groups)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             HStack(spacing: 16) {
+
                 Button("Start Today") {
                     routine.startSession(on: .now, in: context)
                 }

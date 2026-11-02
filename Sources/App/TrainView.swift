@@ -47,6 +47,8 @@ struct TrainView: View {
 
                             ScheduledSessionBanner(date: selectedDate)
 
+                            UpNextBanner(date: selectedDate)
+
                             // The coach's week, under the coach's own card for
                             // the day and above the day's own log -- the day's
                             // action first, the week as the context under it,
@@ -66,6 +68,10 @@ struct TrainView: View {
                             OutdoorDaySection(date: selectedDate)
 
                             OutdoorHighlights()
+
+                            MusclesThisWeekCard()
+
+                            TrainingYearCard()
                         }
                     }
                 }
@@ -74,6 +80,7 @@ struct TrainView: View {
                 .adaptivePageWidth()
             }
             .liftScreen()
+            .safeAreaInset(edge: .bottom) { RestBanner() }
             // Number pads have no return key: Done above the keyboard, and a
             // drag on the page puts it away.
             .keyboardDoneButton()
@@ -229,6 +236,49 @@ private struct ScheduledSessionBanner: View {
     }
 }
 
+/// "Up next: Pull · Push/Pull/Legs", on today's page while nothing has been
+/// logged on it and no coach has booked it: the next routine of the rotation
+/// most recently trained (`RoutineRotation`). A suggestion, started by a tap
+/// the way any routine is. Only today, because a rotation's next step is
+/// about now: on a day gone by it would be a guess about what came after.
+private struct UpNextBanner: View {
+    let date: Date
+    @Environment(\.modelContext) private var context
+
+    @Query private var routines: [Routine]
+    @Query(RoutineRotation.recentDays) private var recentDays: [WorkoutDay]
+    @Query private var scheduled: [ScheduledSession]
+
+    init(date: Date) {
+        self.date = date
+        let key = DayKey.make(from: date)
+        _scheduled = Query(filter: #Predicate<ScheduledSession> { $0.dayKey == key })
+    }
+
+    private var suggestion: (routine: Routine, folder: String)? {
+        guard Calendar.current.isDateInToday(date), scheduled.isEmpty else { return nil }
+        let key = DayKey.make(from: date)
+        if let today = recentDays.first(where: { DayKey.make(from: $0.date) == key }),
+           !today.exercises.isEmpty { return nil }
+        guard let current = RoutineRotation.current(RoutineRotation.folders(routines),
+                                                    days: recentDays.map(RoutineRotation.day)),
+              let routine = routines.first(where: { $0.id == current.upNext.routineID })
+        else { return nil }
+        return (routine, current.folder)
+    }
+
+    var body: some View {
+        if let suggestion {
+            Button {
+                suggestion.routine.startSession(on: date, in: context)
+            } label: {
+                Label("Up next: \(suggestion.routine.name) · \(suggestion.folder)",
+                      systemImage: "arrow.triangle.2.circlepath")
+            }
+        }
+    }
+}
+
 /// The card containing name, summary and every exercise for one day.
 private struct DayEditor: View {
     @Environment(\.modelContext) private var context
@@ -237,6 +287,9 @@ private struct DayEditor: View {
     @Binding var showingPicker: Bool
 
     @Query private var days: [WorkoutDay]
+    /// Supersets, drop sets and rest-pause on the day's logged rows, copied
+    /// there when a routine was started (`RoutineSetTypes`).
+    @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
 
     init(date: Date, unit: WeightUnit, showingPicker: Binding<Bool>) {
         self.date = date
@@ -267,9 +320,14 @@ private struct DayEditor: View {
                 }
 
                 if let day {
-                    ForEach(day.orderedExercises) { exercise in
+                    let exercises = day.orderedExercises
+                    let labels = RoutineSetTypes.decode(setTypesData).loggedLabels(exercises)
+                    ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
                         ExerciseBlock(exercise: exercise, unit: unit,
-                                      focus: day.focus)
+                                      focus: day.focus, isLive: day.isLive,
+                                      groupLabel: labels[index]) { set in
+                            ticked(set, of: exercise, in: day)
+                        }
                         Divider().overlay(Theme.hairline)
                     }
                 }
@@ -285,6 +343,17 @@ private struct DayEditor: View {
                 liveSessionControl
             }
         }
+    }
+
+    /// A set ticked done: the rest it starts, read off the whole day, because
+    /// inside a superset the next set is another exercise's (`SessionRest`).
+    private func ticked(_ set: SetEntry, of exercise: ExerciseEntry, in day: WorkoutDay) {
+        let after = SessionRest.after(
+            ticking: set.id,
+            in: SessionRest.exercises(day.orderedExercises,
+                                      setTypes: RoutineSetTypes.decode(setTypesData)),
+            restSeconds: WatchPlanSettings.resolvedRestSeconds())
+        RestTimer.shared.setDone(set.id, after: after, exerciseName: exercise.displayName)
     }
 
     private var nameBinding: Binding<String> {
@@ -309,6 +378,7 @@ private struct DayEditor: View {
                 Button("End") {
                     day.liveEndedAt = .now
                     try? context.save()
+                    RestTimer.shared.sessionEnded()
                     Task { await HealthKitManager.shared.syncPending(context: context) }
                 }
                 .foregroundStyle(Theme.accentText)
@@ -332,9 +402,17 @@ private struct ExerciseBlock: View {
     @Environment(\.modelContext) private var context
     @AppStorage(PerSideLogging.storageKey) private var perSideRaw = "{}"
     @AppStorage(PlanSides.storageKey) private var planSidesData = Data()
+    @AppStorage(RoutineSetTypes.storageKey) private var setTypesData = Data()
     @Bindable var exercise: ExerciseEntry
     let unit: WeightUnit
     let focus: TrainingFocus
+    /// During a live session each set can be ticked done, which starts the
+    /// rest before the next one.
+    var isLive: Bool = false
+    /// "Superset A · A1" when the routine it was started from grouped it.
+    var groupLabel: GroupLabel? = nil
+    /// A set ticked done during a live session; the day decides the rest.
+    var onTicked: (SetEntry) -> Void = { _ in }
 
     @State private var confirmingRemove = false
 
@@ -366,6 +444,11 @@ private struct ExerciseBlock: View {
 
     private var showsSide: Bool { perSide || pendingNamedSide }
 
+    /// The bar this lift is loaded on, if it is, for the set editor's plates.
+    private var bar: BarKind? {
+        BarKind.of(name: exercise.name, equipment: exercise.equipment)
+    }
+
     /// "L 1/3 · R 0/3" against a prescription with sides in it, "L 4/3" when
     /// over; otherwise the plain "L 3 · R 3" whenever sides are showing.
     private var countLabel: String? {
@@ -377,6 +460,11 @@ private struct ExerciseBlock: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
+                    if let groupLabel {
+                        Text(groupLabel.text)
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                     // The name opens the lift's own progression — two lines
                     // and the gap between them when it is logged per side.
                     NavigationLink {
@@ -424,6 +512,8 @@ private struct ExerciseBlock: View {
                     }
             }
 
+            ProgressionHint(exercise: exercise, unit: unit, bar: bar, perSide: showsSide)
+
             Button {
                 perSideRaw = PerSideLogging.setting(
                     !perSide,
@@ -444,9 +534,13 @@ private struct ExerciseBlock: View {
             .accessibilityValue(perSide ? "On" : "Off")
             .accessibilityAddTraits(.isToggle)
 
+            let setTypes = RoutineSetTypes.decode(setTypesData)
             ForEach(Array(exercise.orderedSets.enumerated()), id: \.element.id) { index, set in
                 SetRow(index: index + 1, set: set, unit: unit, focus: focus,
-                       showsSide: showsSide) {
+                       showsSide: showsSide, bar: bar,
+                       kind: setTypes.loggedKind(of: set, at: index),
+                       restsBefore: isLive ? exercise.displayName : nil,
+                       onTicked: { onTicked(set) }) {
                     delete(set, number: index + 1)
                 }
             }
@@ -478,7 +572,7 @@ private struct ExerciseBlock: View {
         let side: SetSide? = showsSide
             ? (prescription?.nextSide(after: logged) ?? exercise.nextSide) : nil
         if let asked = prescription?.setFor(side: side, after: logged) {
-            exercise.sets.append(SetEntry(
+            let set = SetEntry(
                 orderIndex: exercise.sets.count,
                 weightKg: asked.weightKg ?? 0,
                 reps: asked.reps ?? 0,
@@ -486,7 +580,14 @@ private struct ExerciseBlock: View {
                 durationSec: asked.durationSec,
                 distanceMeters: asked.distanceMeters,
                 side: side
-            ))
+            )
+            exercise.sets.append(set)
+            // A sided set from the coach keeps its kind: "30 x 12 L drop".
+            if let kind = asked.kind {
+                var setTypes = RoutineSetTypes.decode(setTypesData)
+                setTypes.loggedKinds[set.id] = kind
+                if let data = setTypes.encoded() { setTypesData = data }
+            }
         } else {
             let previous = exercise.orderedSets.last
             exercise.sets.append(SetEntry(
@@ -504,6 +605,7 @@ private struct ExerciseBlock: View {
     /// original `id`, `orderIndex` and side, so it lands back in the same place.
     private func delete(_ set: SetEntry, number: Int) {
         let snapshot = SetEntrySnapshot(set)
+        RestTimer.shared.setUndone(set.id)
         exercise.sets.removeAll { $0.id == set.id }
         context.delete(set)
         save()
@@ -517,6 +619,7 @@ private struct ExerciseBlock: View {
     }
 
     private func remove() {
+        exercise.sets.forEach { RestTimer.shared.setUndone($0.id) }
         exercise.day?.exercises.removeAll { $0.id == exercise.id }
         context.delete(exercise)
         save()
@@ -574,6 +677,17 @@ private struct SetRow: View {
     /// Whether this lift is logged a limb at a time. Off, this row is exactly
     /// what it has always been — no control, no side in the text.
     var showsSide: Bool = false
+    /// The bar the lift is loaded on; the editor shows its plates.
+    var bar: BarKind? = nil
+    /// Drop or rest-pause, from the routine it was started from. Said after
+    /// the side, as Coach and LIFT web say it: "30 x 12 L drop".
+    var kind: SetKind? = nil
+    /// Set during a live session: the row gets a done tick, and ticking it
+    /// starts a rest before this exercise's next set. Nil otherwise.
+    var restsBefore: String? = nil
+    /// Ticked done: the day works out the rest (`SessionRest`). Nil, the tick
+    /// starts the Settings rest itself, as it always did.
+    var onTicked: (() -> Void)? = nil
     let onDelete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -612,7 +726,7 @@ private struct SetRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Set \(index), \(set.display(unit: unit))\(set.isWarmup ? ", warmup" : "")")
+                .accessibilityLabel("Set \(index), \(set.display(unit: unit))\(set.isWarmup ? ", warmup" : "")\(kind.map { ", \($0.label)" } ?? "")")
                 .accessibilityHint(isEditing ? "Closes the editor" : "Edits this set")
 
                 if set.isWarmup {
@@ -622,7 +736,16 @@ private struct SetRow: View {
                         .accessibilityHidden(true)
                 }
 
+                if let kind {
+                    Text(kind.label)
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundStyle(Theme.textSecondary)
+                        .accessibilityHidden(true)
+                }
+
                 Spacer()
+
+                if restsBefore != nil { doneTick }
 
                 DeleteGlyphButton(accessibilityName: "set \(index)", action: onDelete)
                     .padding(.trailing, -12)
@@ -632,6 +755,38 @@ private struct SetRow: View {
                 editor
             }
         }
+    }
+
+    /// Done, during a live session. `completedAt` is the set's own field, and
+    /// it already travels in backups. Ticking starts the rest from Settings;
+    /// unticking takes back the rest this set started, and only that one.
+    private var doneTick: some View {
+        Button {
+            if set.completedAt == nil {
+                set.completedAt = .now
+                if let onTicked {
+                    onTicked()
+                } else {
+                    RestTimer.shared.setDone(set.id, exerciseName: restsBefore,
+                                             restSeconds: WatchPlanSettings.resolvedRestSeconds())
+                }
+            } else {
+                set.completedAt = nil
+                RestTimer.shared.setUndone(set.id)
+            }
+            save()
+        } label: {
+            Image(systemName: set.completedAt == nil ? "circle" : "checkmark.circle.fill")
+                .scaledFont(size: 22)
+                .foregroundStyle(set.completedAt == nil ? Theme.textSecondary : Theme.accentText)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Set \(index) done")
+        .accessibilityValue(set.completedAt == nil ? "Not done" : "Done")
+        .accessibilityHint(set.completedAt == nil ? "Starts your rest" : "")
+        .accessibilityAddTraits(.isToggle)
     }
 
     /// Two buttons rather than a `Picker`: a segmented picker cannot express
@@ -688,6 +843,10 @@ private struct SetRow: View {
                 }
             }
 
+            if let bar, focus.showsWeight {
+                PlateLine(weightKg: set.weightKg, bar: bar, unit: unit)
+            }
+
             if focus.showsTime || focus.showsDistance {
                 HStack(alignment: .bottom, spacing: 8) {
                     if focus.showsTime {
@@ -706,7 +865,7 @@ private struct SetRow: View {
                         }
                     }
                     if focus.showsDistance {
-                        field("metres", value: Binding(
+                        field("meters", value: Binding(
                             get: { set.distanceMeters ?? 0 },
                             set: { set.distanceMeters = $0 == 0 ? nil : $0; save() }
                         ), width: wideField, decimal: true)
@@ -819,7 +978,7 @@ private struct SetRow: View {
         case "kg": "Weight, kilograms"
         case "reps": "Reps"
         case "RPE": "RPE"
-        case "metres": "Distance, metres"
+        case "meters": "Distance, meters"
         default: prompt
         }
     }

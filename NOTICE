@@ -1,0 +1,8 @@
+LIFT for iPhone
+Copyright 2026 DugCanLift
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The bundled reference databases (food.db, exercises.db) are separate works
+under their own licenses (public domain, ODbL, CC BY-SA 3.0); the Apache
+License does not cover them. See ATTRIBUTION.md.

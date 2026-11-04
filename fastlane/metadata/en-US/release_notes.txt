@@ -1,11 +1,5 @@
-- Rest timer: tick a set done in a live session and your rest counts down on the lock screen and in the Dynamic Island
-- Plate math, and the screen stays on while you train
-- Supersets, circuits, drop sets and rest-pause sets, with rest that follows the round
-- Routine folders run as a rotation, with the next one shown on Train
-- A suggested next weight for your own routines, with the reason. It goes by your working sets and leaves drop and rest-pause sets alone
-- My equipment: exercise search leaves out what you can't use
-- Progress: your training year, sets per muscle this week, a body weight chart, and progress photos that stay on your phone
-- Import your training history from Strong, Hevy or FitNotes, and export yours as CSV
-- Road Food: six more chains, newer charts, allergens to avoid, and a meal you can put together before you order
-- Send recipes from your browser: save a bookmark once, then tap it on a recipe page and the recipe opens in LIFT for you to check. LIFT never visits the page. In Safari, Share → LIFT does the same
-- Ingredient lines read units written out, like "2 tablespoons" or "1 pound", and fractions, like "½ cup" or "1½ cups"
+- Apple Watch: a workout you finish on the watch comes into your log on iPhone, every set of it
+- Apple Watch: left and right for each-side lifts, and supersets, circuits, drop sets and rest-pause sets, from your own routine or a coach's plan
+- Apple Watch: the highest heart rate around each set, shown under the set on the watch and in Train, and the session's average and highest on the day. No zones, no targets
+- Apple Watch: a run or hike shows time, distance, pace and elevation in bigger type, and asks before it finishes
+- A run you're recording on iPhone keeps going if the phone switches between light and dark

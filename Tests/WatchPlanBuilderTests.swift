@@ -28,6 +28,21 @@ final class WatchPlanBuilderTests: XCTestCase {
         super.tearDown()
     }
 
+    private func isolatedDefaults(_ name: String = #function) -> UserDefaults {
+        let suite = "WatchPlanBuilderTests.\(name)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    private func isolatedHeartRates(_ name: String = #function) -> WorkoutHeartRateStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WatchPlanBuilderTests.\(name).\(UUID().uuidString).json")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return WorkoutHeartRateStore(url: url)
+    }
+
     @MainActor
     private func makeContext() -> ModelContext {
         ModelContext(LiftStore.makeContainer(inMemory: true))
@@ -587,27 +602,28 @@ final class WatchPlanBuilderTests: XCTestCase {
     // MARK: - Heart rate landing
 
     @MainActor
-    func testSessionFinishedHeartRateIsRecorded() async {
+    func testAHeartRateWithNoSessionHasNoDayToBelongTo() async {
         let context = makeContext()
-        let receiver = WatchSyncReceiver(context: context)
-        let id = UUID()
+        let heartRates = isolatedHeartRates()
+        let receiver = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                         heartRates: heartRates, sender: { _ in })
+        // A watch build that predates the session payload: the pair arrives
+        // with no workout, so there is no day to keep it under.
         let handled = await receiver.handle(SyncEnvelope(
-            event: .sessionFinished, workoutID: id, revision: 3,
+            event: .sessionFinished, workoutID: UUID(), revision: 3,
             updatedAt: .now, origin: .watchOS,
             heartRate: SessionHeartRate(averageBpm: 131, maxBpm: 168)
         ))
 
-        XCTAssertTrue(handled)
-        let stored = WatchSessionHeartRateStore.latest()
-        XCTAssertEqual(stored?.workoutID, id)
-        XCTAssertEqual(stored?.averageBpm, 131)
-        XCTAssertEqual(stored?.maxBpm, 168)
+        XCTAssertFalse(handled)
+        XCTAssertTrue(heartRates.rates.isEmpty)
     }
 
     @MainActor
     func testSessionFinishedWithoutHeartRateIsStillNotAnError() async {
         let context = makeContext()
-        let receiver = WatchSyncReceiver(context: context)
+        let receiver = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+                                         heartRates: isolatedHeartRates(), sender: { _ in })
         // Unhandled, but harmless: a watch that recorded no heart rate (or an
         // older build that does not send any) must not be treated as broken.
         let handled = await receiver.handle(SyncEnvelope(

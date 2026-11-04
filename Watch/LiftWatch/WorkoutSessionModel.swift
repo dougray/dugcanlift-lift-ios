@@ -127,6 +127,7 @@ final class WorkoutSessionModel: ObservableObject {
         #if DEBUG
         ingestEnvelopeFromLaunchEnvironment()
         #endif
+        heartRate?.onSamples = { [weak self] in self?.updateSetHeartRates() }
     }
 
     #if DEBUG
@@ -277,6 +278,10 @@ final class WorkoutSessionModel: ObservableObject {
                                               reps: reps, rpe: rpe, side: side) else { return }
             draft.completeSet(setID)
         }
+        // This tick closes the set before's window, if its 20 seconds were
+        // not up yet, and opens this set's.
+        updateSetHeartRates()
+        scheduleHeartRateCheck()
 
         // Rest is the one the set just performed prescribed — not the next
         // set's, and not the next exercise's. `recordSet(on:)` also advances
@@ -310,6 +315,12 @@ final class WorkoutSessionModel: ObservableObject {
         // A second tap on a Finish confirmation still on screen for a frame
         // must not end the HealthKit session again or queue anything.
         guard let current = draft, !current.isFinished else { return }
+        // Every window still open closes here, with what has been measured
+        // so far, and before `finish()`: a finished draft takes no figures,
+        // so the session sent is the session kept.
+        updateSetHeartRates(finishing: true)
+        heartRateCheck?.cancel()
+        heartRateCheck = nil
         edit { $0.finish() }
         restTimer.stop()
         // Ends the HealthKit session and hands back the two numbers the
@@ -335,6 +346,41 @@ final class WorkoutSessionModel: ObservableObject {
         // finished workout is kept in `store`, and its SESSION_FINISHED in
         // the outbox, both of which is all that ever read it afterwards.
         draft = nil
+    }
+
+    // MARK: - Heart rate per set
+
+    private var heartRateCheck: Task<Void, Never>?
+
+    /// Writes the figure of every set whose window has closed
+    /// (`SetHeartRate`), from the readings the recorder holds. Called when
+    /// readings arrive, when a set is logged, 20 seconds after one is, and
+    /// at Finish for any window still open. With no HealthKit, no readings
+    /// or nothing new, it changes nothing.
+    private func updateSetHeartRates(finishing: Bool = false) {
+        guard var current = draft, !current.isFinished,
+              let samples = heartRate?.samples, !samples.isEmpty else { return }
+        let figures = current.heartRateUpdates(samples: samples, now: .now, finishing: finishing)
+        guard current.recordHeartRates(figures) else { return }
+        // Kept the way an edit is kept, but not sent as one: a figure is not
+        // a revision (`WorkoutDraft.recordHeartRates`). It reaches the phone
+        // inside `SESSION_FINISHED`.
+        draft = current
+        store.store(current)
+    }
+
+    /// The set just logged closes its own window 20 seconds from now if no
+    /// tick comes first. Readings arriving afterwards would also close it,
+    /// but a watch that delivers nothing new in that time still gets its
+    /// figure on time. Only the newest set needs one: a newer tick closes
+    /// every window before it.
+    private func scheduleHeartRateCheck() {
+        heartRateCheck?.cancel()
+        heartRateCheck = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(SetHeartRate.afterTick + 1))
+            guard !Task.isCancelled else { return }
+            self?.updateSetHeartRates()
+        }
     }
 
     // MARK: - Rest alert

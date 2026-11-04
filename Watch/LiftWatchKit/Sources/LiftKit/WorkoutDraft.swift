@@ -1,4 +1,5 @@
 import Foundation
+import LiftSync
 
 /// A workout the watch can create and edit with no phone in range.
 ///
@@ -128,6 +129,7 @@ public struct WorkoutDraft: Identifiable, Codable, Equatable, Sendable {
         reps: Int,
         rpe: Double? = nil,
         isWarmup: Bool = false,
+        side: PlanSide? = nil,
         now: Date = Date()
     ) -> UUID? {
         guard let index = exercises.firstIndex(where: { $0.id == exerciseID }) else { return nil }
@@ -136,7 +138,8 @@ public struct WorkoutDraft: Identifiable, Codable, Equatable, Sendable {
             weightKg: weightKg,
             reps: reps,
             rpe: rpe,
-            isWarmup: isWarmup
+            isWarmup: isWarmup,
+            side: side
         )
         exercises[index].sets.append(set)
         commit(now)
@@ -161,6 +164,33 @@ public struct WorkoutDraft: Identifiable, Codable, Equatable, Sendable {
             if let reps { set.reps = reps }
             if let rpe { set.rpe = rpe }
         }
+    }
+
+    /// Writes figures onto their sets, higher only (see `heartRateUpdates`, in
+    /// `SetHeartRate.swift`).
+    ///
+    /// **Not an edit, so not a revision.** Every change the lifter makes goes
+    /// through `commit` so that the phone sees it; a figure is a reading the
+    /// watch takes on its own, a set at a time across the whole session, and
+    /// a revision for each would queue a `WORKOUT_EDITED` the phone does
+    /// nothing with every time a window closed. It reaches the phone the one
+    /// way the sets do, inside `SESSION_FINISHED`, and a finished draft takes
+    /// no more figures, so the session that is sent is the session that is
+    /// kept.
+    @discardableResult
+    public mutating func recordHeartRates(_ figures: [UUID: Int]) -> Bool {
+        guard !isFinished, !figures.isEmpty else { return false }
+        var changed = false
+        for exerciseIndex in exercises.indices {
+            for setIndex in exercises[exerciseIndex].sets.indices {
+                let set = exercises[exerciseIndex].sets[setIndex]
+                guard let figure = figures[set.id], figure > 0,
+                      figure > (set.maxBpm ?? 0) else { continue }
+                exercises[exerciseIndex].sets[setIndex].maxBpm = figure
+                changed = true
+            }
+        }
+        return changed
     }
 
     @discardableResult
@@ -238,7 +268,19 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
     /// 6–10 in half steps, shown inline on every set like the phone does.
     public var rpe: Double?
     public var isWarmup: Bool
+    /// Which limb this set was done on, when the lifter was logging one at a
+    /// time. **Absent is "both", forever** — the phone's own rule for
+    /// `SetEntry.sideRaw`, and the same one word for it (`PlanSide`), so a
+    /// watch-logged set and a phone-logged set say the same thing. A draft
+    /// written before this decodes with no side and stays two-sided.
+    public var side: PlanSide?
     public var completedAt: Date?
+    /// The highest heart rate the watch measured around this set, in whole
+    /// beats per minute (`SetHeartRate`, written by `recordHeartRates`).
+    /// **Absent when nothing was measured, never zero.** It belongs to the
+    /// set, so correcting the weight or the reps keeps it, and a draft
+    /// written before this decodes with none.
+    public var maxBpm: Int?
 
     public init(
         id: UUID = UUID(),
@@ -247,7 +289,9 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
         reps: Int = 0,
         rpe: Double? = nil,
         isWarmup: Bool = false,
-        completedAt: Date? = nil
+        side: PlanSide? = nil,
+        completedAt: Date? = nil,
+        maxBpm: Int? = nil
     ) {
         self.id = id
         self.orderIndex = orderIndex
@@ -255,14 +299,18 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
         self.reps = reps
         self.rpe = rpe
         self.isWarmup = isWarmup
+        self.side = side
         self.completedAt = completedAt
+        self.maxBpm = maxBpm
     }
 
     public var volumeKg: Double {
         isWarmup ? 0 : Double(reps) * weightKg
     }
 
-    /// "325 x 5 @7.5" — weight, reps, then RPE, matching the phone app.
+    /// "325 x 5 @7.5", and "30 x 8 @8 · L" for a set done on one side —
+    /// weight, reps, RPE, then the side, matching the phone app's own set
+    /// rows. A two-sided set is unchanged.
     public func display(unit: WeightUnit) -> String {
         let weight = unit.fromKilograms(weightKg)
         let rounded = (weight * 10).rounded() / 10
@@ -274,6 +322,7 @@ public struct DraftSet: Identifiable, Codable, Equatable, Sendable {
             let rpeText = rpe == rpe.rounded() ? String(Int(rpe)) : String(format: "%.1f", rpe)
             text += " @\(rpeText)"
         }
+        if let side { text += " · \(side.shortLabel)" }
         return text
     }
 

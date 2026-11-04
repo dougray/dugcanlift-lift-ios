@@ -35,9 +35,30 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var lastError: Error?
 
+    /// The last few minutes of readings, for heart rate per set
+    /// (`SetHeartRate`). **In memory only, and never written anywhere**: the
+    /// samples are HealthKit's, saved with the workout by the builder, and the
+    /// design rules out a second store for them. What survives is one whole
+    /// number per set, on the set.
+    ///
+    /// Not `@Published`: nothing draws it, and a sample every few seconds
+    /// would re-render every view watching this recorder for nothing.
+    private(set) var samples: [HeartRateSample] = []
+    /// Called on the main actor whenever readings arrive, so the session can
+    /// work out the figure of any set whose window has closed.
+    var onSamples: (() -> Void)?
+    /// How long a reading is kept. A window reaches back at most five minutes
+    /// and ends twenty seconds after its tick; ten minutes leaves room for a
+    /// batch HealthKit delivers late, wrist down, without keeping a session's
+    /// worth.
+    static let sampleRetention: TimeInterval = 600
+
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
+    /// Every heart-rate sample saved since the session started. See
+    /// `startSampleQuery(from:)` for why this and not the builder.
+    private var sampleQuery: HKAnchoredObjectQuery?
     /// Set while a start is waiting on the HealthKit permission sheet, and
     /// cleared by `finish()` / `discard()`, so a workout finished or
     /// abandoned during that wait does not get a session afterwards. The
@@ -56,6 +77,7 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
         averageBpm = nil
         maxBpm = nil
         lastError = nil
+        samples = []
         let startDate = Date()
         let token = UUID()
         pendingStart = token
@@ -77,6 +99,7 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
 
         session.stopActivity(with: endDate)
         session.end()
+        stopSampleQuery()
 
         // The save outlives this call deliberately: `finishWorkout()` is what
         // writes the workout and the samples collected during it, and the
@@ -104,12 +127,14 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
         session.stopActivity(with: Date())
         session.end()
         builder.discardWorkout()
+        stopSampleQuery()
         self.session = nil
         self.builder = nil
         isRunning = false
         currentBpm = nil
         averageBpm = nil
         maxBpm = nil
+        samples = []
     }
 
     var heartRateSummary: SessionHeartRate? {
@@ -159,6 +184,7 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
 
             newSession.startActivity(with: startDate)
             try await newBuilder.beginCollection(at: startDate)
+            startSampleQuery(from: startDate)
         } catch {
             lastError = error
             if pendingStart == token { pendingStart = nil }
@@ -168,6 +194,63 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
             builder = nil
             isRunning = false
         }
+    }
+
+    // MARK: - Readings, for heart rate per set
+
+    /// An anchored query for heart rate from the session's start, rather than
+    /// the builder's `didCollectDataOf`. The builder hands over statistics,
+    /// and the only single reading in them is `mostRecentQuantity()`: when
+    /// the watch delivers a batch at once -- wrist down between sets, which is
+    /// exactly when a set's window closes -- every reading but the last is
+    /// lost, and the highest one in a set is usually not the last. The query
+    /// sees every sample the session saves, late or not. It reads the same
+    /// `.heartRate` type the session already asks for: no new permission.
+    private func startSampleQuery(from startDate: Date) {
+        let query = HKAnchoredObjectQuery(
+            type: HKQuantityType(.heartRate),
+            predicate: HKQuery.predicateForSamples(withStart: startDate, end: nil),
+            anchor: nil,
+            limit: HKObjectQueryNoLimit
+        ) { @Sendable [weak self] _, added, _, _, _ in
+            // HealthKit calls these on its own queue, never the main one.
+            self?.receive(added)
+        }
+        query.updateHandler = { @Sendable [weak self] _, added, _, _, _ in
+            self?.receive(added)
+        }
+        sampleQuery = query
+        healthStore.execute(query)
+    }
+
+    private func stopSampleQuery() {
+        if let sampleQuery { healthStore.stop(sampleQuery) }
+        sampleQuery = nil
+    }
+
+    nonisolated private func receive(_ added: [HKSample]?) {
+        let beatsPerMinute = HKUnit.count().unitDivided(by: .minute())
+        let readings = (added ?? []).compactMap { sample -> HeartRateSample? in
+            guard let quantity = sample as? HKQuantitySample else { return nil }
+            // A heart-rate sample is an instant: its start and end are one
+            // moment. The end is when it was measured if they ever differ.
+            return HeartRateSample(date: quantity.endDate,
+                                   bpm: quantity.quantity.doubleValue(for: beatsPerMinute))
+        }
+        guard !readings.isEmpty else { return }
+        Task { @MainActor in self.absorb(readings) }
+    }
+
+    private func absorb(_ readings: [HeartRateSample]) {
+        // A query that outlived its session (a late delivery after Finish)
+        // has nothing to add to.
+        guard sampleQuery != nil else { return }
+        samples.append(contentsOf: readings)
+        if let newest = samples.map(\.date).max() {
+            let horizon = newest.addingTimeInterval(-Self.sampleRetention)
+            samples.removeAll { $0.date < horizon }
+        }
+        onSamples?()
     }
 
     fileprivate func absorb(_ statistics: HKStatistics?) {

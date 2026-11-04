@@ -4,43 +4,105 @@ import SwiftUI
 
 /// Live stats screen for a Run or Hike in progress. No map — per the design
 /// spec, the watch's job is elapsed time / distance / pace ticking plus a
-/// Finish/Discard control, matching this app's minimal-chrome `List`-based
-/// screens (`WorkoutView.swift`/`SummaryView.swift`) rather than introducing
-/// a different visual language for outdoor activities.
+/// Finish/Discard control. Metrics and controls are separate vertical pages
+/// (see `body`), and both controls confirm before acting.
 struct OutdoorActivityView: View {
     @EnvironmentObject private var recorder: OutdoorActivityRecorder
     @EnvironmentObject private var library: OutdoorActivityLibrary
     @EnvironmentObject private var session: WorkoutSessionModel
+    @State private var confirmingFinish = false
     @State private var confirmingDiscard = false
+    /// Scale with the wearer's text size; `minimumScaleFactor` still keeps
+    /// each number on one line.
+    @ScaledMetric(relativeTo: .largeTitle) private var timeSize: CGFloat = 34
+    @ScaledMetric(relativeTo: .title2) private var metricSize: CGFloat = 22
 
     /// The phone's own mi/km setting, which now travels in its application
     /// context (`DisplayUnitsContext`); miles until a phone has said.
     private var distanceUnit: DistanceUnit { session.distanceUnit }
 
+    /// Two vertical pages, the way watchOS workout apps are laid out: the
+    /// numbers a runner glances at, big, on the first; Finish and Discard a
+    /// swipe away on the second, so neither is hit by accident mid-stride.
     var body: some View {
+        TabView {
+            metricsPage
+            controlsPage
+        }
+        .tabViewStyle(.verticalPage)
+        .navigationTitle(recorder.activity?.activityType.displayName ?? "Activity")
+        // Finish ends the recording for good: a run can't be resumed once
+        // it is finished, so it asks too.
+        .confirmationDialog("Finish this \(activityNoun)?", isPresented: $confirmingFinish,
+                            titleVisibility: .visible) {
+            Button("Finish") { finish() }
+            Button("Keep Recording", role: .cancel) {}
+        } message: {
+            Text("It's saved to this watch and sent to Health.")
+        }
+        .confirmationDialog("Discard this \(activityNoun)?",
+                            isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { recorder.discard() }
+            Button("Keep Recording", role: .cancel) {}
+        } message: {
+            Text("The route won't be saved.")
+        }
+    }
+
+    private var activityNoun: String {
+        recorder.activity?.activityType.displayName.lowercased() ?? "activity"
+    }
+
+    private var metricsPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                if recorder.authorizationStatus == .denied || recorder.authorizationStatus == .restricted {
+                    Label {
+                        Text("Location access is off — grant it in Settings to record a route.")
+                            .font(.caption2)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .foregroundStyle(DclTheme.accentText)
+                }
+
+                Text(Self.formatElapsed(recorder.elapsedSeconds))
+                    .font(.system(size: timeSize, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .accessibilityLabel("Time")
+                    .accessibilityValue(Self.formatElapsed(recorder.elapsedSeconds))
+
+                metric(formatDistance(recorder.distanceMeters), label: "Distance")
+                metric(formatPace(recorder.averagePaceSecondsPerKilometer), label: "Pace")
+                if recorder.elevationGainMeters > 0 {
+                    metric(formatElevation(recorder.elevationGainMeters), label: "Elevation Gain")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func metric(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(value)
+                .font(.system(size: metricSize, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(DclTheme.muted)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var controlsPage: some View {
         List {
-            if recorder.authorizationStatus == .denied || recorder.authorizationStatus == .restricted {
-                Section {
-                    Text("Location access is off — grant it in Settings to record a route.")
-                        .foregroundStyle(DclTheme.accentText)
-                }
-            }
-
-
             Section {
-                LabeledValue("Time", Self.formatElapsed(recorder.elapsedSeconds))
-                LabeledValue("Distance", formatDistance(recorder.distanceMeters))
-                LabeledValue("Pace", formatPace(recorder.averagePaceSecondsPerKilometer))
-            }
-
-            if recorder.elevationGainMeters > 0 {
-                Section {
-                    LabeledValue("Elevation Gain", formatElevation(recorder.elevationGainMeters))
-                }
-            }
-
-            Section {
-                Button("Finish") { finish() }
+                Button("Finish") { confirmingFinish = true }
                     .buttonStyle(.borderedProminent)
                     .tint(DclTheme.accent)
             }
@@ -50,14 +112,6 @@ struct OutdoorActivityView: View {
             Section {
                 Button("Discard", role: .destructive) { confirmingDiscard = true }
             }
-        }
-        .navigationTitle(recorder.activity?.activityType.displayName ?? "Activity")
-        .confirmationDialog("Discard this \(recorder.activity?.activityType.displayName.lowercased() ?? "activity")?",
-                            isPresented: $confirmingDiscard, titleVisibility: .visible) {
-            Button("Discard", role: .destructive) { recorder.discard() }
-            Button("Keep Recording", role: .cancel) {}
-        } message: {
-            Text("The route won't be saved.")
         }
     }
 

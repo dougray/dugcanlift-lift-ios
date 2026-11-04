@@ -260,6 +260,22 @@ points. There is no map behind it, so no tile server learns where the lifter
 runs. Do not bring MapKit back for a nicer backdrop; the distance and time beside
 each card carry the facts.
 
+**A recording ends on Cancel or Finish, never on `onDisappear`.** Under the
+paged-`TabView` shell (until f0968df, 2026-10-08), switching light and dark
+mid-run (a phone on Auto does it at sunset) rebuilt the recording screen with
+fresh `@State`: its `onDisappear` stopped the tracker, the new view's
+`onAppear` started an empty one, and the run was gone. Current main no longer
+rebuilds the screen on that switch, but nothing promises it never will. So the
+recording -- tracker, start time, lifecycle -- is an `OutdoorRecording` held by
+the presenter (`OutdoorDaySection`) and handed to the cover as its item, and
+`RecordingLifecycle` decides what an event means: the first appear starts,
+disappear and any later appear do nothing, Cancel / Finish / the cover's
+`onDismiss` stop. Never start or stop location from a view's lifecycle alone.
+**This relies on `OutdoorDaySection` keeping its identity while a recording is
+presented**: never `.id(date)` it, never put it behind an `if` or `switch`, and
+never a shell that destroys tabs -- a new `OutdoorDaySection` is a new `@State`,
+and the run goes with the old one.
+
 **Light and dark both exist, and System is the default.** `Theme`'s tokens
 resolve per interface style (LiftKit 1.7.0). Apply `.liftAppearance()` — never
 `.preferredColorScheme(.dark)` — on the root and on every sheet, since a sheet is
@@ -344,9 +360,10 @@ since V3, and not a V9 on `ExerciseEntry` for a suggestion. It is not in the
 backup file: a restored session loses only its targets, never a set.
 `PlanSidesDegradationTests` pins how a build without any of this reads such a
 plan (as two-sided sets, weights intact) against Coach web's fixture
-`Tests/Fixtures/web-plan-per-side.txt`; never regenerate it from Swift. The
-watch's `WorkoutPlan` does not carry sides yet: that waits for the watch
-companion move.
+`Tests/Fixtures/web-plan-per-side.txt`; never regenerate it from Swift.
+**The watch carries them too**: `WatchPlanBuilder` reads `PlanSides` and fills
+`eachSide` / `side` on the watch's own contract, and `GuidedSession` counts and
+alternates by the same rules (see "The Apple Watch app" below).
 
 **A coach's plan can carry set types** (PLAN-FORMAT.md "Set types"; the LIFT
 superproject's `2026-10-28-set-types-design.md`): `g`, a positive integer on
@@ -393,7 +410,8 @@ Otherwise the next not-ticked set decides: a drop set is no rest and "Drop set
 next", rest-pause is 15 seconds (fixed, not a setting). A tick with no rest ends
 a rest still running. Rest turned off in Settings is still nothing at all.
 `RestTimer.cue` is the no-rest line: not persisted, not on the lock screen. The
-watch's `WorkoutPlan` carries no set types yet, as it carries no sides. Nothing
+watch carries set types too (see "A coach's set types travel to the watch"
+below). Nothing
 here reaches a coach: SHARE-FORMAT has no set type, so a drop set goes to them as
 an ordinary set. `Tests/Fixtures/web-plan-set-types.txt` is Coach web's own;
 never regenerate it from Swift.
@@ -407,6 +425,35 @@ alongside the others. LiftKit 1.9.0's
 every existing install failed to open its store (134504). Verify any schema
 change by installing over a store the previous build wrote, not only in tests —
 `Tests/Fixtures/v6-simulator.store` is one.
+
+**A coach's sides travel to the watch as well.** `PLAN_PUSHED` carries
+`eachSide` on an exercise and `side` on a prescribed set, both **omitted** when
+they say nothing -- never `false`, never `"both"` -- so a plan without sides
+hashes to what it always did and is not re-pushed. `WatchPlanBuilder` fills
+them from `PlanSides`, `SetSide.planSide` maps this app's own side onto
+`LiftSync`'s `PlanSide` (identical raw values, deliberately: one word in the
+store, in a backup and on this wire), and the watch's `GuidedSession` is a port
+of `Prescription`'s rules, so an each-side exercise is twice the sets and
+alternates the way Add set does here.
+
+**A coach's set types travel to the watch as well.** `PLAN_PUSHED` carries
+`group` (a positive integer) on an exercise and `kind` (`"drop"` /
+`"restPause"`, `SetKind`'s raw values, which `SetKind.planKind` maps onto
+`LiftSync`'s `PlanSetKind`) on a prescribed set, both **omitted** when they say
+nothing -- never `0`, never `"straight"` -- so a plan without them hashes as
+before. `WatchPlanBuilder` fills them from `RoutineSetTypes`: groups renumbered
+as runs, so a group of one is never sent, and no kind on a first set. The watch
+reads both leniently (anything but a positive integer is ungrouped, an unknown
+word is straight), reads a first set as straight whatever arrived, and labels
+with `ExerciseGrouping`'s own words through its port, `PlanGrouping` ("Superset
+A · A1", "Circuit B"). **The order and the rest are `SessionRest`'s**, ported
+into `GuidedSession`: round by round across a group, skipping a member that has
+run out; no rest inside a round ("Next: Seated Cable Rows" on the Now screen),
+none before a drop set ("Drop set next"), 15 seconds before rest-pause. One
+difference, decided: the watch's round is one *prescribed row* of each member,
+so an each-side member does both its sides in its round (left, right, partner,
+rest), where the phone, which logs a sided set as it is done, counts each sided
+set as its own place. Nothing is graded on the wrist either.
 
 **The watch is told what to lift, in kilograms, with blanks left blank.**
 `PLAN_PUSHED` carries today's plan to the watch app: the routine a coach's
@@ -984,6 +1031,53 @@ that repo is Wear OS only now. `Watch/README.md` has the detail.
   `LIFT_SYNC_ENVELOPE` launch variable exists for that gap.
 - **HealthKit** authorization is per bundle id: the move asks again on the
   watch, and the watch's Info.plist carries its own usage strings.
+- **A finished session comes home whole, and is stored as an ordinary
+  workout.** `SESSION_FINISHED` carries a `session` payload — every exercise,
+  every set with its weight in kilograms, reps, RPE, warmup flag and **side**,
+  the local day it belongs to and the heart rate — because a phone in a locker
+  is reachable for none of it, so there is deliberately no streamed
+  `SET_LOGGED`. `WatchSessionImporter` decides what happens to it, out of the
+  `WCSession` delegate for the reason `LiftProgression` is out of a view: a new
+  session is appended to its day (a day may already hold a workout logged
+  here), a repeat is not stored twice, and a newer revision replaces an earlier
+  import **only while this phone has not edited those rows since** — a
+  fingerprint taken at import and re-derived, so "the watch never silently
+  overwrites newer phone edits" is code and not a comment. The day is the
+  watch's `performedOn` unless it is more than a day ahead of this phone or a
+  fortnight behind it, in which case the session is filed under today rather
+  than under a broken clock's year; it is never dropped. The watch keeps the
+  session in `UnsentSessionLog` until the acknowledgement arrives, so nothing
+  is lost if this app is never opened.
+- **Heart rate per set** (LIFT superproject `2026-10-28-build-plan.md` item
+  16): the highest bpm the watch measured around each set, shown and never
+  graded. **The rule is `SetHeartRate`** in `LiftWatchKit`, a pure function:
+  a window ends 20 s after the set's tick or at the next tick, starts at the
+  previous tick or the session's start, never more than 5 minutes back, both
+  ends inclusive; no reading in it is no figure, never 0. It is checked against
+  `Tests/LiftKitTests/Fixtures/heart-rate-per-set.json`, worked by hand and
+  shared with `dugcanlift-lift-watch`'s Kotlin port: never regenerate it from
+  either port. `LiftingSessionRecorder` keeps the last ten minutes of readings
+  in memory only, from an anchored query (the builder's statistics give only
+  the newest reading of a batch), and the figure lands on `DraftSet.maxBpm`
+  when its window closes -- higher only, and not a revision. On the wire it is
+  `maxBpm` on a performed set, a positive integer, absent when not recorded.
+  **On the iPhone it is a side-car, not a column**: `WorkoutHeartRates`, a JSON
+  file in Application Support keyed by set id (and each session's pair by day
+  id), written by `WatchSessionImporter` after the store saves and swept of
+  sets and days that are gone on each import. In a backup a set carries
+  `maxBpm`, and a day of one watch session carries `averageBpm` / `maxBpm` in
+  whole bpm on its common `workouts[]` record, LIFT for Android's shape; only a
+  day of two or more keeps a list in `ext.ios.workouts[id].heartRate`, with the
+  common pair left off, because a merged average nobody measured is never
+  written. On restore that list wins, and otherwise the common pair is the
+  day's one session, either half on its own. The
+  importer and `WatchSyncReceiver` take the store with **no default**: the
+  importer sweeps it against the context it is handed, so a test that took
+  `.shared` would empty the test host's. A phone-led session gets no figure:
+  no phone reads heart rate from Apple Health. Nothing goes to a coach, LIFT
+  web or a CSV. The words are `HeartRateWords` in `LiftSync`, which both apps
+  compile: "max 142 bpm" and "Heart rate: average 118 · max 156 bpm", the
+  Android builds' too -- change them everywhere or nowhere.
 - **A food is stored once and acknowledged.** A watch-logged food arrives as
   `FOOD_LOGGED`; `WatchSyncReceiver` stores each one-shot id once
   (`WatchFoodLogReceipts`) and answers with a `WORKOUT_SYNC_ACK` under that id,

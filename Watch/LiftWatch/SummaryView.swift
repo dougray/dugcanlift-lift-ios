@@ -1,8 +1,12 @@
 import LiftKit
+import LiftSync
 import SwiftUI
 
 struct SummaryView: View {
     @EnvironmentObject private var session: WorkoutSessionModel
+    /// Observed here rather than read through the session, so the pair
+    /// moves as the builder's statistics do.
+    @EnvironmentObject private var heartRate: LiftingSessionRecorder
     @State private var confirmingFinish = false
 
     var body: some View {
@@ -14,6 +18,14 @@ struct SummaryView: View {
                         "Volume",
                         "\(Int(session.unit.fromKilograms(draft.totalVolumeKg).rounded())) \(session.unit.abbreviation)"
                     )
+                    // The pair the phone is sent at Finish, so far. Only
+                    // when something was measured, and nothing beside it:
+                    // shown, never graded.
+                    if let pair = heartRate.heartRateSummary {
+                        Text(HeartRateWords.session(pair))
+                            .font(.caption2)
+                            .foregroundStyle(DclTheme.muted)
+                    }
                 }
             }
 

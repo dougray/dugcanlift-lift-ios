@@ -31,6 +31,15 @@ final class WatchSyncReceiverTests: XCTestCase {
         return defaults
     }
 
+    /// Its own heart-rate file per test, for the reason the defaults are a
+    /// suite of their own: `.shared` is the test host's, which is LIFT.
+    private func isolatedHeartRates(_ name: String = #function) -> WorkoutHeartRateStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WatchSyncReceiverTests.\(name).\(UUID().uuidString).json")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return WorkoutHeartRateStore(url: url)
+    }
+
     private func foodLoggedEnvelope(
         foodRefID: String = "usda:174608",
         amountGrams: Double = 150,
@@ -59,7 +68,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     /// roll, oven-roasted, 134.0 kcal/100g.
     func testFoodLoggedInsertsFoodEntryWithResolvedNutrition() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "usda:174608", amountGrams: 150, meal: "lunch")
 
         let handled = await sut.handle(envelope)
@@ -89,7 +98,7 @@ final class WatchSyncReceiverTests: XCTestCase {
         context.insert(recipe)
         try context.save()
 
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: recipe.foodRefID, amountGrams: 200, meal: "dinner")
 
         let handled = await sut.handle(envelope)
@@ -106,7 +115,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testUnknownFoodRefIDIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "not-a-real-ref-id")
 
         let handled = await sut.handle(envelope)
@@ -118,7 +127,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testUnknownMealTypeIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
         let envelope = foodLoggedEnvelope(foodRefID: "usda:174608", meal: "brunch")
 
         let handled = await sut.handle(envelope)
@@ -130,7 +139,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testMissingFoodLogPayloadIsSilentlyDroppedWithoutInserting() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
         // event is .foodLogged but foodLog itself is nil — malformed on the
         // wire, but SyncEnvelope's own decoding still lets it construct.
         let envelope = SyncEnvelope(
@@ -153,7 +162,7 @@ final class WatchSyncReceiverTests: XCTestCase {
 
     func testNonFoodEventIsANoOp() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
         let envelope = SyncEnvelope(
             event: .sessionFinished,
             workoutID: UUID(),
@@ -200,7 +209,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     func testAStoredSessionIsAcknowledgedUnderItsOwnID() async throws {
         let context = makeContext()
         var sent: [SyncEnvelope] = []
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(),
                                     sender: { sent.append($0) })
         let envelope = sessionEnvelope()
 
@@ -221,7 +230,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     func testTheSameSessionArrivingTwiceIsStoredOnceAndAcknowledgedTwice() async throws {
         let context = makeContext()
         var sent: [SyncEnvelope] = []
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(),
                                     sender: { sent.append($0) })
         let envelope = sessionEnvelope()
 
@@ -235,19 +244,55 @@ final class WatchSyncReceiverTests: XCTestCase {
                        [envelope.workoutID, envelope.workoutID])
     }
 
-    /// Heart rate still travels with it, and is still kept beside the store
-    /// rather than on the day.
+    /// Heart rate still travels with it, and is kept beside the store rather
+    /// than on the rows: the session's pair under its day, and each set's
+    /// figure under the set's new id.
     func testTheSessionsHeartRateIsRecorded() async throws {
         let context = makeContext()
         let defaults = isolatedDefaults()
-        let sut = WatchSyncReceiver(context: context, defaults: defaults, sender: { _ in })
-        let envelope = sessionEnvelope()
+        let heartRates = isolatedHeartRates()
+        let sut = WatchSyncReceiver(context: context, defaults: defaults, heartRates: heartRates,
+                                    sender: { _ in })
+        var envelope = sessionEnvelope()
+        envelope.session?.exercises[0].sets[0].maxBpm = 142
 
         _ = await sut.handle(envelope)
 
-        let stored = try XCTUnwrap(WatchSessionHeartRateStore.latest(in: defaults))
-        XCTAssertEqual(stored.workoutID, envelope.workoutID)
-        XCTAssertEqual(stored.maxBpm, 171)
+        let day = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutDay>()).first)
+        let set = try XCTUnwrap(day.orderedExercises.first?.orderedSets.first)
+        XCTAssertEqual(heartRates.rates.maxBpm(of: set.id), 142)
+        XCTAssertEqual(heartRates.rates.sessions(on: day.id),
+                       [WorkoutHeartRates.Session(sessionID: envelope.workoutID,
+                                                  averageBpm: 128.5, maxBpm: 171)])
+        XCTAssertNil(defaults.object(forKey: WorkoutHeartRateStore.legacyDefaultsKey))
+    }
+
+    /// The one pair the phone used to keep, for the last session, folds into
+    /// the side-car under the day that session was stored on, and the old key
+    /// goes.
+    func testTheOldLastSessionPairFoldsIntoItsDay() async throws {
+        let context = makeContext()
+        let defaults = isolatedDefaults()
+        let first = isolatedHeartRates()
+        let sut = WatchSyncReceiver(context: context, defaults: defaults, heartRates: first,
+                                    sender: { _ in })
+        var envelope = sessionEnvelope()
+        envelope.heartRate = nil
+        _ = await sut.handle(envelope)
+        let day = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutDay>()).first)
+        XCTAssertTrue(first.rates.sessions(on: day.id).isEmpty)
+
+        // What an earlier build wrote.
+        let legacy = #"{"workoutID":"\#(envelope.workoutID.uuidString)","averageBpm":131,"maxBpm":168,"receivedAt":0}"#
+        defaults.set(Data(legacy.utf8), forKey: WorkoutHeartRateStore.legacyDefaultsKey)
+
+        let heartRates = WorkoutHeartRateStore(url: first.url)
+        _ = WatchSyncReceiver(context: context, defaults: defaults, heartRates: heartRates,
+                              sender: { _ in })
+
+        XCTAssertEqual(heartRates.rates.sessions(on: day.id).map(\.maxBpm), [168])
+        XCTAssertEqual(heartRates.rates.sessions(on: day.id).map(\.averageBpm), [131])
+        XCTAssertNil(defaults.object(forKey: WorkoutHeartRateStore.legacyDefaultsKey))
     }
 
     // MARK: - Phone -> watch mapping (WatchSyncReceiver.makeSnapshot)
@@ -376,7 +421,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     func testAStoredFoodIsAcknowledgedUnderItsOwnID() async throws {
         let context = makeContext()
         var sent: [SyncEnvelope] = []
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(),
                                     sender: { sent.append($0) })
         let envelope = foodLoggedEnvelope()
 
@@ -396,7 +441,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     func testTheSameFoodArrivingTwiceIsStoredOnce() async throws {
         let context = makeContext()
         var sent: [SyncEnvelope] = []
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(),
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(),
                                     sender: { sent.append($0) })
         let envelope = foodLoggedEnvelope()
 
@@ -415,7 +460,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     /// first is still being resolved must still make one entry.
     func testTwoCopiesArrivingTogetherAreStoredOnce() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
         let envelope = foodLoggedEnvelope()
 
         async let first = sut.handle(envelope)
@@ -430,7 +475,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     /// two entries: only the id makes a repeat.
     func testTwoFoodsWithTheSameContentAreBothStored() async throws {
         let context = makeContext()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
 
         _ = await sut.handle(foodLoggedEnvelope())
         _ = await sut.handle(foodLoggedEnvelope())
@@ -441,7 +486,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     /// Not stored, not acknowledged: the watch keeps the food exportable.
     func testAFoodThatCannotBeStoredIsNotAcknowledged() async throws {
         var sent: [SyncEnvelope] = []
-        let sut = WatchSyncReceiver(context: makeContext(), defaults: isolatedDefaults(),
+        let sut = WatchSyncReceiver(context: makeContext(), defaults: isolatedDefaults(), heartRates: isolatedHeartRates(),
                                     sender: { sent.append($0) })
 
         let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "usda:does-not-exist"))
@@ -521,7 +566,7 @@ final class WatchSyncReceiverTests: XCTestCase {
         RememberedFoods.remember(code: "36000291452", name: "Corn flakes",
                                  per100g: NutritionFacts(calories: 357, proteinG: 7, carbsG: 84, fatG: 0.4),
                                  in: context)
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
 
         let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "barcode:36000291452", amountGrams: 30))
 
@@ -544,7 +589,7 @@ final class WatchSyncReceiverTests: XCTestCase {
             nutrition: NutritionFacts(calories: 142.8, proteinG: 2.8, carbsG: 33.6, fatG: 0.16),
             mealType: .breakfast, loggedAt: Date(timeIntervalSince1970: 1_700_000_000)))
         try context.save()
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { _ in })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { _ in })
 
         let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "barcode:36000291452", amountGrams: 30,
                                                           loggedAt: Date(timeIntervalSince1970: 1_700_100_000)))
@@ -564,7 +609,7 @@ final class WatchSyncReceiverTests: XCTestCase {
     func testFoodLoggedForABarcodeWithNothingStoredIsNotAcknowledged() async throws {
         let context = makeContext()
         var sent: [SyncEnvelope] = []
-        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), sender: { sent.append($0) })
+        let sut = WatchSyncReceiver(context: context, defaults: isolatedDefaults(), heartRates: isolatedHeartRates(), sender: { sent.append($0) })
 
         let handled = await sut.handle(foodLoggedEnvelope(foodRefID: "barcode:36000291452", amountGrams: 30))
 

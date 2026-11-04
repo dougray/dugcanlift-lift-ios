@@ -76,6 +76,14 @@ struct LogSetView: View {
                     dismiss()
                 }
             }
+
+            if let sets = exercise?.sets, !sets.isEmpty {
+                Section("Sets") {
+                    ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
+                        SetLine(number: index + 1, set: set, unit: session.unit)
+                    }
+                }
+            }
         }
         .navigationTitle(exercise?.name ?? "Set")
         .onAppear(perform: seed)
@@ -174,6 +182,26 @@ struct LogSetView: View {
         return rounded == rounded.rounded()
             ? String(Int(rounded))
             : String(format: "%.1f", rounded)
+    }
+}
+
+/// "2. 135 x 5 @8", and under it "max 142 bpm" once the set's window has
+/// closed and something was measured in it. Muted, and nothing else: the
+/// figure is shown, never graded.
+struct SetLine: View {
+    let number: Int
+    let set: DraftSet
+    let unit: WeightUnit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("\(number). \(set.display(unit: unit))")
+            if let maxBpm = set.maxBpm {
+                Text(HeartRateWords.set(maxBpm: maxBpm))
+                    .font(.caption2)
+                    .foregroundStyle(DclTheme.muted)
+            }
+        }
     }
 }
 

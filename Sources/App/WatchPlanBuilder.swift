@@ -354,39 +354,36 @@ enum WatchPlanSettings {
     }
 }
 
-// MARK: - Session heart rate, as it arrives
+// MARK: - Session heart rate, as it used to be kept
 
-/// What the watch reported for its last finished lifting session.
-///
-/// `UserDefaults` rather than the SwiftData store on purpose: `WorkoutDay`
-/// has no heart-rate columns, and adding them is a schema change for a store
-/// two shipped apps share. The samples are in HealthKit already — the watch
-/// writes them as part of its own workout — so this is only the summary,
-/// kept so a phone screen can show it without reading Health back.
-enum WatchSessionHeartRateStore {
-    static let defaultsKey = "lastWatchSessionHeartRate"
+/// Before heart rate per set, the phone kept one pair -- the last watch
+/// session's average and max -- in `UserDefaults`, under the session's id,
+/// which matched no day and which no screen read. It folds into
+/// `WorkoutHeartRates` now, keyed by day: a session this phone has stored has
+/// a receipt naming its day (`WatchSessionImports`), so the pair goes there.
+/// One that has none was never stored as a workout, and there is nothing to
+/// hang it on. Either way the old key goes, once.
+extension WorkoutHeartRateStore {
+    static let legacyDefaultsKey = "lastWatchSessionHeartRate"
 
-    struct Record: Codable, Equatable {
+    private struct LegacyRecord: Decodable {
         var workoutID: UUID
         var averageBpm: Double
         var maxBpm: Double
-        var receivedAt: Date
     }
 
-    static func record(_ heartRate: SessionHeartRate, for workoutID: UUID,
-                       at date: Date = .now, in defaults: UserDefaults = .standard) {
-        let record = Record(
-            workoutID: workoutID,
-            averageBpm: heartRate.averageBpm,
-            maxBpm: heartRate.maxBpm,
-            receivedAt: date
-        )
-        guard let data = try? JSONEncoder().encode(record) else { return }
-        defaults.set(data, forKey: defaultsKey)
-    }
-
-    static func latest(in defaults: UserDefaults = .standard) -> Record? {
-        guard let data = defaults.data(forKey: defaultsKey) else { return nil }
-        return try? JSONDecoder().decode(Record.self, from: data)
+    func absorbLegacyPair(from defaults: UserDefaults = .standard) {
+        guard let data = defaults.data(forKey: Self.legacyDefaultsKey) else { return }
+        defaults.removeObject(forKey: Self.legacyDefaultsKey)
+        guard let record = try? JSONDecoder().decode(LegacyRecord.self, from: data),
+              let receipt = WatchSessionImports.load(from: defaults).receipt(for: record.workoutID),
+              rates.sessions(on: receipt.dayID).isEmpty
+        else { return }
+        update {
+            $0.setSession(WorkoutHeartRates.Session(sessionID: record.workoutID,
+                                                    averageBpm: record.averageBpm,
+                                                    maxBpm: record.maxBpm),
+                          sessionID: record.workoutID, on: receipt.dayID)
+        }
     }
 }

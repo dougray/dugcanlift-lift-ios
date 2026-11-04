@@ -54,11 +54,17 @@ enum WatchSessionImporter {
 
     // MARK: - Importing
 
+    /// - Parameter heartRates: where each set's figure and the session's
+    ///   pair are kept beside the store (`WorkoutHeartRates`). No default, on
+    ///   purpose: `.shared` is the installed app's own file, and a test that
+    ///   took it would write into it -- and sweep it against a test's
+    ///   in-memory store, emptying it. A test passes its own.
     @MainActor
     @discardableResult
     static func apply(_ envelope: SyncEnvelope, in context: ModelContext,
                       now: Date = .now, calendar: Calendar = .current,
-                      defaults: UserDefaults = .standard) -> WatchSessionOutcome {
+                      defaults: UserDefaults = .standard,
+                      heartRates: WorkoutHeartRateStore) -> WatchSessionOutcome {
         guard envelope.event == .sessionFinished, let session = envelope.session else {
             return .nothingToStore
         }
@@ -101,11 +107,15 @@ enum WatchSessionImporter {
             // leave the old rows in `day.exercises` until the save, and the
             // insert below reads that array to number what it appends.
             let staleIDs = Set(existing.map(\.id))
+            let staleSetIDs = existing.flatMap { $0.sets.map(\.id) }
             day.exercises.removeAll { staleIDs.contains($0.id) }
             for entry in existing { context.delete(entry) }
+            var figures: [UUID: Int] = [:]
             let ids = insert(exercises, into: day, sessionID: envelope.workoutID,
-                             defaults: defaults)
+                             defaults: defaults, figures: &figures)
             guard save(context) else { return .failed }
+            record(figures, replacing: staleSetIDs, pair: envelope.heartRate,
+                   session: envelope.workoutID, day: day.id, in: heartRates, context: context)
             receipts.record(WatchSessionImports.Receipt(
                 revision: envelope.revision, dayID: day.id,
                 exerciseIDs: ids, fingerprint: fingerprint
@@ -128,15 +138,47 @@ enum WatchSessionImporter {
             // lifter has already logged against has a focus they chose.
             day.focus = focus
         }
+        var figures: [UUID: Int] = [:]
         let ids = insert(exercises, into: day, sessionID: envelope.workoutID,
-                         defaults: defaults)
+                         defaults: defaults, figures: &figures)
         guard save(context) else { return .failed }
+        record(figures, replacing: [], pair: envelope.heartRate,
+               session: envelope.workoutID, day: day.id, in: heartRates, context: context)
         receipts.record(WatchSessionImports.Receipt(
             revision: envelope.revision, dayID: day.id,
             exerciseIDs: ids, fingerprint: fingerprint
         ), for: envelope.workoutID)
         receipts.save(to: defaults)
         return .stored
+    }
+
+    // MARK: - Heart rate
+
+    /// Each set's figure under the id it was just stored with, and the
+    /// session's pair under its day, written after the store has saved: a
+    /// session that failed to store has no rows to hang a figure on. A newer
+    /// revision's rows are new rows, so the figures of the ones it replaced
+    /// go, and its pair replaces the earlier one. Whatever names a set or a
+    /// day that no longer exists is swept on the way: no delete anywhere
+    /// reaches this file, and nothing else would.
+    ///
+    /// A conflict -- the phone kept its own edit -- writes nothing, so the
+    /// kept rows keep the figures they had.
+    @MainActor
+    private static func record(_ figures: [UUID: Int], replacing stale: [UUID],
+                               pair: SessionHeartRate?, session: UUID, day: UUID,
+                               in heartRates: WorkoutHeartRateStore, context: ModelContext) {
+        let setIDs = Set(((try? context.fetch(FetchDescriptor<SetEntry>())) ?? []).map(\.id))
+        let dayIDs = Set(((try? context.fetch(FetchDescriptor<WorkoutDay>())) ?? []).map(\.id))
+        heartRates.update { rates in
+            for id in stale { rates.setMaxBpm(nil, for: id) }
+            for (id, bpm) in figures { rates.setMaxBpm(bpm, for: id) }
+            rates.setSession(pair.map {
+                WorkoutHeartRates.Session(sessionID: session, averageBpm: $0.averageBpm,
+                                          maxBpm: $0.maxBpm)
+            }, sessionID: session, on: day)
+            rates = rates.pruned(keepingSets: setIDs, days: dayIDs)
+        }
     }
 
     // MARK: - Which day
@@ -171,9 +213,12 @@ enum WatchSessionImporter {
 
     /// Appends the session's exercises to `day` and returns the ids written,
     /// in order, for the receipt.
+    /// `figures` gains each stored set's heart rate, by its new id, for the
+    /// sets that carried one.
     @MainActor
     private static func insert(_ exercises: [PerformedExercise], into day: WorkoutDay,
-                               sessionID: UUID, defaults: UserDefaults) -> [UUID] {
+                               sessionID: UUID, defaults: UserDefaults,
+                               figures: inout [UUID: Int]) -> [UUID] {
         var ids: [UUID] = []
         var perSide = PerSideLogging.decode(defaults.string(forKey: PerSideLogging.storageKey) ?? "{}")
         var perSideChanged = false
@@ -203,6 +248,7 @@ enum WatchSessionImporter {
                     side: set.side?.setSide
                 )
                 stored.completedAt = set.completedAt
+                if let bpm = set.maxBpm { figures[stored.id] = bpm }
                 return stored
             }
             day.exercises.append(entry)
@@ -336,7 +382,7 @@ extension PlanSide {
 /// was written.
 ///
 /// `UserDefaults` rather than columns on the store, for the reason
-/// `WatchSessionHeartRateStore` and `PlanSides` are there too: `WorkoutDay`
+/// `PlanSides` is there too: `WorkoutDay`
 /// and `ExerciseEntry` are shared `@Model`s, and a field on one is a schema
 /// change for two shipped apps. This is bookkeeping about a wire, not
 /// history: losing it costs a duplicate import of a session the watch is

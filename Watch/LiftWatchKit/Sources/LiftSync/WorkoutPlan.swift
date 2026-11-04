@@ -357,3 +357,42 @@ public struct SessionHeartRate: Codable, Equatable, Sendable {
         self.maxBpm = maxBpm
     }
 }
+
+/// How heart rate is said, on the watch and on the phone: both compile this
+/// one copy, so the two cannot drift. LIFT for Android and its Wear OS watch
+/// say the same words; change them in every build or in none.
+///
+/// **Shown, never graded.** A number and its unit, with nothing beside it:
+/// no zone, no colour, no threshold, no percentage of a maximum heart rate
+/// (that needs an age-based guess no build is qualified to make), and nothing
+/// about being recovered or ready.
+public enum HeartRateWords {
+
+    /// "max 142 bpm", muted, beside a set that has a figure.
+    public static func set(maxBpm: Int) -> String {
+        "max \(maxBpm) bpm"
+    }
+
+    /// "Heart rate: average 118 · max 156 bpm", for a session. Whole beats,
+    /// halves away from zero, as a set's figure is rounded.
+    public static func session(_ heartRate: SessionHeartRate) -> String {
+        "Heart rate: average \(whole(heartRate.averageBpm)) · max \(whole(heartRate.maxBpm)) bpm"
+    }
+
+    /// The same line from halves either of which may be absent, as a backup
+    /// can carry them: one half alone says only that half ("Heart rate: max
+    /// 156 bpm"), and neither is no line at all. LIFT for Android's
+    /// `HeartRateLines.session`, word for word. The watch always sends both,
+    /// so only a hand-edited or foreign backup ever shows a half.
+    public static func session(averageBpm: Double?, maxBpm: Double?) -> String? {
+        let parts = [
+            averageBpm.flatMap { $0.isFinite && whole($0) > 0 ? "average \(whole($0))" : nil },
+            maxBpm.flatMap { $0.isFinite && whole($0) > 0 ? "max \(whole($0))" : nil }
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : "Heart rate: \(parts.joined(separator: " · ")) bpm"
+    }
+
+    private static func whole(_ bpm: Double) -> Int {
+        Int(bpm.rounded(.toNearestOrAwayFromZero))
+    }
+}

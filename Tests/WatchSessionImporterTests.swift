@@ -28,6 +28,18 @@ final class WatchSessionImporterTests: XCTestCase {
         return defaults
     }
 
+    /// Its own heart-rate file per test, for the reason the defaults are a
+    /// suite of their own: `.shared` is the test host's, which is LIFT.
+    private func isolatedHeartRates(_ name: String = #function) -> WorkoutHeartRateStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WatchSessionImporterTests.\(name).\(UUID().uuidString).json")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return WorkoutHeartRateStore(url: url)
+    }
+
+    /// One per test: XCTest builds a fresh instance for every test method.
+    private lazy var heartRates = isolatedHeartRates()
+
     // 2026-09-20 09:00 UTC, and the phone's "now" an hour later.
     private let started = Date(timeIntervalSince1970: 1_789_891_200)
     private let now = Date(timeIntervalSince1970: 1_789_894_800)
@@ -72,7 +84,7 @@ final class WatchSessionImporterTests: XCTestCase {
         let defaults = isolatedDefaults()
 
         let outcome = WatchSessionImporter.apply(envelope(session()), in: context,
-                                                 now: now, defaults: defaults)
+                                                 now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(outcome, .stored)
         let day = try XCTUnwrap(try days(in: context).first)
@@ -97,7 +109,7 @@ final class WatchSessionImporterTests: XCTestCase {
     func testNothingConvertsTheWeight() throws {
         let context = makeContext()
         WatchSessionImporter.apply(envelope(session()), in: context, now: now,
-                                   defaults: isolatedDefaults())
+                                   defaults: isolatedDefaults(), heartRates: heartRates)
 
         let set = try XCTUnwrap(try days(in: context).first?.orderedExercises.first?
             .orderedSets.last)
@@ -112,7 +124,7 @@ final class WatchSessionImporterTests: XCTestCase {
                                 updatedAt: now, origin: .watchOS)
 
         let outcome = WatchSessionImporter.apply(bare, in: context, now: now,
-                                                 defaults: isolatedDefaults())
+                                                 defaults: isolatedDefaults(), heartRates: heartRates)
 
         XCTAssertEqual(outcome, .nothingToStore)
         XCTAssertTrue(try days(in: context).isEmpty)
@@ -134,7 +146,7 @@ final class WatchSessionImporterTests: XCTestCase {
             ])
         ])
 
-        WatchSessionImporter.apply(envelope(perSide), in: context, now: now, defaults: defaults)
+        WatchSessionImporter.apply(envelope(perSide), in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         let exercise = try XCTUnwrap(try days(in: context).first?.orderedExercises.first)
         XCTAssertEqual(exercise.orderedSets.map(\.side), [.left, .right, .left, .right])
@@ -162,7 +174,7 @@ final class WatchSessionImporterTests: XCTestCase {
         WatchSessionImporter.apply(envelope(session(exercises: [
             PerformedExercise(name: "Bulgarian Split Squat", equipment: "dumbbell",
                               sets: [PerformedSet(weightKg: 30, reps: 8, side: .left)])
-        ])), in: context, now: now, defaults: defaults)
+        ])), in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(
             PerSideLogging.isOn(key, in: defaults.string(forKey: PerSideLogging.storageKey) ?? "{}"),
@@ -178,7 +190,7 @@ final class WatchSessionImporterTests: XCTestCase {
         let context = makeContext()
         let defaults = isolatedDefaults()
 
-        WatchSessionImporter.apply(envelope(session()), in: context, now: now, defaults: defaults)
+        WatchSessionImporter.apply(envelope(session()), in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(try days(in: context).first?.orderedExercises.first?
             .orderedSets.compactMap(\.side), [])
@@ -195,9 +207,9 @@ final class WatchSessionImporterTests: XCTestCase {
         let sent = envelope(session())
 
         XCTAssertEqual(WatchSessionImporter.apply(sent, in: context, now: now,
-                                                  defaults: defaults), .stored)
+                                                  defaults: defaults, heartRates: heartRates), .stored)
         XCTAssertEqual(WatchSessionImporter.apply(sent, in: context, now: now,
-                                                  defaults: defaults), .duplicate)
+                                                  defaults: defaults, heartRates: heartRates), .duplicate)
 
         XCTAssertEqual(try days(in: context).count, 1)
         XCTAssertEqual(try days(in: context).first?.totalSetCount, 2)
@@ -212,10 +224,10 @@ final class WatchSessionImporterTests: XCTestCase {
 
         WatchSessionImporter.apply(
             envelope(session(name: "Upper A (edited)"), id: id, revision: 3),
-            in: context, now: now, defaults: defaults)
+            in: context, now: now, defaults: defaults, heartRates: heartRates)
         let outcome = WatchSessionImporter.apply(
             envelope(session(name: "Upper A"), id: id, revision: 2),
-            in: context, now: now, defaults: defaults)
+            in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(outcome, .duplicate)
         XCTAssertEqual(try days(in: context).first?.name, "Upper A (edited)")
@@ -227,10 +239,10 @@ final class WatchSessionImporterTests: XCTestCase {
         let context = makeContext()
         let defaults = isolatedDefaults()
 
-        WatchSessionImporter.apply(envelope(session()), in: context, now: now, defaults: defaults)
+        WatchSessionImporter.apply(envelope(session()), in: context, now: now, defaults: defaults, heartRates: heartRates)
         WatchSessionImporter.apply(envelope(session(name: "Evening", exercises: [
             PerformedExercise(name: "Row", sets: [PerformedSet(weightKg: 70, reps: 10)])
-        ])), in: context, now: now, defaults: defaults)
+        ])), in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         let days = try days(in: context)
         XCTAssertEqual(days.count, 1)
@@ -247,7 +259,7 @@ final class WatchSessionImporterTests: XCTestCase {
         let id = UUID()
 
         WatchSessionImporter.apply(envelope(session(), id: id, revision: 2),
-                                   in: context, now: now, defaults: defaults)
+                                   in: context, now: now, defaults: defaults, heartRates: heartRates)
         let corrected = session(exercises: [
             PerformedExercise(name: "Bench Press", equipment: "barbell", sets: [
                 PerformedSet(weightKg: 60, reps: 8, isWarmup: true, completedAt: started),
@@ -255,7 +267,7 @@ final class WatchSessionImporterTests: XCTestCase {
             ])
         ])
         let outcome = WatchSessionImporter.apply(envelope(corrected, id: id, revision: 3),
-                                                 in: context, now: now, defaults: defaults)
+                                                 in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(outcome, .stored)
         let day = try XCTUnwrap(try days(in: context).first)
@@ -277,7 +289,7 @@ final class WatchSessionImporterTests: XCTestCase {
         let defaults = isolatedDefaults()
         let id = UUID()
         WatchSessionImporter.apply(envelope(session(), id: id, revision: 2),
-                                   in: context, now: now, defaults: defaults)
+                                   in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         // The lifter corrects the working set here, on the phone.
         let day = try XCTUnwrap(try days(in: context).first)
@@ -292,7 +304,7 @@ final class WatchSessionImporterTests: XCTestCase {
                     PerformedSet(weightKg: 100, reps: 12, rpe: 8, completedAt: now)
                 ])
             ]), id: id, revision: 3),
-            in: context, now: now, defaults: defaults)
+            in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(outcome, .conflict)
         let after = try XCTUnwrap(try days(in: context).first)
@@ -307,15 +319,15 @@ final class WatchSessionImporterTests: XCTestCase {
         let defaults = isolatedDefaults()
         let id = UUID()
         WatchSessionImporter.apply(envelope(session(), id: id, revision: 2),
-                                   in: context, now: now, defaults: defaults)
+                                   in: context, now: now, defaults: defaults, heartRates: heartRates)
         let day = try XCTUnwrap(try days(in: context).first)
         day.orderedExercises[0].orderedSets.last?.reps = 4
         try context.save()
 
         _ = WatchSessionImporter.apply(envelope(session(), id: id, revision: 3),
-                                       in: context, now: now, defaults: defaults)
+                                       in: context, now: now, defaults: defaults, heartRates: heartRates)
         let again = WatchSessionImporter.apply(envelope(session(), id: id, revision: 3),
-                                               in: context, now: now, defaults: defaults)
+                                               in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(again, .duplicate)
         XCTAssertEqual(try days(in: context).first?.orderedExercises.first?
@@ -328,12 +340,12 @@ final class WatchSessionImporterTests: XCTestCase {
         let defaults = isolatedDefaults()
         let id = UUID()
         WatchSessionImporter.apply(envelope(session(), id: id, revision: 2),
-                                   in: context, now: now, defaults: defaults)
+                                   in: context, now: now, defaults: defaults, heartRates: heartRates)
         for day in try days(in: context) { context.delete(day) }
         try context.save()
 
         let outcome = WatchSessionImporter.apply(envelope(session(), id: id, revision: 3),
-                                                 in: context, now: now, defaults: defaults)
+                                                 in: context, now: now, defaults: defaults, heartRates: heartRates)
 
         XCTAssertEqual(outcome, .conflict)
         XCTAssertTrue(try days(in: context).isEmpty)
@@ -353,7 +365,7 @@ final class WatchSessionImporterTests: XCTestCase {
         try context.save()
 
         WatchSessionImporter.apply(envelope(session()), in: context, now: now,
-                                   defaults: isolatedDefaults())
+                                   defaults: isolatedDefaults(), heartRates: heartRates)
 
         let days = try days(in: context)
         XCTAssertEqual(days.count, 1)
@@ -377,7 +389,7 @@ final class WatchSessionImporterTests: XCTestCase {
             Calendar.current.date(byAdding: .day, value: 3, to: now))
 
         WatchSessionImporter.apply(envelope(session()), in: context, now: threeDaysLater,
-                                   defaults: isolatedDefaults())
+                                   defaults: isolatedDefaults(), heartRates: heartRates)
 
         XCTAssertEqual(try days(in: context).first?.dayKey, DayKey.make(from: started))
     }
@@ -390,7 +402,7 @@ final class WatchSessionImporterTests: XCTestCase {
         let context = makeContext()
 
         WatchSessionImporter.apply(envelope(session(performedOn: "2016-01-04")),
-                                   in: context, now: now, defaults: isolatedDefaults())
+                                   in: context, now: now, defaults: isolatedDefaults(), heartRates: heartRates)
 
         let day = try XCTUnwrap(try days(in: context).first)
         XCTAssertEqual(day.dayKey, DayKey.make(from: now))
@@ -402,7 +414,7 @@ final class WatchSessionImporterTests: XCTestCase {
         let nextWeek = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: 7, to: now))
 
         WatchSessionImporter.apply(envelope(session(performedOn: DayKey.make(from: nextWeek))),
-                                   in: context, now: now, defaults: isolatedDefaults())
+                                   in: context, now: now, defaults: isolatedDefaults(), heartRates: heartRates)
 
         XCTAssertEqual(try days(in: context).first?.dayKey, DayKey.make(from: now))
     }
@@ -414,7 +426,7 @@ final class WatchSessionImporterTests: XCTestCase {
         let tomorrow = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: 1, to: now))
 
         WatchSessionImporter.apply(envelope(session(performedOn: DayKey.make(from: tomorrow))),
-                                   in: context, now: now, defaults: isolatedDefaults())
+                                   in: context, now: now, defaults: isolatedDefaults(), heartRates: heartRates)
 
         XCTAssertEqual(try days(in: context).first?.dayKey, DayKey.make(from: tomorrow))
     }

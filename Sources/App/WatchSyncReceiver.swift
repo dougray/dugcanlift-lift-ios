@@ -35,17 +35,24 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
 
     private let context: ModelContext
     private let defaults: UserDefaults
+    /// Each watch set's heart rate and each session's pair, beside the store.
+    /// `.shared` from `activate`; never a default, for the reason the
+    /// importer's is not one.
+    private let heartRates: WorkoutHeartRateStore
     /// Where an outgoing envelope goes. `nil` is WatchConnectivity
     /// (`sendOverSession`); a test passes a closure to see what was sent,
     /// since no `WCSession` activates in a unit test process.
     private let sender: ((SyncEnvelope) -> Void)?
 
     init(context: ModelContext, defaults: UserDefaults = .standard,
+         heartRates: WorkoutHeartRateStore,
          sender: ((SyncEnvelope) -> Void)? = nil) {
         self.context = context
         self.defaults = defaults
+        self.heartRates = heartRates
         self.sender = sender
         super.init()
+        heartRates.absorbLegacyPair(from: defaults)
         if WCSession.isSupported() {
             WCSession.default.delegate = self
             WCSession.default.activate()
@@ -55,7 +62,7 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// Installs `.shared`. Called once, from `LiftApp.init()`, at launch.
     @MainActor
     static func activate(context: ModelContext) {
-        shared = WatchSyncReceiver(context: context)
+        shared = WatchSyncReceiver(context: context, heartRates: .shared)
     }
 
     // WatchConnectivity delivers this on a background serial queue, not the
@@ -222,23 +229,22 @@ final class WatchSyncReceiver: NSObject, WCSessionDelegate {
     /// favour, and a payload with nothing in it — and a failed write is not,
     /// so the watch goes on holding what this phone could not store.
     ///
-    /// **The heart rate** is kept beside the store rather than on the day:
-    /// `WorkoutDay` has no heart-rate columns, and adding them is a schema
-    /// change for a store two shipped apps share (see CLAUDE.md, "A struct a
-    /// model stores is part of the schema"). The samples themselves are in
-    /// HealthKit already, written by the watch as part of its own workout.
+    /// **The heart rate** -- each set's figure and the session's average and
+    /// max -- is kept beside the store rather than on the rows, by the
+    /// importer as it stores them (`WorkoutHeartRates`): `SetEntry` and
+    /// `WorkoutDay` are versioned models, and a column is a schema version.
+    /// The samples themselves are in HealthKit already, written by the watch
+    /// as part of its own workout.
     @MainActor
     @discardableResult
     private func handleSessionFinished(_ envelope: SyncEnvelope) -> Bool {
-        if let heartRate = envelope.heartRate {
-            WatchSessionHeartRateStore.record(heartRate, for: envelope.workoutID, in: defaults)
-        }
         // A `SESSION_FINISHED` from a watch build that predates the payload
         // is what it always was: a notification, with nothing to store and
-        // nothing to acknowledge.
-        guard envelope.session != nil else { return envelope.heartRate != nil }
+        // nothing to acknowledge. Its heart rate has no day to belong to.
+        guard envelope.session != nil else { return false }
 
-        let outcome = WatchSessionImporter.apply(envelope, in: context, defaults: defaults)
+        let outcome = WatchSessionImporter.apply(envelope, in: context, defaults: defaults,
+                                                 heartRates: heartRates)
         guard outcome != .failed else { return false }
         acknowledge(envelope)
         guard outcome == .stored else { return outcome == .duplicate }

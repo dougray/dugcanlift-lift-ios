@@ -82,7 +82,8 @@ final class SchemaConformanceTests: XCTestCase {
                     note: "Pause the first rep",
                     sets: [PerformedSet(weightKg: 83.9, reps: 5, rpe: 8, isWarmup: true,
                                         side: .left,
-                                        completedAt: Date(timeIntervalSince1970: 1_758_356_000))]
+                                        completedAt: Date(timeIntervalSince1970: 1_758_356_000),
+                                        maxBpm: 142)]
                 )]
             ),
             heartRate: SessionHeartRate(averageBpm: 128.5, maxBpm: 171)

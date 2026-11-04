@@ -106,29 +106,38 @@ public struct PerformedSet: Codable, Equatable, Sendable {
     /// When the set was logged. Absent for a set that was entered but never
     /// completed.
     public var completedAt: Date?
+    /// The highest heart rate the watch measured around this set, in whole
+    /// beats per minute: the window rule is the watch's `SetHeartRate`.
+    /// **Absent when not recorded, never zero** -- a phone-led set, a watch
+    /// off the wrist, Health's heart rate turned off -- so a session with no
+    /// figures is byte for byte what a sender that predates this key wrote,
+    /// and a receiver that predates it ignores the key.
+    public var maxBpm: Int?
 
     public init(weightKg: Double, reps: Int, rpe: Double? = nil,
                 isWarmup: Bool = false, side: PlanSide? = nil,
-                completedAt: Date? = nil) {
+                completedAt: Date? = nil, maxBpm: Int? = nil) {
         self.weightKg = weightKg
         self.reps = reps
         self.rpe = rpe
         self.isWarmup = isWarmup
         self.side = side
         self.completedAt = completedAt
+        self.maxBpm = maxBpm.flatMap { $0 > 0 ? $0 : nil }
     }
 
     private enum CodingKeys: String, CodingKey {
         case weightKg, reps, rpe
         case isWarmup = "warmup"
-        case side, completedAt
+        case side, completedAt, maxBpm
     }
 
-    // Written out by hand for two keys, and two only: `warmup`, which is
-    // absent rather than `false`, and `side`, which is read leniently — a
-    // word this build does not know leaves the set two-sided rather than
-    // failing the whole session (`PlanSide(wire:)`). A session is the only
-    // copy of somebody's work; nothing here may throw over a detail.
+    // Written out by hand for three keys, and three only: `warmup`, which is
+    // absent rather than `false`, and `side` and `maxBpm`, which are read
+    // leniently -- a word this build does not know leaves the set two-sided
+    // rather than failing the whole session (`PlanSide(wire:)`), and a heart
+    // rate that is not a positive whole number is no heart rate. A session is
+    // the only copy of somebody's work; nothing here may throw over a detail.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         weightKg = try container.decode(Double.self, forKey: .weightKg)
@@ -138,6 +147,8 @@ public struct PerformedSet: Codable, Equatable, Sendable {
         let rawSide = (try? container.decodeIfPresent(String.self, forKey: .side)) ?? nil
         side = PlanSide(wire: rawSide)
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        let rawBpm = (try? container.decodeIfPresent(Int.self, forKey: .maxBpm)) ?? nil
+        maxBpm = rawBpm.flatMap { $0 > 0 ? $0 : nil }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -148,6 +159,7 @@ public struct PerformedSet: Codable, Equatable, Sendable {
         if isWarmup { try container.encode(true, forKey: .isWarmup) }
         try container.encodeIfPresent(side, forKey: .side)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        if let maxBpm, maxBpm > 0 { try container.encode(maxBpm, forKey: .maxBpm) }
     }
 }
 

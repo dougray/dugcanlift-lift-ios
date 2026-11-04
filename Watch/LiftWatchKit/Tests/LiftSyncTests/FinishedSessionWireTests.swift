@@ -182,6 +182,83 @@ final class FinishedSessionWireTests: XCTestCase {
         XCTAssertEqual(try SyncEnvelope(messageBody: body).session?.name, "Upper A")
     }
 
+    // MARK: - Heart rate per set
+
+    private func withFigure(_ maxBpm: Int?) -> FinishedSession {
+        FinishedSession(
+            name: "Workout", performedOn: "2026-09-20",
+            startedAt: Date(timeIntervalSince1970: 1_789_891_200),
+            finishedAt: Date(timeIntervalSince1970: 1_789_894_800),
+            exercises: [PerformedExercise(name: "Deadlift", sets: [
+                PerformedSet(weightKg: 140, reps: 3,
+                             completedAt: Date(timeIntervalSince1970: 1_789_891_500),
+                             maxBpm: maxBpm)
+            ])]
+        )
+    }
+
+    private func firstSet(_ object: [String: Any]) throws -> [String: Any] {
+        try XCTUnwrap((((object["session"] as? [String: Any])?["exercises"]
+            as? [[String: Any]])?.first?["sets"] as? [[String: Any]])?.first)
+    }
+
+    /// A set's figure is `maxBpm`, a whole number, and comes back as it went.
+    func testASetsHeartRateTravelsAsAWholeNumber() throws {
+        let sent = envelope(withFigure(142))
+        let object = try json(sent)
+        XCTAssertEqual(try firstSet(object)["maxBpm"] as? Int, 142)
+
+        let received = try SyncEnvelope(messageBody: try sent.messageBody())
+        XCTAssertEqual(received.session?.exercises[0].sets[0].maxBpm, 142)
+        XCTAssertEqual(received, sent)
+    }
+
+    /// Not recorded is no key, never a zero, so a session with no figures is
+    /// what a watch that predates them sent.
+    func testNoHeartRateIsNoKeyAndZeroIsNoHeartRate() throws {
+        XCTAssertEqual(Set(try firstSet(try json(envelope(withFigure(nil)))).keys),
+                       ["weightKg", "reps", "completedAt"])
+        XCTAssertEqual(Set(try firstSet(try json(envelope(withFigure(0)))).keys),
+                       ["weightKg", "reps", "completedAt"])
+        XCTAssertNil(PerformedSet(weightKg: 140, reps: 3, maxBpm: -3).maxBpm)
+    }
+
+    /// Anything but a positive whole number costs the figure and nothing
+    /// else: the set, and the session, still arrive.
+    func testAHeartRateThatIsNotAPositiveWholeNumberIsNoHeartRate() throws {
+        for junk: Any in [0, -3, "fast", 141.5, NSNull()] {
+            var body = try envelope(withFigure(nil)).messageBody()
+            var session = try XCTUnwrap(body["session"] as? [String: Any])
+            var exercises = try XCTUnwrap(session["exercises"] as? [[String: Any]])
+            var sets = try XCTUnwrap(exercises[0]["sets"] as? [[String: Any]])
+            sets[0]["maxBpm"] = junk
+            exercises[0]["sets"] = sets
+            session["exercises"] = exercises
+            body["session"] = session
+
+            let set = try XCTUnwrap(SyncEnvelope(messageBody: body).session?.exercises[0].sets[0])
+            XCTAssertNil(set.maxBpm, "\(junk)")
+            XCTAssertEqual(set.reps, 3, "\(junk)")
+        }
+    }
+
+    /// A phone that predates the key reads a newer watch's set exactly as it
+    /// always did: its decoder names the keys it knows and no others.
+    func testAReceiverThatPredatesTheKeyStillReadsTheSet() throws {
+        struct OlderPerformedSet: Decodable {
+            var weightKg: Double
+            var reps: Int
+            var completedAt: Date?
+        }
+        let data = try SyncEnvelope.encoder.encode(envelope(withFigure(142)))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let setData = try JSONSerialization.data(withJSONObject: try firstSet(object))
+        let older = try SyncEnvelope.decoder.decode(OlderPerformedSet.self, from: setData)
+        XCTAssertEqual(older.weightKg, 140)
+        XCTAssertEqual(older.reps, 3)
+        XCTAssertNotNil(older.completedAt)
+    }
+
     /// The old shape: a notification that a session ended, with nothing in
     /// it. It still decodes, and `session` is simply absent.
     func testASessionFinishedWithNoPayloadStillDecodes() throws {

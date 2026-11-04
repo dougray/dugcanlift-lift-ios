@@ -39,3 +39,10 @@ data/
 
 # Claude Code worktree scratch directories
 .claude/worktrees/
+
+# Secrets: never commit env files (examples and templates stay tracked)
+.env
+.env.*
+*.env
+!.env.example
+!.env.template

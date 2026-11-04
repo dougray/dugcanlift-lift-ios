@@ -26,6 +26,9 @@ let package = Package(
         .target(name: "LiftKit", dependencies: ["LiftSync"],
                 resources: [.copy("Resources/foods.json")]),
         .testTarget(name: "LiftSyncTests", dependencies: ["LiftSync"]),
-        .testTarget(name: "LiftKitTests", dependencies: ["LiftKit", "LiftSync"])
+        // `heart-rate-per-set.json` was worked by hand and is shared with
+        // dugcanlift-lift-watch's Kotlin port: never regenerate it.
+        .testTarget(name: "LiftKitTests", dependencies: ["LiftKit", "LiftSync"],
+                    resources: [.copy("Fixtures/heart-rate-per-set.json")])
     ]
 )

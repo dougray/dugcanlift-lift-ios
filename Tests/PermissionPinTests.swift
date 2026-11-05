@@ -73,7 +73,9 @@ final class PermissionPinTests: XCTestCase {
                 "NSLocationWhenInUseUsageDescription",
             ],
             backgroundModes: ["location"],
-            watchBackgroundModes: ["location", "workout-processing"]),
+            // Not "location": that is no WKBackgroundModes value, and App Store
+            // Connect refuses the upload. Location lives in UIBackgroundModes.
+            watchBackgroundModes: ["workout-processing"]),
     ]
 
     /// project.yml's `entitlements.properties`, file by file, plus the tracked

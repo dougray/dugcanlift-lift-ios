@@ -4,8 +4,9 @@
 # The .xcodeproj is a build artifact — it is gitignored. This file is the
 # source of truth for targets, entitlements, capabilities and Info.plist keys.
 #
-# Replace com.dugcanlift throughout, and set DEVELOPMENT_TEAM to your 10-char
-# Team ID from developer.apple.com → Membership.
+# Replace com.dugcanlift throughout, and put your 10-char Team ID (from
+# developer.apple.com → Membership) in Config/Local.xcconfig; see
+# Config/Signing.xcconfig.
 
 name: Lift
 
@@ -16,6 +17,12 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
   generateEmptyDirectories: true
+
+# Signing team: Config/Signing.xcconfig, which reads your Team ID from the
+# gitignored Config/Local.xcconfig, so no team ID is ever committed.
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
 
 settings:
   base:

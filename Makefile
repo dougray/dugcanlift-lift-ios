@@ -83,9 +83,9 @@ WATCH ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/Watch/ && !/si
 #
 # Rows marked "simulated" are skipped: devicectl lists simulators alongside
 # real devices now (its Reality column says which), sorted by name. Today's
-# phone, "Mjolnir", sorts ahead of every "iPad ..."/"iPhone ..." simulator
-# only because of its capital M; a device named "stormbringer" sorts after
-# them, and with no phone attached at all the first simulator was taken as
+# phone sorted ahead of every "iPad ..."/"iPhone ..." simulator only because
+# its name starts with a capital letter; a device named in lower case sorts
+# after them, and with no phone attached at all the first simulator was taken as
 # the device instead of the "No iPhone or iPad visible" message below.
 DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/iPhone|iPad/ && !/simulated/ { for (i = 1; i <= NF; i++) if ($$i ~ /^[0-9A-Fa-f]{8}-[0-9A-Fa-f-]+$$/) { print $$i; exit } }')
 

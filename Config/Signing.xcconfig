@@ -1,0 +1,9 @@
+// Signing team. The Team ID is kept out of the repo: put yours in
+// Config/Local.xcconfig (gitignored), one line:
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//
+// Without it Xcode builds for the simulator fine and asks for a team when
+// signing for a device.
+DEVELOPMENT_TEAM =
+#include? "Local.xcconfig"

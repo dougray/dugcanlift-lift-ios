@@ -170,8 +170,9 @@ string key, not date-range predicates. The two must stay consistent.
 set it after. Background sync retries, and duplicated Health entries are very
 visible to users.
 
-**LIFT makes no network calls.** Nothing in the app, its share extension, its
-widget or its watch app requests anything from any server — the in-house rule
+**LIFT makes no network calls**, except the one street-map download described
+below. Nothing else in the app, its share extension, its widget or its watch
+app requests anything from any server — the in-house rule
 (LIFT superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
 `NoNetworkTests`, which fails `make test` on `URLSession`, `URLRequest`,
 `NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
@@ -187,6 +188,27 @@ the share extension's `RecipePage.js` hands over the page's JSON-LD, the
 extension queues the raw block (`PendingRecipeImports`), and `RecipeImportView`
 re-reads it with `LiftCore.RecipeJSONLD` for review. LIFT never fetches the
 page.
+
+**The app holds no exception to that rule; the kit holds exactly one**: the
+download a person starts in Settings › Maps (`LiftMapCore`'s `MapDownload`, only
+to `tiles.openfreemap.org`, never while a map is viewed). That request carries
+the tile coordinates of the area the person picked -- for "Download streets
+around here" an approximate location, at the scale of kilometers -- and their IP
+address, to OpenFreeMap; nothing goes to the developer. Street maps (`RouteMap`
+on the recording screen, the run review and Train's "Last route"; `MapsSection`
+in Settings) come from `LiftKit` 1.18.1's `LiftMap` and
+`LiftMapCore` products, which only the `Lift` target links -- never
+`LiftWidgets`, `LiftShare` or `LiftWatch` (`MapTargetsTests` reads `project.yml`
+and fails if one does). `LiftApp.init` calls `MapNetworkGuard.install()`, so
+MapLibre's own session refuses every request. A map draws from the areas the
+person downloaded, or the plain line (`RouteCanvas`) where none covers the run.
+`NoNetworkTests` is unchanged and still scans every Swift file under `Sources/`:
+this repo gains no network API, and the day it needs one the answer is the kit,
+not a new exception here. The Maps section's "around here" offer asks
+`OneLocationFix` for one position and **never prompts**: without location
+permission the row is not shown. The licenses the maps carry (MapLibre's BSD
+2-Clause, Noto's OFL, OpenStreetMap / OpenFreeMap) are `Resources/MapLicenses.txt`,
+shown from Settings › Data sources › Map licenses.
 
 **A shared recipe opens through `RecipeReviewQueue`, one at a time.** A recipe
 drained from the App Group is gone from disk, and SwiftUI shows one

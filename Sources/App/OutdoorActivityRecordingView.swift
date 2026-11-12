@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import LiftCore
+import LiftMap
 
 /// Live recording: elapsed time, distance, pace, and a live-updating
 /// route. `LocationTracker` is the source of truth for points while
@@ -50,9 +51,10 @@ struct OutdoorActivityRecordingView: View {
                 )
             } else {
                 VStack(spacing: 16) {
-                    // The line on its own, as LIFT Android draws it: no tile
-                    // server learns where you are running.
-                    RouteCanvas(points: tracker.points.map {
+                    // Over the streets you have downloaded, or the line on its
+                    // own where you have none. Nothing is fetched either way:
+                    // no tile server learns where you are running.
+                    RouteMap(points: tracker.points.map {
                         OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
                     }, aspectRatio: 1)
 

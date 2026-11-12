@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 import HealthKit
 import LiftCore
+import LiftMap
+import LiftMapCore
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
@@ -21,6 +23,9 @@ struct SettingsView: View {
     @State private var health = HealthKitManager.shared
     @State private var isRequesting = false
     @State private var latestWeight: String?
+    /// Where the newest recorded run began, for the Maps section to offer.
+    @State private var lastRunStart: (Double, Double)?
+    @State private var oneFix = OneLocationFix()
 
     private var unit: WeightUnit {
         WeightUnit(rawValue: unitRaw) ?? .kilograms
@@ -73,6 +78,15 @@ struct SettingsView: View {
                 // it hears about a change on the next context push.
                 .onChange(of: unitRaw) { WatchSyncReceiver.shared?.pushRecentFoodsSnapshot() }
                 .onChange(of: distanceUnitRaw) { WatchSyncReceiver.shared?.pushRecentFoodsSnapshot() }
+
+                // Street maps are drawn from areas the person downloads here;
+                // nothing downloads or updates on its own. No store (the file
+                // could not be opened) means no section rather than a broken one.
+                if let streets = StreetStore.shared {
+                    MapsSection(store: streets,
+                                location: { await oneFix.current() },
+                                lastRunStart: lastRunStart)
+                }
 
                 Section {
                     Stepper(value: $watchRestSeconds,
@@ -155,15 +169,33 @@ struct SettingsView: View {
                     Text("These databases are distributed separately under their own licenses.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    attribution(
+                        "Street maps",
+                        detail: "© OpenStreetMap contributors (ODbL), vector tiles from OpenFreeMap. Drawn with MapLibre Native (BSD 2-Clause). Street names in Noto Sans (SIL Open Font License 1.1)."
+                    )
+                    NavigationLink("Map licenses") {
+                        MapLicenseView()
+                    }
                 }
             }
             .readableListMargins()
             .navigationTitle("Settings")
             .task {
+                lastRunStart = newestRunStart()
                 await health.refreshAuthorizationState()
                 await loadWeight()
             }
         }
+    }
+
+    /// The first recorded point of the newest run, if it recorded any. One
+    /// row is fetched, not every run with its route.
+    private func newestRunStart() -> (Double, Double)? {
+        var newest = FetchDescriptor<OutdoorActivity>(
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
+        newest.fetchLimit = 1
+        guard let first = (try? context.fetch(newest))?.first?.routePoints.first else { return nil }
+        return (first.latitude, first.longitude)
     }
 
     private func attribution(_ title: String, detail: String) -> some View {

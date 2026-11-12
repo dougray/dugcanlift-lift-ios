@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import LiftCore
+import LiftMap
 
 /// Wraps a decoded plan in its own identity for `.sheet(item:)`.
 ///
@@ -41,6 +42,9 @@ struct LiftApp: App {
     // the main actor before this: `App.init()` is declared `@MainActor` by
     // SwiftUI itself, which `LiftStore.shared.mainContext` needs.
     init() {
+        // Before any map is made: MapLibre's own session then refuses every
+        // request, so viewing a map cannot reach a server even if it tried.
+        MapNetworkGuard.install()
         WatchSyncReceiver.activate(context: LiftStore.shared.mainContext)
         // Built now so it is the notification delegate before anything is
         // delivered, and picks up a Live Activity left from a previous run.

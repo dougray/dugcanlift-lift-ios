@@ -1,5 +1,6 @@
 import SwiftUI
 import LiftCore
+import LiftMap
 
 /// Shown once a recording finishes. The activity is already saved locally
 /// (OutdoorActivityRecordingView inserted it) — this screen's job is
@@ -32,9 +33,9 @@ struct OutdoorActivityReviewView: View {
 
     private var activityBody: some View {
         List {
-            RouteCanvas(points: activity.routePoints.map {
+            RouteMap(points: activity.routePoints.map {
                 OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
-            }, aspectRatio: 1)
+            }, aspectRatio: 1, interactive: true)
             .listRowInsets(EdgeInsets())
 
             Section {

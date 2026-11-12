@@ -53,7 +53,7 @@ packages:
   # this line, never something that happens on a `swift package update`.
   LiftKit:
     url: https://github.com/dougray/dugcanlift-kit
-    exactVersion: 1.17.0
+    exactVersion: 1.18.0
   # The watch app's own domain package, in this repo (Watch/LiftWatchKit).
   # Its package is named LiftWatchKit, not LiftKit, so Xcode does not take it
   # for a local override of dugcanlift-kit above, whose package is also named
@@ -77,6 +77,14 @@ targets:
         product: LiftCore
       - package: LiftKit
         product: LiftReference
+      # Street maps (MapLibre, the downloaded areas, the one download). The
+      # app target only: never LiftWidgets, LiftShare or LiftWatch -- a map
+      # renderer has no place in a widget, and by the in-house rule nothing
+      # near a network API belongs in an extension. MapTargetsTests pins it.
+      - package: LiftKit
+        product: LiftMap
+      - package: LiftKit
+        product: LiftMapCore
       # The WatchConnectivity wire types, the same definitions the watch app
       # compiles. Only this product: none of the watch's domain comes along.
       - package: LiftWatchKit

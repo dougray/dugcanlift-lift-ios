@@ -4,6 +4,7 @@ import WidgetKit
 import LiftCore
 import LiftReference
 import LiftSync
+import LiftMap
 
 /// Day-based training log. Previous / Next walks calendar days; a day record
 /// is created lazily on first edit so browsing empty dates costs nothing.
@@ -1150,7 +1151,7 @@ private struct OutdoorHighlights: View {
                         .followsWindowAppearance()
                 } label: {
                     VStack(alignment: .leading, spacing: 10) {
-                        RouteCanvas(points: last.routePoints.map {
+                        RouteMap(points: last.routePoints.map {
                             OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
                         })
                         .frame(height: 180)

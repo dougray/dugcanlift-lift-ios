@@ -75,7 +75,7 @@ final class MapTargetsTests: XCTestCase {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
         let yml = try String(contentsOf: root.appendingPathComponent("project.yml"), encoding: .utf8)
-        XCTAssertTrue(yml.contains("exactVersion: 1.18.0"))
+        XCTAssertTrue(yml.contains("exactVersion: 1.18.1"))
     }
 
     /// The share extension and the widget compile no file that imports the map.

@@ -196,7 +196,7 @@ the tile coordinates of the area the person picked -- for "Download streets
 around here" an approximate location, at the scale of kilometers -- and their IP
 address, to OpenFreeMap; nothing goes to the developer. Street maps (`RouteMap`
 on the recording screen, the run review and Train's "Last route"; `MapsSection`
-in Settings) come from `LiftKit` 1.18.0's `LiftMap` and
+in Settings) come from `LiftKit` 1.18.1's `LiftMap` and
 `LiftMapCore` products, which only the `Lift` target links -- never
 `LiftWidgets`, `LiftShare` or `LiftWatch` (`MapTargetsTests` reads `project.yml`
 and fails if one does). `LiftApp.init` calls `MapNetworkGuard.install()`, so

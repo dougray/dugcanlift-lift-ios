@@ -173,7 +173,7 @@ struct SettingsView: View {
                         "Street maps",
                         detail: "© OpenStreetMap contributors (ODbL), vector tiles from OpenFreeMap. Drawn with MapLibre Native (BSD 2-Clause). Street names in Noto Sans (SIL Open Font License 1.1)."
                     )
-                    NavigationLink("MapLibre license") {
+                    NavigationLink("Map licenses") {
                         MapLicenseView()
                     }
                 }

@@ -25,7 +25,7 @@ struct MapLicenseView: View {
                 .padding()
         }
         .background(Theme.background)
-        .navigationTitle("MapLibre license")
+        .navigationTitle("Map licenses")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

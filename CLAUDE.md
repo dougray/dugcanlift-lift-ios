@@ -170,8 +170,9 @@ string key, not date-range predicates. The two must stay consistent.
 set it after. Background sync retries, and duplicated Health entries are very
 visible to users.
 
-**LIFT makes no network calls.** Nothing in the app, its share extension, its
-widget or its watch app requests anything from any server — the in-house rule
+**LIFT makes no network calls**, except the one street-map download described
+below. Nothing else in the app, its share extension, its widget or its watch
+app requests anything from any server — the in-house rule
 (LIFT superproject, `2026-10-06-in-house-runtime-design.md`), enforced by
 `NoNetworkTests`, which fails `make test` on `URLSession`, `URLRequest`,
 `NWConnection`, `import Network`, `import MapKit`, `import WebKit` or
@@ -190,8 +191,12 @@ page.
 
 **The app holds no exception to that rule; the kit holds exactly one**: the
 download a person starts in Settings › Maps (`LiftMapCore`'s `MapDownload`, only
-to `tiles.openfreemap.org`, never while a map is viewed). Street maps (`RouteMap` on the recording screen, the run review and Train's "Last
-route"; `MapsSection` in Settings) come from `LiftKit` 1.18.0's `LiftMap` and
+to `tiles.openfreemap.org`, never while a map is viewed). That request carries
+the tile coordinates of the area the person picked -- for "Download streets
+around here" an approximate location, at the scale of kilometers -- and their IP
+address, to OpenFreeMap; nothing goes to the developer. Street maps (`RouteMap`
+on the recording screen, the run review and Train's "Last route"; `MapsSection`
+in Settings) come from `LiftKit` 1.18.0's `LiftMap` and
 `LiftMapCore` products, which only the `Lift` target links -- never
 `LiftWidgets`, `LiftShare` or `LiftWatch` (`MapTargetsTests` reads `project.yml`
 and fails if one does). `LiftApp.init` calls `MapNetworkGuard.install()`, so

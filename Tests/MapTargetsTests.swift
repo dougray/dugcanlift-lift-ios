@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 @testable import Lift
 
 /// Street maps link MapLibre, which is a network-capable binary and a large
@@ -109,5 +110,26 @@ final class MapTargetsTests: XCTestCase {
         XCTAssertTrue(settings.contains("MapLicenseView()"), "Settings does not link the map licenses")
         XCTAssertNotNil(Bundle.main.url(forResource: MapLicenseView.fileName, withExtension: "txt"),
                         "MapLicenses.txt is not in the app bundle")
+    }
+}
+
+/// `OneLocationFix` is the Maps section's "around here" offer. It must never be
+/// the thing that raises a location prompt.
+@MainActor
+final class OneLocationFixTests: XCTestCase {
+
+    func testOnlyAnAlreadyGivenPermissionMayBeRead() {
+        let allowed: [CLAuthorizationStatus] = [.authorizedWhenInUse, .authorizedAlways]
+        let refused: [CLAuthorizationStatus] = [.notDetermined, .denied, .restricted]
+        for status in allowed { XCTAssertTrue(OneLocationFix.isAllowed(status), "\(status.rawValue)") }
+        for status in refused { XCTAssertFalse(OneLocationFix.isAllowed(status), "\(status.rawValue)") }
+    }
+
+    func testWithoutPermissionItAnswersNilAtOnceAndNeverAsks() async {
+        for status in [CLAuthorizationStatus.notDetermined, .denied, .restricted] {
+            let fix = OneLocationFix(status: { status })
+            let position = await fix.current()
+            XCTAssertNil(position, "status \(status.rawValue) must give nil without a request")
+        }
     }
 }

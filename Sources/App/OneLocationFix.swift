@@ -9,10 +9,24 @@ import CoreLocation
 @MainActor
 final class OneLocationFix: NSObject, CLLocationManagerDelegate {
 
-    private let manager = CLLocationManager()
+    /// Built on first use, not with this object: Settings holds one of these in
+    /// view state, and a `CLLocationManager` should exist only once somebody
+    /// actually asks for a fix.
+    private lazy var manager = CLLocationManager()
+    /// Tests give the status; the app reads the manager's own.
+    private let statusProvider: (() -> CLAuthorizationStatus)?
     private var continuation: CheckedContinuation<(Double, Double)?, Never>?
 
-    /// True when the person has already allowed location while the app is open.
+    init(status: (() -> CLAuthorizationStatus)? = nil) {
+        statusProvider = status
+        super.init()
+    }
+
+    private var status: CLAuthorizationStatus { statusProvider?() ?? manager.authorizationStatus }
+
+    /// The never-prompts rule as a pure decision: only a permission the person
+    /// has already given may be read. Not determined, denied and restricted all
+    /// answer nil without asking CoreLocation for anything.
     static func isAllowed(_ status: CLAuthorizationStatus) -> Bool {
         status == .authorizedWhenInUse || status == .authorizedAlways
     }
@@ -20,7 +34,7 @@ final class OneLocationFix: NSObject, CLLocationManagerDelegate {
     /// Latitude and longitude, or nil: no permission, no fix, or a fix that
     /// could not be read.
     func current() async -> (Double, Double)? {
-        guard Self.isAllowed(manager.authorizationStatus), continuation == nil else { return nil }
+        guard Self.isAllowed(status), continuation == nil else { return nil }
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
         return await withCheckedContinuation { continuation in

@@ -16,9 +16,11 @@
 	     - The app makes no network request while you use it. A recipe arrives
 	       through Safari's share sheet and routes are drawn on the device. The
 	       one exception is a street-map area the person chooses to download
-	       in Settings: it asks tiles.openfreemap.org for public map tiles, with
-	       no account, key or identifier and nothing about the person or their
-	       runs. No analytics or crash-reporting SDK is linked.
+	       in Settings. The tile coordinates of the area the person picks (for
+	       "Download streets around here", an approximate location at the scale
+	       of kilometers) and their IP address go to OpenFreeMap, which serves
+	       the tiles, with no account, key or identifier. Nothing goes to the
+	       developer. No analytics or crash-reporting SDK is linked.
 	     - Send to Coach puts the log in the #fragment of a
 	       www.dugcanlift.com/coach/ link, which a browser never sends to the
 	       server, and the person sends it themselves to a coach they choose.

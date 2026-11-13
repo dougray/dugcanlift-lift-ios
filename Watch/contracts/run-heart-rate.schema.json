@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LIFT Run Heart Rate",
+  "description": "One heart rate reading, sent watch -> phone during a run the phone records (path B). The phone starts the watch app with HKHealthStore.startWatchApp(toHandle:); the watch runs an HKWorkoutSession, mirrors it to the phone, and sends one of these per new heart rate statistic with sendToRemoteWorkoutSession(data:). Each Data is this object as UTF-8 JSON; the phone reads them in didReceiveDataFromRemoteWorkoutSession. Tracked and shown, never targeted: the phone shows the latest and keeps only the run's average and max, never the readings. A bpm of zero or less is no reading and is dropped. See LiftSync's RunHeartRatePayload.",
+  "type": "object",
+  "required": ["bpm", "at"],
+  "additionalProperties": false,
+  "properties": {
+    "bpm": {
+      "type": "integer",
+      "description": "Beats per minute, rounded to a whole number. Zero or less is no reading.",
+      "minimum": 1
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the reading was measured, ISO 8601 in UTC. Senders write whole seconds; readers accept fractional seconds too."
+    }
+  },
+  "examples": [
+    { "bpm": 142, "at": "2026-11-10T18:00:00Z" }
+  ]
+}

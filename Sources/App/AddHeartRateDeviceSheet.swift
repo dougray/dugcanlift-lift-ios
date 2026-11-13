@@ -19,10 +19,8 @@ struct AddHeartRateDeviceSheet: View {
                 Section {
                     if offered.isEmpty {
                         HStack(spacing: 12) {
-                            if !central.isDenied { ProgressView() }
-                            Text(central.isDenied
-                                 ? "Bluetooth is off for LIFT. Turn it on in the Settings app."
-                                 : "Looking for heart rate devices…")
+                            if central.radio.isLooking { ProgressView() }
+                            Text(central.radio.emptyListMessage)
                                 .foregroundStyle(.secondary)
                         }
                     }

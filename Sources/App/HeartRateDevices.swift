@@ -105,27 +105,79 @@ enum HeartRateStorage {
     }
 }
 
+/// What the radio is doing, as far as the add sheet cares. `HeartRateCentral`
+/// maps `CBManagerState` onto this, so the words the sheet shows can be tested
+/// without a radio.
+enum HeartRateRadioState: Equatable {
+    case unknown, resetting, poweredOn, poweredOff, unauthorized, unsupported
+
+    static let lookingMessage = "Looking for heart rate devices…"
+
+    /// What the add sheet says while it has nothing to list. Only "not allowed"
+    /// and "switched off" are things the person can fix, so only they get their
+    /// own words; an unsettled radio or a working one is still looking.
+    var emptyListMessage: String {
+        switch self {
+        case .unauthorized: "Bluetooth is off for LIFT. Turn it on in the Settings app."
+        case .poweredOff: "Bluetooth is turned off. Turn it on to look for heart rate devices."
+        case .unsupported: "This device can't look for Bluetooth heart rate devices."
+        case .unknown, .resetting, .poweredOn: Self.lookingMessage
+        }
+    }
+
+    /// Whether the sheet is actually searching (and so shows its spinner).
+    var isLooking: Bool {
+        switch self {
+        case .unknown, .resetting, .poweredOn: true
+        case .unauthorized, .poweredOff, .unsupported: false
+        }
+    }
+}
+
 /// Reconnecting while a run records: the same device, and only that one. A run
 /// has one source, so a drop is never answered by trying another device (or the
 /// watch); the number simply hides while nothing arrives
 /// (`LiveHeartRate.staleAfter`) and returns with the next reading.
 struct HeartRateReconnect {
+    /// How long to wait before trying again after a connection attempt *fails*
+    /// (a drop is retried at once). Two seconds, then five for every try after,
+    /// so a device that keeps refusing is not hammered.
+    static let retryDelays: [Duration] = [.seconds(2), .seconds(5)]
+
     /// The device this run is reading, nil when no run is recording.
     private(set) var target: UUID?
+    private var failures = 0
 
-    /// Starts a run's connection. Ignored while one is already held: the source
-    /// is fixed at the start.
-    mutating func begin(_ id: UUID) {
-        if target == nil { target = id }
+    /// Starts a run's connection. Ignored while one is already held (the source
+    /// is fixed at the start) and for a device nobody added: only the person's
+    /// own list can be connected to, whatever a caller upstream passes.
+    mutating func begin(_ id: UUID, among added: [AddedHeartRateDevice]) {
+        guard target == nil, added.contains(where: { $0.id == id }) else { return }
+        target = id
+        failures = 0
     }
 
     mutating func end() {
         target = nil
+        failures = 0
     }
 
     /// The device to connect again after `id` dropped, or nil to leave it.
     func onDisconnect(of id: UUID) -> UUID? {
         guard let target, target == id else { return nil }
         return target
+    }
+
+    /// The same device, and how long to wait, after an attempt to connect failed.
+    mutating func onFailure(of id: UUID) -> (id: UUID, delay: Duration)? {
+        guard let target, target == id else { return nil }
+        let delay = Self.retryDelays[min(failures, Self.retryDelays.count - 1)]
+        failures += 1
+        return (target, delay)
+    }
+
+    /// A connection was made: the next failure starts the delays again.
+    mutating func connected() {
+        failures = 0
     }
 }

@@ -33,15 +33,15 @@ struct HeartRateSettingsSection: View {
                 choice("Apple Watch", is: .watch)
             }
             Button("Add a Bluetooth heart rate device") { isAdding = true }
+                .sheet(isPresented: $isAdding) {
+                    AddHeartRateDeviceSheet(central: central, alreadyAdded: Set(devices.map(\.id))) { device in
+                        devicesRaw = HeartRateStorage.string(for: HeartRateStorage.adding(device, to: devices))
+                    }
+                }
         } header: {
             Text("Heart rate")
         } footer: {
             Text("Automatic uses a device you've added when it's nearby, then LIFT on your Apple Watch. Bands that save heart rate to Apple Health fill in the summary after the run.")
-        }
-        .sheet(isPresented: $isAdding) {
-            AddHeartRateDeviceSheet(central: central, alreadyAdded: Set(devices.map(\.id))) { device in
-                devicesRaw = HeartRateStorage.string(for: HeartRateStorage.adding(device, to: devices))
-            }
         }
     }
 

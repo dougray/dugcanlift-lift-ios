@@ -24,14 +24,17 @@ final class HeartRateCentral: NSObject {
     nonisolated(unsafe) static let measurement = CBUUID(string: "2A37")
     nonisolated static let restoreIdentifier = "lift.heartRate"
 
-    /// Bluetooth is switched off for LIFT in Settings. Read live, not cached.
-    var isDenied: Bool { CBManager.authorization == .denied || CBManager.authorization == .restricted }
-    private(set) var isPoweredOn = false
+    /// The radio's state, stored so a view reading it redraws when it changes
+    /// (a person tapping Don't Allow, or switching Bluetooth off, mid-sheet).
+    private(set) var radio: HeartRateRadioState = .unknown
 
     @ObservationIgnored private var manager: CBCentralManager?
 
     // Scanning (the add sheet)
     @ObservationIgnored private var scanContinuation: AsyncStream<[DiscoveredDevice]>.Continuation?
+    /// Which scan is current. A stream that ended late (its termination arrives
+    /// on a later turn) must not stop the scan that replaced it.
+    @ObservationIgnored private var scanToken = 0
     @ObservationIgnored private var discovered: [DiscoveredDevice] = []
     // Range probe (`inRange`)
     @ObservationIgnored private var probing = false
@@ -41,6 +44,7 @@ final class HeartRateCentral: NSObject {
     @ObservationIgnored private var reconnect = HeartRateReconnect()
     @ObservationIgnored private var peripheral: CBPeripheral?
     @ObservationIgnored private var onReading: ((Int, Date) -> Void)?
+    @ObservationIgnored private var retry: Task<Void, Never>?
 
     private func central() -> CBCentralManager {
         if let manager { return manager }
@@ -61,8 +65,9 @@ final class HeartRateCentral: NSObject {
         discovered = []
         let (stream, continuation) = AsyncStream.makeStream(of: [DiscoveredDevice].self)
         scanContinuation = continuation
+        let token = scanToken
         continuation.onTermination = { [weak self] _ in
-            Task { @MainActor in self?.endScan() }
+            Task { @MainActor in self?.endScan(ifCurrent: token) }
         }
         continuation.yield([])
         let manager = central()
@@ -72,10 +77,12 @@ final class HeartRateCentral: NSObject {
 
     func stopScan() {
         scanContinuation?.finish()
-        endScan()
+        scanToken += 1
+        endScan(ifCurrent: scanToken)
     }
 
-    private func endScan() {
+    private func endScan(ifCurrent token: Int) {
+        guard token == scanToken else { return }
         scanContinuation = nil
         if !probing, let manager, manager.isScanning { manager.stopScan() }
     }
@@ -99,18 +106,20 @@ final class HeartRateCentral: NSObject {
         while manager.state != .poweredOn {
             // `.unknown` and `.resetting` settle in a moment; anything else will not.
             guard manager.state == .unknown || manager.state == .resetting, clock.now < deadline else { return [] }
-            try? await Task.sleep(for: .milliseconds(100))
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return [] }
         }
         let wanted = Set(added.map(\.id))
         probing = true
         seen = Set(manager.retrieveConnectedPeripherals(withServices: [Self.service])
             .map(\.identifier).filter(wanted.contains))
         startScanning(manager)
-        try? await Task.sleep(until: deadline, clock: clock)
+        var cancelled = false
+        do { try await Task.sleep(until: deadline, clock: clock) } catch { cancelled = true }
         probing = false
         if scanContinuation == nil { manager.stopScan() }
         let found = seen
         seen = []
+        if cancelled { return [] }
         return HeartRateRange.inRange(added, seen: found)
     }
 
@@ -119,8 +128,13 @@ final class HeartRateCentral: NSObject {
     /// Reads one device's heart rate until `disconnect()`. A drop is answered by
     /// connecting the same device again, never another; a second `connect` for a
     /// different device while a run holds one is ignored (one source per run).
-    func connect(_ id: UUID, onReading: @escaping (Int, Date) -> Void) {
-        reconnect.begin(id)
+    /// An id that is not in `allowed` -- the person's added list, read from
+    /// storage when not handed over -- is refused, so nothing upstream can make
+    /// this connect to a stranger's strap.
+    func connect(_ id: UUID, allowed: [AddedHeartRateDevice]? = nil, onReading: @escaping (Int, Date) -> Void) {
+        let added = allowed ?? HeartRateStorage.devices(
+            from: UserDefaults.standard.string(forKey: HeartRateStorage.devicesKey) ?? "")
+        reconnect.begin(id, among: added)
         guard reconnect.target == id else { return }
         self.onReading = onReading
         _ = central()
@@ -128,6 +142,8 @@ final class HeartRateCentral: NSObject {
     }
 
     func disconnect() {
+        retry?.cancel()
+        retry = nil
         reconnect.end()
         onReading = nil
         if let peripheral { manager?.cancelPeripheralConnection(peripheral) }
@@ -152,7 +168,7 @@ extension HeartRateCentral: CBCentralManagerDelegate {
 
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         MainActor.assumeIsolated {
-            isPoweredOn = central.state == .poweredOn
+            radio = Self.radioState(of: central.state)
             guard central.state == .poweredOn else { return }
             if scanContinuation != nil || probing { startScanning(central) }
             attemptConnection()
@@ -184,12 +200,13 @@ extension HeartRateCentral: CBCentralManagerDelegate {
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         peripheral.discoverServices([Self.service])
+        MainActor.assumeIsolated { reconnect.connected() }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral,
                                     error: Error?) {
         let id = peripheral.identifier
-        MainActor.assumeIsolated { reconnectIfWanted(id) }
+        MainActor.assumeIsolated { retryAfterFailure(id) }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager,
@@ -200,6 +217,29 @@ extension HeartRateCentral: CBCentralManagerDelegate {
 }
 
 extension HeartRateCentral {
+    static func radioState(of state: CBManagerState) -> HeartRateRadioState {
+        switch state {
+        case .poweredOn: .poweredOn
+        case .poweredOff: .poweredOff
+        case .unauthorized: .unauthorized
+        case .unsupported: .unsupported
+        case .resetting: .resetting
+        case .unknown: .unknown
+        @unknown default: .unknown
+        }
+    }
+
+    /// A failed attempt waits a little before the next, so a device that keeps
+    /// refusing is not retried in a tight loop. Still only the run's own device.
+    fileprivate func retryAfterFailure(_ id: UUID) {
+        guard let next = reconnect.onFailure(of: id) else { return }
+        retry?.cancel()
+        retry = Task { [weak self] in
+            do { try await Task.sleep(for: next.delay) } catch { return }
+            self?.reconnectIfWanted(next.id)
+        }
+    }
+
     /// Only the run's own device, only while the run holds it.
     fileprivate func reconnectIfWanted(_ id: UUID) {
         guard let again = reconnect.onDisconnect(of: id) else { return }

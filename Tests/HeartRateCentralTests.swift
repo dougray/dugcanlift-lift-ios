@@ -122,32 +122,35 @@ final class HeartRateCentralTests: XCTestCase {
 
     // MARK: - Reconnecting, on the same device only
 
+    private var both: [AddedHeartRateDevice] {
+        [AddedHeartRateDevice(id: a, name: "A"), AddedHeartRateDevice(id: b, name: "B")]
+    }
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
     func testADropWhileRecordingReconnectsTheSameDevice() {
         var reconnect = HeartRateReconnect()
-        reconnect.begin(a)
+        reconnect.begin(a, among: both)
         XCTAssertEqual(reconnect.onDisconnect(of: a), a)
     }
 
     func testADropOfAnotherDeviceIsLeftAlone() {
         var reconnect = HeartRateReconnect()
-        reconnect.begin(a)
+        reconnect.begin(a, among: both)
         XCTAssertNil(reconnect.onDisconnect(of: b))
     }
 
     func testNothingReconnectsBeforeARunBeginsOrAfterItEnds() {
         var reconnect = HeartRateReconnect()
         XCTAssertNil(reconnect.onDisconnect(of: a))
-        reconnect.begin(a)
+        reconnect.begin(a, among: both)
         reconnect.end()
         XCTAssertNil(reconnect.onDisconnect(of: a))
     }
 
     func testBeginningAnotherDeviceMidRunIsRefused() {
         var reconnect = HeartRateReconnect()
-        reconnect.begin(a)
-        reconnect.begin(b)
+        reconnect.begin(a, among: both)
+        reconnect.begin(b, among: both)
         XCTAssertEqual(reconnect.target, a, "one source per run")
         XCTAssertNil(reconnect.onDisconnect(of: b))
         XCTAssertEqual(reconnect.onDisconnect(of: a), a)
@@ -155,7 +158,7 @@ final class HeartRateCentralTests: XCTestCase {
 
     func testALongDropHidesTheNumberWhileTheReconnectKeepsTargetingTheSameDevice() {
         var reconnect = HeartRateReconnect()
-        reconnect.begin(a)
+        reconnect.begin(a, among: both)
         let last = (bpm: 142, at: t0)
         XCTAssertEqual(LiveHeartRate.shown(last: last, now: t0 + 5), 142)
         // The strap drops and stays gone for 12 s: the number hides...
@@ -166,5 +169,55 @@ final class HeartRateCentralTests: XCTestCase {
         XCTAssertEqual(reconnect.target, a)
         // It comes back: the number shows again from the new reading.
         XCTAssertEqual(LiveHeartRate.shown(last: (bpm: 138, at: t0 + 13), now: t0 + 14), 138)
+    }
+
+    func testAnIdNobodyAddedIsNeverConnected() {
+        var reconnect = HeartRateReconnect()
+        reconnect.begin(c, among: both)
+        XCTAssertNil(reconnect.target)
+        XCTAssertNil(reconnect.onDisconnect(of: c))
+        reconnect.begin(c, among: [])
+        XCTAssertNil(reconnect.target)
+        // A refused id does not use up the run's one source.
+        reconnect.begin(a, among: both)
+        XCTAssertEqual(reconnect.target, a)
+    }
+
+    func testAFailedAttemptWaitsTwoSecondsThenFiveAndStaysOnTheSameDevice() {
+        var reconnect = HeartRateReconnect()
+        reconnect.begin(a, among: both)
+        let first = reconnect.onFailure(of: a)
+        XCTAssertEqual(first?.id, a)
+        XCTAssertEqual(first?.delay, .seconds(2))
+        XCTAssertEqual(reconnect.onFailure(of: a)?.delay, .seconds(5))
+        XCTAssertEqual(reconnect.onFailure(of: a)?.delay, .seconds(5))
+        XCTAssertNil(reconnect.onFailure(of: b), "another device is never retried")
+        reconnect.connected()
+        XCTAssertEqual(reconnect.onFailure(of: a)?.delay, .seconds(2))
+    }
+
+    func testNoRetryAfterTheRunEnds() {
+        var reconnect = HeartRateReconnect()
+        reconnect.begin(a, among: both)
+        reconnect.end()
+        XCTAssertNil(reconnect.onFailure(of: a))
+    }
+
+    // MARK: - What the add sheet says
+
+    func testTheSheetSaysWhyItIsEmptyWhenThePersonCanFixIt() {
+        XCTAssertEqual(HeartRateRadioState.unauthorized.emptyListMessage,
+                       "Bluetooth is off for LIFT. Turn it on in the Settings app.")
+        XCTAssertEqual(HeartRateRadioState.poweredOff.emptyListMessage,
+                       "Bluetooth is turned off. Turn it on to look for heart rate devices.")
+        XCTAssertFalse(HeartRateRadioState.unauthorized.isLooking)
+        XCTAssertFalse(HeartRateRadioState.poweredOff.isLooking)
+    }
+
+    func testAnUnsettledOrWorkingRadioIsStillLooking() {
+        for state: HeartRateRadioState in [.poweredOn, .unknown, .resetting] {
+            XCTAssertEqual(state.emptyListMessage, "Looking for heart rate devices…")
+            XCTAssertTrue(state.isLooking)
+        }
     }
 }

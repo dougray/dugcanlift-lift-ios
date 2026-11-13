@@ -11,6 +11,7 @@ struct OutdoorActivityReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
+    @AppStorage(HeartRateStorage.settingKey) private var heartRateSettingRaw = HeartRateStorage.defaultSetting
     @State private var exportError: String?
     @State private var isExporting = true
     @State private var confirmingDelete = false
@@ -47,6 +48,14 @@ struct OutdoorActivityReviewView: View {
                 }
                 LabeledContent("Elevation gain", value: elevationText)
             }
+
+            if let heartRate = RunHeartRateWords.line(for: activity) {
+                Section {
+                    LabeledContent("Heart rate", value: heartRate.summary)
+                } footer: {
+                    if let source = heartRate.source { Text(source) }
+                }
+            }
         }
         .readableListMargins()
         .navigationTitle(activity.activityType.displayName)
@@ -78,12 +87,22 @@ struct OutdoorActivityReviewView: View {
                 exportError = error.localizedDescription
             }
         }
+        // A watch syncs to Health some time after a run: opened within a week
+        // of its end, a run with no heart rate asks Health again.
+        .task { await fillHeartRateFromHealth() }
         .alert("Couldn't save to Health", isPresented: .constant(exportError != nil), presenting: exportError) { _ in
             Button("OK") { exportError = nil }
         } message: { Text($0) }
         .deletesOutdoorActivity(activity, summary: summary, isPresented: $confirmingDelete) {
             removed = true
             dismiss()
+        }
+    }
+
+    private func fillHeartRateFromHealth() async {
+        let setting = HeartRateStorage.setting(from: heartRateSettingRaw)
+        if await RunHeartRateFinish.fill(activity, setting: setting, history: HealthKitManager.shared) {
+            try? context.save()
         }
     }
 

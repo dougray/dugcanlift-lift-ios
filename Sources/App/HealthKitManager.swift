@@ -11,7 +11,7 @@ import LiftCore
 /// an idempotency key each retry writes another copy into the Health app —
 /// which users notice immediately and cannot easily clean up.
 @Observable
-final class HealthKitManager {
+final class HealthKitManager: HeartRateHistory {
 
     static let shared = HealthKitManager()
 
@@ -36,15 +36,16 @@ final class HealthKitManager {
         return types
     }
 
-    /// Only what this file reads: body weight (`latestBodyMassKg`) and steps
-    /// (`todaysStepCount`, `dailyStepCounts`). Nothing queries workouts.
+    /// Only what this file reads: body weight (`latestBodyMassKg`), steps
+    /// (`todaysStepCount`, `dailyStepCounts`), heart rate (`heartRates`, a run's
+    /// summary) and VO2 max (read beside a run). Nothing queries workouts. The
+    /// Info.plist `NSHealthShareUsageDescription` names exactly these four.
     private var readTypes: Set<HKObjectType> {
         var types: Set<HKObjectType> = []
-        if let bodyMass = HKQuantityType.quantityType(forIdentifier: .bodyMass) {
-            types.insert(bodyMass)
-        }
-        if let steps = HKQuantityType.quantityType(forIdentifier: .stepCount) {
-            types.insert(steps)
+        for identifier in [HKQuantityTypeIdentifier.bodyMass, .stepCount, .heartRate, .vo2Max] {
+            if let type = HKQuantityType.quantityType(forIdentifier: identifier) {
+                types.insert(type)
+            }
         }
         return types
     }
@@ -287,6 +288,26 @@ final class HealthKitManager {
         let results = try await descriptor.result(for: store)
         guard let sample = results.first else { return nil }
         return (sample.quantity.doubleValue(for: .gramUnit(with: .kilo)), sample.endDate)
+    }
+
+    // MARK: Heart rate
+
+    /// Heart rate samples that overlap `start`...`end`, from any source (a
+    /// watch, a strap that writes to Health, another app), in beats per minute,
+    /// oldest first. Empty when there are none -- and when read access was not
+    /// given, which HealthKit never distinguishes from none.
+    func heartRates(from start: Date, to end: Date) async throws -> [Int] {
+        guard isAvailable, end > start,
+              let type = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return [] }
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: type, predicate: predicate)],
+            sortDescriptors: [SortDescriptor(\.startDate)]
+        )
+        let beatsPerMinute = HKUnit.count().unitDivided(by: .minute())
+        return try await descriptor.result(for: store)
+            .map { Int($0.quantity.doubleValue(for: beatsPerMinute).rounded()) }
     }
 
     // MARK: Steps

@@ -12,6 +12,12 @@ import SwiftData
 /// stop nothing.
 ///
 /// One run at a time: `start` refuses while one is recording.
+///
+/// Finish waits on Apple Health when no strap spoke, so it is async. While it
+/// waits the run is *finishing*: a second Finish is refused (`notRecording`),
+/// a new run cannot start, and a Cancel in that window wins -- the run is
+/// discarded whole and the waiting Finish saves nothing. The run is saved
+/// exactly once or not at all, and a failed save leaves it recording.
 @MainActor
 @Observable
 final class ActiveRun {
@@ -25,7 +31,32 @@ final class ActiveRun {
     /// the view that finished it is gone by the time the review shows.
     var justFinished: OutdoorActivity?
 
-    init() {}
+    /// This run's heart rate, once its one source has been picked (three
+    /// seconds at most after Start), and nil before that. Its source never
+    /// changes: a strap that drops is reconnected by the radio, never replaced.
+    private(set) var heartRate: RunHeartRateSession?
+
+    /// The run whose Finish is waiting on Health, if any. A run, not a flag,
+    /// so a cancelled run's late Finish cannot be mistaken for the next run's.
+    private var finishing: OutdoorRecording?
+    var isFinishing: Bool { finishing != nil }
+
+    private let history: HeartRateHistory
+    private let central: HeartRateConnecting
+    private let defaults: UserDefaults
+    private let save: @MainActor (ModelContext) throws -> Void
+    private var heartRateSetting: HeartRateSetting = .automatic
+    @ObservationIgnored private var picking: Task<Void, Never>?
+
+    init(history: HeartRateHistory = HealthKitManager.shared,
+         central: HeartRateConnecting? = nil,
+         defaults: UserDefaults = .standard,
+         save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }) {
+        self.history = history
+        self.central = central ?? HeartRateCentral()
+        self.defaults = defaults
+        self.save = save
+    }
 
     /// Begins a run and shows its screen. False, and nothing changes, while
     /// one is already recording.
@@ -40,7 +71,63 @@ final class ActiveRun {
         // tracker that is not running. The screen's own appear is then a no-op.
         new.handle(.appear)
         isScreenShown = true
+        beginHeartRate(for: new)
         return true
+    }
+
+    /// Picks the run's one source, once, and starts listening to it.
+    ///
+    /// The setting and the added devices are read now and held for the run.
+    /// Only the person's own added devices are ever looked for (and only when
+    /// there is one to look for, so a phone with none never raises the
+    /// Bluetooth prompt); the picker chooses among those in range after a
+    /// three second look; and only its answer is connected. A strap that
+    /// appears after the look is not used live -- Health fills the summary
+    /// after the run -- and nothing re-picks when a reading goes quiet.
+    private func beginHeartRate(for run: OutdoorRecording) {
+        let setting = HeartRateStorage.setting(from: defaults.string(forKey: HeartRateStorage.settingKey) ?? "")
+        let added = HeartRateStorage.devices(from: defaults.string(forKey: HeartRateStorage.devicesKey) ?? "")
+        heartRateSetting = setting
+        heartRate = nil
+        picking = Task { [weak self] in
+            guard let self else { return }
+            var inRange: [AddedHeartRateDevice] = []
+            switch setting {
+            case .automatic, .device:
+                if !added.isEmpty { inRange = await central.inRange(added, within: .seconds(3)) }
+            case .watch, .off:
+                break
+            }
+            // Over, or replaced, while it looked: connect to nothing.
+            guard !Task.isCancelled, recording === run else { return }
+            // The watch path is not wired yet, so it is never available here.
+            let source = HeartRateSourcePicker.pick(setting, addedInRange: inRange, watchAvailable: false)
+            let session = RunHeartRateSession(begin: source)
+            heartRate = session
+            if case .device(let id, _)? = source {
+                // Weak, and the session only: the radio holds this callback for
+                // the length of the run and must not hold the run's owner. The
+                // radio calls it on the main actor.
+                central.connect(id, allowed: added) { [weak session] bpm, at in
+                    session?.receive(bpm, at: at)
+                }
+            }
+        }
+    }
+
+    /// Returns once the source has been picked (or the run ended first).
+    func awaitHeartRateSource() async {
+        await picking?.value
+    }
+
+    /// The live card's heart rate: the number, or a dash once the last reading
+    /// is more than ten seconds old, with the source under it. Nil when this
+    /// run has no source, which shows nothing. Takes `now`, so a view that
+    /// ticks each second hides the number on time with nothing else changing.
+    func liveHeartRate(now: Date) -> LiveHeartRateLine? {
+        guard let session = heartRate, let source = session.source else { return nil }
+        return LiveHeartRateLine(number: RunHeartRateWords.live(session.shown(now: now)),
+                                 source: RunHeartRateWords.source(source.storedName))
     }
 
     /// Brings the full screen back.
@@ -74,28 +161,54 @@ final class ActiveRun {
     /// Saves the run and ends it. A failed save throws and keeps recording, so
     /// nothing walked after it is lost; the unsaved insert is backed out so a
     /// retry cannot save two copies. The screen and the card both come here.
-    func finish(in context: ModelContext) throws -> OutdoorActivity {
-        guard let recording else { throw FinishError.notRecording }
-        let points = recording.tracker.points
-        let activity = OutdoorActivity(activityType: recording.activityType, startedAt: recording.startedAt)
-        activity.endedAt = .now
+    ///
+    /// The run ends at the moment Finish is chosen: its route, its end time and
+    /// the heart rate window are taken then, before Health is asked. While
+    /// Health answers the run is finishing -- a second Finish throws
+    /// `notRecording`, and a Cancel discards the run, in which case this
+    /// throws `notRecording` too and saves nothing.
+    func finish(in context: ModelContext) async throws -> OutdoorActivity {
+        guard let run = recording, finishing !== run else { throw FinishError.notRecording }
+        finishing = run
+        defer { if finishing === run { finishing = nil } }
+
+        let endedAt = Date.now
+        let points = run.tracker.points
+        // Not `end()`ed yet: if the save fails the run goes on, listening.
+        let readings = heartRate?.readings ?? []
+        let record = await RunHeartRateFinish.record(
+            readings: readings, sourceName: heartRate?.source?.storedName,
+            setting: heartRateSetting, history: history, from: run.startedAt, to: endedAt)
+        // Cancelled while Health answered: the person's later word stands.
+        guard recording === run else { throw FinishError.notRecording }
+
+        let activity = OutdoorActivity(activityType: run.activityType, startedAt: run.startedAt)
+        activity.endedAt = endedAt
         activity.routePoints = points
         activity.distanceMeters = OutdoorActivityMath.totalDistanceMeters(points)
         activity.elevationGainMeters = OutdoorActivityMath.elevationGainMeters(points)
+        RunHeartRateFinish.apply(record, to: activity)
         context.insert(activity)
         do {
-            try context.save()
+            try save(context)
         } catch {
             context.delete(activity)
             throw error
         }
-        recording.handle(.finish)
+        run.handle(.finish)
         end()
         justFinished = activity
         return activity
     }
 
     private func end() {
+        picking?.cancel()
+        picking = nil
+        // Lets the strap go and ends the session, so a late reading is dropped.
+        central.disconnect()
+        _ = heartRate?.end()
+        heartRate = nil
+        finishing = nil
         recording = nil
         isScreenShown = false
     }

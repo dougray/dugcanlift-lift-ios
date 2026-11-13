@@ -1163,6 +1163,10 @@ private struct OutdoorHighlights: View {
                                  ? last.averagePaceSecondsPerMeter.map { OutdoorRecords.paceText($0, unit: unit) } ?? "—"
                                  : "—")
                         }
+
+                        if let heartRate = RunHeartRateWords.line(for: last) {
+                            heartRateLines(heartRate)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
@@ -1216,9 +1220,11 @@ private struct OutdoorHighlights: View {
                         stat("Distance", stats.distanceText(unit: unit))
                         stat("Pace", stats.paceText(unit: unit))
                     }
+                    // Inside the once-a-second timeline and handed its date, so
+                    // the number goes at ten seconds of silence without any
+                    // other state changing.
+                    liveExtras(now: timeline.date)
                 }
-
-                liveExtras
 
                 HStack(spacing: 12) {
                     Button { activeRun.open() } label: {
@@ -1227,12 +1233,13 @@ private struct OutdoorHighlights: View {
                     .buttonStyle(.bordered)
                     .tint(Theme.accent)
 
-                    // Saves, so not red.
+                    // Saves, so not red. Off while Finish waits on Health.
                     Button { finish() } label: {
                         Text("Finish").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accent)
+                    .disabled(activeRun.isFinishing)
                 }
                 .scaledFont(size: 15, weight: .semibold)
             }
@@ -1244,20 +1251,51 @@ private struct OutdoorHighlights: View {
         }
     }
 
-    /// Room for what a later change adds to a live run (heart rate among it).
-    private var liveExtras: some View {
-        VStack(alignment: .leading, spacing: 6) {}
+    /// Heart rate under the live numbers: `142 bpm` and, small, where it came
+    /// from. Nothing at all when this run has no source. No zones, no color.
+    @ViewBuilder
+    private func liveExtras(now: Date) -> some View {
+        if let line = activeRun.liveHeartRate(now: now) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line.number)
+                    .scaledFont(size: 16, weight: .semibold).monospacedDigit()
+                    .foregroundStyle(Theme.textPrimary)
+                Text(line.source)
+                    .scaledFont(size: 12)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private func finish() {
-        do {
-            // The review opens from `ActiveRun.justFinished`.
-            _ = try activeRun.finish(in: context)
-        } catch ActiveRun.FinishError.notRecording {
-            // A second tap after the first saved.
-        } catch {
-            finishFailed = true
+        // The review opens from `ActiveRun.justFinished`.
+        Task { @MainActor in
+            do {
+                _ = try await activeRun.finish(in: context)
+            } catch ActiveRun.FinishError.notRecording {
+                // A second tap after the first saved, or a Cancel that won.
+            } catch {
+                finishFailed = true
+            }
         }
+    }
+
+    /// `Avg 141 · Max 168 bpm` and, small, where it came from.
+    private func heartRateLines(_ line: (summary: String, source: String?)) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(line.summary)
+                .scaledFont(size: 16, weight: .semibold).monospacedDigit()
+                .foregroundStyle(Theme.textPrimary)
+            if let source = line.source {
+                Text(source)
+                    .scaledFont(size: 12)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     private func stat(_ label: String, _ value: String) -> some View {

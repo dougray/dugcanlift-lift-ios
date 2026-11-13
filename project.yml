@@ -185,12 +185,13 @@ targets:
         # HealthKit — both strings are required or the app is rejected. Each
         # must say exactly what HealthKitManager requests: App Review rejects
         # a purpose string that claims more (or less) than the code does.
-        # Reads: body weight (Settings > Apple Health) and step count (Home,
-        # Send to Coach). Writes: strength workouts, and runs, walks and hikes
+        # Reads: body weight (Settings > Apple Health), step count (Home,
+        # Send to Coach), heart rate (a run's summary, when no strap spoke) and
+        # VO2 max (beside a run). Writes: strength workouts, and runs, walks and hikes
         # with their route and distance.
         NSHealthShareUsageDescription: >-
-          Lift reads your body weight and step count from Health to show your
-          latest weight and your daily steps.
+          LIFT reads your weight, steps, heart rate and VO2 max from Apple
+          Health to show them beside your training.
         NSHealthUpdateUsageDescription: >-
           Lift saves your strength workouts, and your runs, walks and hikes
           with their route and distance, to Health.

@@ -22,8 +22,14 @@ final class ActiveRunTests: XCTestCase {
         ModelContext(container)
     }
 
+    /// No Health store and no radio: these tests are about the run's lifecycle.
+    private func makeRun() -> ActiveRun {
+        ActiveRun(history: FakeHistory(), central: FakeCentral(),
+                  defaults: UserDefaults(suiteName: "ActiveRunTests") ?? .standard)
+    }
+
     func testAnotherRunCannotStartWhileOneRecords() {
-        let run = ActiveRun()
+        let run = makeRun()
         XCTAssertTrue(run.start(.run))
         addTeardownBlock { @MainActor in run.cancel() }
         let first = run.recording
@@ -33,7 +39,7 @@ final class ActiveRunTests: XCTestCase {
     }
 
     func testCloseKeepsTheTrackerRunning() throws {
-        let run = ActiveRun()
+        let run = makeRun()
         XCTAssertTrue(run.start(.walk))
         addTeardownBlock { @MainActor in run.cancel() }
         let recording = try XCTUnwrap(run.recording)
@@ -51,25 +57,28 @@ final class ActiveRunTests: XCTestCase {
         XCTAssertTrue(run.recording === recording)
     }
 
-    func testFinishFromTheCardSavesOnce() throws {
+    func testFinishFromTheCardSavesOnce() async throws {
         let context = makeContext()
-        let run = ActiveRun()
+        let run = makeRun()
         XCTAssertTrue(run.start(.run))
         let recording = try XCTUnwrap(run.recording)
         recording.handle(.appear)
         run.close()
 
-        let activity = try run.finish(in: context)
+        let activity = try await run.finish(in: context)
         XCTAssertNil(run.recording)
         XCTAssertFalse(recording.tracker.isTracking)
         XCTAssertTrue(run.justFinished === activity)
-        XCTAssertThrowsError(try run.finish(in: context))
+        do {
+            _ = try await run.finish(in: context)
+            XCTFail("a second Finish after the save must throw")
+        } catch ActiveRun.FinishError.notRecording {}
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<OutdoorActivity>()), 1)
     }
 
     func testCancelSavesNothing() throws {
         let context = makeContext()
-        let run = ActiveRun()
+        let run = makeRun()
         XCTAssertTrue(run.start(.hike))
         let recording = try XCTUnwrap(run.recording)
         recording.handle(.appear)
@@ -86,16 +95,16 @@ final class ActiveRunTests: XCTestCase {
 
     /// A presentation SwiftUI never showed must not strand the run: the
     /// tracker is already going, and Finish on the card still ends it.
-    func testARunWhoseScreenNeverAppearedIsNotStranded() throws {
+    func testARunWhoseScreenNeverAppearedIsNotStranded() async throws {
         let context = makeContext()
-        let run = ActiveRun()
+        let run = makeRun()
         XCTAssertTrue(run.start(.run))
         let recording = try XCTUnwrap(run.recording)
         // No `.appear` is ever sent, as when the cover is dropped.
         XCTAssertTrue(recording.tracker.isTracking)
         XCTAssertEqual(recording.phase, .recording)
 
-        _ = try run.finish(in: context)
+        _ = try await run.finish(in: context)
         XCTAssertNil(run.recording)
         XCTAssertFalse(recording.tracker.isTracking)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<OutdoorActivity>()), 1)
@@ -104,7 +113,7 @@ final class ActiveRunTests: XCTestCase {
     /// Open on a screen that claims to be shown (a dropped presentation)
     /// presents it again, a turn later.
     func testOpenRepresentsADroppedScreen() async throws {
-        let run = ActiveRun()
+        let run = makeRun()
         XCTAssertTrue(run.start(.walk))
         addTeardownBlock { @MainActor in run.cancel() }
         XCTAssertTrue(run.isScreenShown)
@@ -118,7 +127,7 @@ final class ActiveRunTests: XCTestCase {
     }
 
     func testOpenWithNothingRecordingDoesNothing() {
-        let run = ActiveRun()
+        let run = makeRun()
         run.open()
         XCTAssertFalse(run.isScreenShown)
     }

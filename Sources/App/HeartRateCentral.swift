@@ -43,7 +43,7 @@ final class HeartRateCentral: NSObject {
     // A run's connection
     @ObservationIgnored private var reconnect = HeartRateReconnect()
     @ObservationIgnored private var peripheral: CBPeripheral?
-    @ObservationIgnored private var onReading: ((Int, Date) -> Void)?
+    @ObservationIgnored private var onReading: (@MainActor (Int, Date) -> Void)?
     @ObservationIgnored private var retry: Task<Void, Never>?
 
     private func central() -> CBCentralManager {
@@ -131,7 +131,8 @@ final class HeartRateCentral: NSObject {
     /// An id that is not in `allowed` -- the person's added list, read from
     /// storage when not handed over -- is refused, so nothing upstream can make
     /// this connect to a stranger's strap.
-    func connect(_ id: UUID, allowed: [AddedHeartRateDevice]? = nil, onReading: @escaping (Int, Date) -> Void) {
+    func connect(_ id: UUID, allowed: [AddedHeartRateDevice]? = nil,
+                 onReading: @escaping @MainActor (Int, Date) -> Void) {
         let added = allowed ?? HeartRateStorage.devices(
             from: UserDefaults.standard.string(forKey: HeartRateStorage.devicesKey) ?? "")
         reconnect.begin(id, among: added)

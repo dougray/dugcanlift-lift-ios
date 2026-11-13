@@ -139,7 +139,7 @@ struct SettingsView: View {
                         Button("Open Settings", systemImage: "gear") {
                             HealthSettingsLink.open()
                         }
-                        Text("Lift has asked already, so iOS won't ask again. To let Lift write your workouts, runs, walks and hikes and read your body weight and steps, turn them on in Settings › Privacy & Security › Health › LIFT.")
+                        Text("Lift has asked already, so iOS won't ask again. To let Lift write your workouts, runs, walks and hikes and read your weight, steps, heart rate and VO2 max, turn them on in Settings › Privacy & Security › Health › LIFT.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -147,7 +147,7 @@ struct SettingsView: View {
                             authorize()
                         }
                         .disabled(isRequesting)
-                        Text("Lift writes your workouts, runs, walks and hikes to Health, and reads your body weight and steps.")
+                        Text("Lift writes your workouts, runs, walks and hikes to Health, and reads your weight, steps, heart rate and VO2 max.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

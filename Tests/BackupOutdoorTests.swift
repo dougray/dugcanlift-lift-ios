@@ -145,6 +145,81 @@ final class BackupOutdoorTests: XCTestCase {
         XCTAssertLessThan(restored.routePoints[1].verticalAccuracyMeters, 0)
     }
 
+    // MARK: - Heart rate
+
+    private func finishedRun(in context: ModelContext, averageBpm: Int? = nil, maxBpm: Int? = nil,
+                             source: String? = nil) -> OutdoorActivity {
+        let start = Date(timeIntervalSince1970: 1_789_600_000)
+        let run = OutdoorActivity(activityType: .run, startedAt: start)
+        run.endedAt = start.addingTimeInterval(1800)
+        run.distanceMeters = 5000
+        run.averageBpm = averageBpm
+        run.maxBpm = maxBpm
+        run.heartRateSource = source
+        context.insert(run)
+        return run
+    }
+
+    func testARunsHeartRateRoundTripsThroughTheFile() throws {
+        let source = makeContext()
+        let run = finishedRun(in: source, averageBpm: 141, maxBpm: 168, source: "Polar H10")
+        try source.save()
+
+        let backup = try BackupStore.build(context: source)
+        let record = try XCTUnwrap(try outdoorSection(backup).first)
+        XCTAssertEqual(record["averageBpm"] as? Int, 141)
+        XCTAssertEqual(record["maxBpm"] as? Int, 168)
+        XCTAssertEqual(record["heartRateSource"] as? String, "Polar H10")
+
+        UserDefaults.standard.removeObject(forKey: BackupStore.foreignDataKey)
+        let target = makeContext()
+        XCTAssertEqual(BackupStore.restore(context: target, from: backup).added, 1)
+        let restored = try XCTUnwrap(try activities(target).first)
+        XCTAssertEqual(restored.id, run.id)
+        XCTAssertEqual(restored.averageBpm, 141)
+        XCTAssertEqual(restored.maxBpm, 168)
+        XCTAssertEqual(restored.heartRateSource, "Polar H10")
+    }
+
+    func testARunWithoutHeartRateWritesNoneOfTheThreeKeys() throws {
+        let source = makeContext()
+        _ = finishedRun(in: source)
+        try source.save()
+
+        let record = try XCTUnwrap(try outdoorSection(try BackupStore.build(context: source)).first)
+        XCTAssertNil(record["averageBpm"])
+        XCTAssertNil(record["maxBpm"])
+        XCTAssertNil(record["heartRateSource"])
+    }
+
+    func testABackupWithoutTheKeysRestoresNil() throws {
+        let context = makeContext()
+        XCTAssertEqual(BackupStore.restore(context: context, from: try fixture("web-backup-outdoor")).added, 3)
+        for run in try activities(context) {
+            XCTAssertNil(run.averageBpm)
+            XCTAssertNil(run.maxBpm)
+            XCTAssertNil(run.heartRateSource)
+        }
+    }
+
+    func testANonIntegerHeartRateRestoresNil() throws {
+        let base: [String: Any] = [
+            "id": UUID().uuidString, "activityType": "RUN",
+            "startedAtEpochMs": 1_789_600_000_000, "endedAtEpochMs": 1_789_601_800_000,
+            "distanceMeters": 5000, "elevationGainMeters": 0, "routePoints": [[String: Any]]()
+        ]
+        var record = base
+        record["averageBpm"] = 141.5
+        record["maxBpm"] = "168"
+        record["heartRateSource"] = 7
+        let context = makeContext()
+        XCTAssertEqual(BackupStore.restore(context: context, from: try file(["outdoor": [record]])).added, 1)
+        let run = try XCTUnwrap(try activities(context).first)
+        XCTAssertNil(run.averageBpm, "141.5 is not a whole bpm")
+        XCTAssertNil(run.maxBpm, "a string is not a figure")
+        XCTAssertNil(run.heartRateSource, "a number is not a source name")
+    }
+
     // MARK: - Ids and rules
 
     func testIdsDifferingOnlyInCaseDoNotDuplicate() throws {

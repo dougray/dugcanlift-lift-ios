@@ -43,6 +43,25 @@ final class FakeHistory: HeartRateHistory, @unchecked Sendable {
     }
 }
 
+/// Health's VO2 max estimates as a list: answers the newest one at or before
+/// the date it is asked about, as the real query does, and records every ask.
+final class FakeVO2History: VO2MaxHistory, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _asks: [Date] = []
+    var estimates: [(value: Double, date: Date)]
+    var error: Error?
+
+    init(_ estimates: [(value: Double, date: Date)] = []) { self.estimates = estimates }
+
+    var asks: [Date] { lock.withLock { _asks } }
+
+    func latestVO2Max(onOrBefore date: Date) async throws -> (value: Double, date: Date)? {
+        lock.withLock { _asks.append(date) }
+        if let error { throw error }
+        return estimates.filter { $0.date <= date }.max { $0.date < $1.date }
+    }
+}
+
 /// A radio that is a list: which added devices it says are in range, what it
 /// was asked to connect to, and the callback it was handed.
 @MainActor
@@ -805,5 +824,99 @@ final class RunHeartRatePipelineTests: XCTestCase {
         XCTAssertNotNil(held)
         XCTAssertNil(weakRun, "a radio holding the callback does not hold the run")
         held?(150, .now)    // a late reading after the run is gone is harmless
+    }
+
+    // MARK: - VO2 max
+
+    private var gregorianUTC: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    private func moment(_ month: Int, _ day: Int, hour: Int = 12) -> Date {
+        gregorianUTC.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
+    }
+
+    private func vo2(onOrBefore date: Date, _ history: VO2MaxHistory) async -> String? {
+        await VO2MaxLookup.line(onOrBefore: date, history: history,
+                                locale: Locale(identifier: "en_US"), calendar: gregorianUTC)
+    }
+
+    func testASummaryNeverShowsALaterEstimate() async {
+        let history = FakeVO2History([(value: 44.0, date: moment(3, 1)), (value: 46.2, date: moment(11, 8))])
+        let runEnd = moment(3, 15, hour: 10)
+
+        let line = await vo2(onOrBefore: runEnd, history)
+
+        XCTAssertEqual(line, "VO2 max 44 · Mar 1")
+        XCTAssertEqual(history.asks, [runEnd], "asked on or before the run's own end, not today")
+    }
+
+    func testTheLiveCardAsksForTheNewest() async {
+        let history = FakeVO2History([(value: 44.0, date: moment(3, 1)), (value: 46.2, date: moment(11, 8))])
+
+        let line = await vo2(onOrBefore: moment(11, 10), history)
+
+        XCTAssertEqual(line, "VO2 max 46.2 · Nov 8")
+    }
+
+    func testARunBeforeEveryEstimateShowsNothing() async {
+        let history = FakeVO2History([(value: 46.2, date: moment(11, 8))])
+        let line = await vo2(onOrBefore: moment(3, 15), history)
+        XCTAssertNil(line)
+    }
+
+    func testNoEstimateShowsNothing() async {
+        let line = await vo2(onOrBefore: moment(11, 10), FakeVO2History())
+        XCTAssertNil(line)
+    }
+
+    func testAHealthFailureShowsNothingAndDoesNotThrow() async {
+        let history = FakeVO2History([(value: 46.2, date: moment(11, 8))])
+        history.error = Boom()
+        let line = await vo2(onOrBefore: moment(11, 10), history)
+        XCTAssertNil(line)
+        XCTAssertEqual(history.asks.count, 1)
+    }
+
+    func testAnEstimateThatIsNotARealNumberShowsNothing() async {
+        let history = FakeVO2History([(value: 0, date: moment(11, 8))])
+        let line = await vo2(onOrBefore: moment(11, 10), history)
+        XCTAssertNil(line)
+    }
+
+    func testACancelledLookupShowsNothing() async {
+        let history = FakeVO2History([(value: 46.2, date: moment(11, 8))])
+        let when = moment(11, 10)
+        let task = Task { [self] in
+            // Cancelled before it can look at the answer.
+            while !Task.isCancelled { await Task.yield() }
+            return await vo2(onOrBefore: when, history)
+        }
+        task.cancel()
+        let line = await task.value
+        XCTAssertNil(line)
+    }
+
+    func testAFinishedRunsEndIsReadOnlyWhileItStillExists() throws {
+        let context = ModelContext(container)
+        let ended = moment(3, 15, hour: 10)
+        let run = OutdoorActivity(activityType: .run, startedAt: moment(3, 15, hour: 9))
+        run.endedAt = ended
+        context.insert(run)
+        try context.save()
+
+        XCTAssertEqual(VO2MaxLookup.endDate(of: run), ended)
+
+        context.delete(run)
+        XCTAssertNil(VO2MaxLookup.endDate(of: run), "a deleted run is not read again")
+    }
+
+    func testARunStillRecordingAsksNothingOfHistory() throws {
+        let context = ModelContext(container)
+        let run = OutdoorActivity(activityType: .run, startedAt: moment(3, 15, hour: 9))
+        context.insert(run)
+        XCTAssertNil(VO2MaxLookup.endDate(of: run))
     }
 }

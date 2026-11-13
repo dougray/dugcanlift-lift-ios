@@ -1126,11 +1126,17 @@ private struct OutdoorHighlights: View {
     @Environment(ActiveRun.self) private var activeRun
     @Query(sort: \OutdoorActivity.startedAt, order: .reverse) private var activities: [OutdoorActivity]
     @State private var finishFailed = false
+    /// VO2 max lines, asked once per appearance of each card and held here:
+    /// the live card redraws every second and must not ask Health each time.
+    /// The last route's is the newest estimate on or before that run's end.
+    @State private var liveVO2: String?
+    @State private var lastVO2: String?
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
     var body: some View {
         let last = OutdoorRecords.lastRoute(in: activities)
+        let lastEnd = last.flatMap { VO2MaxLookup.endDate(of: $0) }
         let bests = OutdoorRecords.bests(in: activities)
 
         if let recording = activeRun.recording {
@@ -1167,9 +1173,18 @@ private struct OutdoorHighlights: View {
                         if let heartRate = RunHeartRateWords.line(for: last) {
                             heartRateLines(heartRate)
                         }
+                        if let lastVO2 { vo2Line(lastVO2) }
                     }
                 }
                 .buttonStyle(.plain)
+            }
+            // Keyed by the run's end, a plain date: nothing reads the model
+            // after the wait, so a run deleted meanwhile is never touched.
+            .task(id: lastEnd) {
+                lastVO2 = nil
+                guard let lastEnd else { return }
+                let line = await VO2MaxLookup.line(onOrBefore: lastEnd, history: HealthKitManager.shared)
+                if !Task.isCancelled { lastVO2 = line }
             }
         }
 
@@ -1244,6 +1259,13 @@ private struct OutdoorHighlights: View {
                 .scaledFont(size: 15, weight: .semibold)
             }
         }
+        // The newest estimate, asked once while this card is up. A strap or
+        // watch is not needed; no estimate is no line.
+        .task(id: recording.startedAt) {
+            liveVO2 = nil
+            let line = await VO2MaxLookup.line(onOrBefore: .now, history: HealthKitManager.shared)
+            if !Task.isCancelled { liveVO2 = line }
+        }
         .alert("Couldn't save this \(recording.activityType.displayName.lowercased())", isPresented: $finishFailed) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -1267,6 +1289,16 @@ private struct OutdoorHighlights: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
         }
+        // Held in state, not asked here: this runs every second.
+        if let liveVO2 { vo2Line(liveVO2) }
+    }
+
+    /// `VO2 max 46.2 · Nov 8`. Plain words: no zone, no color.
+    private func vo2Line(_ text: String) -> some View {
+        Text(text)
+            .scaledFont(size: 12)
+            .foregroundStyle(Theme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func finish() {

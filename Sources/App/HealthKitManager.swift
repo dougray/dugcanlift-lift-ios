@@ -11,7 +11,7 @@ import LiftCore
 /// an idempotency key each retry writes another copy into the Health app —
 /// which users notice immediately and cannot easily clean up.
 @Observable
-final class HealthKitManager: HeartRateHistory {
+final class HealthKitManager: HeartRateHistory, VO2MaxHistory {
 
     static let shared = HealthKitManager()
 
@@ -308,6 +308,30 @@ final class HealthKitManager: HeartRateHistory {
         let beatsPerMinute = HKUnit.count().unitDivided(by: .minute())
         return try await descriptor.result(for: store)
             .map { Int($0.quantity.doubleValue(for: beatsPerMinute).rounded()) }
+    }
+
+    // MARK: VO2 max
+
+    /// The newest VO2 max estimate that ended at or before `date`, in
+    /// ml/(kg·min), from any source (a watch, another app). Nil when there is
+    /// none -- and when read access was not given, which HealthKit never
+    /// distinguishes from none.
+    func latestVO2Max(onOrBefore date: Date) async throws -> (value: Double, date: Date)? {
+        guard isAvailable,
+              let type = HKQuantityType.quantityType(forIdentifier: .vo2Max) else { return nil }
+
+        // `.strictEndDate`: the estimate's own end is at or before `date`, so
+        // a later one never stands in for it.
+        let predicate = HKQuery.predicateForSamples(withStart: nil, end: date, options: .strictEndDate)
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: type, predicate: predicate)],
+            sortDescriptors: [SortDescriptor(\.endDate, order: .reverse)],
+            limit: 1
+        )
+        let unit = HKUnit.literUnit(with: .milli)
+            .unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute()))
+        guard let sample = try await descriptor.result(for: store).first else { return nil }
+        return (sample.quantity.doubleValue(for: unit), sample.endDate)
     }
 
     // MARK: Steps

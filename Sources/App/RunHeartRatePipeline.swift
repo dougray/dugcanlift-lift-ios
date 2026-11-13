@@ -13,6 +13,40 @@ protocol HeartRateHistory {
     func heartRates(from: Date, to: Date) async throws -> [Int]
 }
 
+/// Apple Health's VO2 max estimates, newest first. `HealthKitManager` is the
+/// real one; tests use a list. Nothing here stores anything: a run shows the
+/// estimate and keeps no copy of it.
+protocol VO2MaxHistory {
+    /// The newest estimate whose end is at or before `date`, or nil.
+    func latestVO2Max(onOrBefore date: Date) async throws -> (value: Double, date: Date)?
+}
+
+/// What the live card, the last-route card and the review say about VO2 max.
+///
+/// Asked once per appearance of a screen and held in its state, never from a
+/// body that redraws each second. A run that ended is asked "on or before its
+/// end", so an old run never shows an estimate made after it; a run in
+/// progress asks for the newest. Anything that goes wrong (permission denied,
+/// no estimate, a Health error, a cancelled task) is no line: nothing is
+/// invented and nothing blocks Finish or the review. No model is read or
+/// written after the wait -- the caller hands in a date, not a run.
+enum VO2MaxLookup {
+    static func line(onOrBefore date: Date, history: VO2MaxHistory,
+                     locale: Locale = .current, calendar: Calendar = .current) async -> String? {
+        guard let latest = try? await history.latestVO2Max(onOrBefore: date),
+              !Task.isCancelled else { return nil }
+        return VO2MaxText.line(value: latest.value, date: latest.date, locale: locale, calendar: calendar)
+    }
+
+    /// The date a finished run asks on or before: its end. A run with none
+    /// (still recording, or a deleted model) asks nothing.
+    @MainActor
+    static func endDate(of activity: OutdoorActivity) -> Date? {
+        guard !activity.isDeleted, activity.modelContext != nil else { return nil }
+        return activity.endedAt
+    }
+}
+
 /// The radio, as `ActiveRun` uses it. `HeartRateCentral` is the real one.
 @MainActor
 protocol HeartRateConnecting: AnyObject {

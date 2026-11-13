@@ -88,6 +88,8 @@ struct SettingsView: View {
                                 lastRunStart: lastRunStart)
                 }
 
+                HeartRateSettingsSection()
+
                 Section {
                     Stepper(value: $watchRestSeconds,
                             in: WatchPlanSettings.restSecondsRange,

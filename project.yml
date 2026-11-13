@@ -214,6 +214,13 @@ targets:
           Lift uses your location to record the route of a run, walk or hike
           you start, including while your screen is locked until you finish it.
 
+        # Bluetooth heart rate during a run (HeartRateCentral): `bluetooth-central`
+        # keeps a strap's readings and its reconnecting going while the phone is
+        # locked, the way `location` keeps the route. Only a device the person
+        # added is ever connected to.
+        NSBluetoothAlwaysUsageDescription: >-
+          LIFT reads heart rate from a Bluetooth strap or watch you add, during a run.
+
         # Location updates so a recording carries on while the phone is locked
         # (LocationTracker). No `processing` mode: nothing registers a
         # BGTaskScheduler task -- Health syncs when a session ends, on connect
@@ -222,6 +229,7 @@ targets:
         # alongside a real BGTaskScheduler.register call.
         UIBackgroundModes:
           - location
+          - bluetooth-central
 
   # ------------------------------------------------------------- widgets
   LiftWidgets:

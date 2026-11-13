@@ -55,11 +55,18 @@ final class PermissionPinTests: XCTestCase {
                 // "Location" > "iPhone": while in use, never Always -- so no
                 // NSLocationAlwaysAndWhenInUseUsageDescription.
                 "NSLocationWhenInUseUsageDescription",
+                // Heart rate from a Bluetooth strap or watch the person adds
+                // in Settings, during a run. NEEDS a "Heart rate" paragraph in
+                // app-privacy.md (iPhone) before this ships: the page has only
+                // Android's Bluetooth text today.
+                "NSBluetoothAlwaysUsageDescription",
             ],
             // `location` is "A recording you start keeps going with the phone
             // locked". No `processing`: nothing registers a BGTaskScheduler
             // task (#78), so a mode coming back here is a new ask.
-            backgroundModes: ["location"]),
+            // `bluetooth-central` keeps a run's strap connected and reconnecting
+            // with the phone locked, the same promise `location` makes.
+            backgroundModes: ["location", "bluetooth-central"]),
         // Neither extension asks for anything: the widget reads the App Group
         // store, and the share extension reads only what the share sheet hands it.
         "PlugIns/LiftShare.appex": BundlePin(),

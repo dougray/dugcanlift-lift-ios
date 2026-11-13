@@ -102,6 +102,7 @@ final class RunHeartRatePipelineTests: XCTestCase {
     }
 
     override func tearDown() {
+        storeContext = nil
         container = nil
         defaults = nil
         super.tearDown()
@@ -223,8 +224,13 @@ final class RunHeartRatePipelineTests: XCTestCase {
 
     // MARK: - Opened later
 
+    /// Held by the test: a model is only in a store while its context lives.
+    private var storeContext: ModelContext!
+
     private func finishedRun(endedAt: Date, figures: Bool = false) -> OutdoorActivity {
+        if storeContext == nil { storeContext = ModelContext(container) }
         let activity = OutdoorActivity(activityType: .run, startedAt: endedAt.addingTimeInterval(-1800))
+        storeContext.insert(activity)
         activity.endedAt = endedAt
         if figures {
             activity.averageBpm = 140
@@ -612,6 +618,148 @@ final class RunHeartRatePipelineTests: XCTestCase {
         XCTAssertEqual(line?.summary, "Avg 140 · Max 160 bpm")
         XCTAssertEqual(line?.source, "from Polar H10")
         XCTAssertNil(RunHeartRateWords.line(for: finishedRun(endedAt: now)))
+    }
+
+    // MARK: - A run deleted while Health answers
+
+    func testARunDeletedWhileHealthAnswersIsNotWrittenTo() async throws {
+        let activity = finishedRun(endedAt: now.addingTimeInterval(-3_600))
+        let history = FakeHistory([130, 150])
+        history.holds = true
+        let waiting = Task { @MainActor in
+            await RunHeartRateFinish.fill(activity, setting: .automatic, history: history, now: now)
+        }
+        await settle { history.calls.count == 1 }
+        storeContext.delete(activity)
+        try storeContext.save()
+        history.release()
+        let changed = await waiting.value
+        XCTAssertFalse(changed)
+        XCTAssertNil(activity.averageBpm, "a deleted run is not written to")
+    }
+
+    func testARunDeletedButNotYetSavedIsNotWrittenToEither() async throws {
+        let activity = finishedRun(endedAt: now.addingTimeInterval(-3_600))
+        let history = FakeHistory([130])
+        history.holds = true
+        let waiting = Task { @MainActor in
+            await RunHeartRateFinish.fill(activity, setting: .automatic, history: history, now: now)
+        }
+        await settle { history.calls.count == 1 }
+        storeContext.delete(activity)
+        history.release()
+        let changed = await waiting.value
+        XCTAssertFalse(changed)
+        XCTAssertNil(activity.averageBpm)
+    }
+
+    func testACancelledFillWritesNothing() async {
+        let activity = finishedRun(endedAt: now.addingTimeInterval(-3_600))
+        let history = FakeHistory([130])
+        history.holds = true
+        let waiting = Task { @MainActor in
+            await RunHeartRateFinish.fill(activity, setting: .automatic, history: history, now: now)
+        }
+        await settle { history.calls.count == 1 }
+        waiting.cancel()
+        history.release()
+        let changed = await waiting.value
+        XCTAssertFalse(changed)
+        XCTAssertNil(activity.averageBpm)
+    }
+
+    func testAScreenThatNoLongerWantsTheAnswerGetsNone() async {
+        let activity = finishedRun(endedAt: now.addingTimeInterval(-3_600))
+        let history = FakeHistory([130])
+        let changed = await RunHeartRateFinish.fill(activity, setting: .automatic, history: history, now: now,
+                                                    isStillWanted: { false })
+        XCTAssertFalse(changed)
+        XCTAssertNil(activity.averageBpm)
+    }
+
+    // MARK: - A pick that completes while Finish waits on Health
+
+    func testAProbeThatEndsWhileFinishWaitsConnectsNothing() async throws {
+        store(.automatic, devices: [polar])
+        let central = FakeCentral()
+        central.nearby = [polar.id]
+        central.holdsProbe = true
+        let history = FakeHistory([100, 120])
+        history.holds = true
+        let run = makeRun(history: history, central: central)
+        XCTAssertTrue(run.start(.run))
+        await settle { central.probes.count == 1 }
+        let context = ModelContext(container)
+        let finishing = Task { @MainActor in try await run.finish(in: context).id }
+        await settle { history.calls.count == 1 }
+        XCTAssertTrue(run.isFinishing)
+
+        central.releaseProbe()          // the look ends, mid-Finish
+        await run.awaitHeartRateSource()
+        XCTAssertTrue(central.connects.isEmpty, "a strap end() would release a moment later is never connected")
+        XCTAssertNil(run.heartRate)
+
+        history.release()
+        _ = try await finishing.value
+        XCTAssertTrue(central.connects.isEmpty)
+    }
+
+    // MARK: - One radio for the app
+
+    func testTheAppHasOneSharedRadio() {
+        XCTAssertTrue(HeartRateCentral.shared === HeartRateCentral.shared)
+        let run = ActiveRun(history: FakeHistory(), defaults: defaults)
+        XCTAssertTrue((run.central as AnyObject) === HeartRateCentral.shared,
+                      "a run uses the app's radio, not one of its own")
+    }
+
+    func testMakingARadioMakesNoCentralManager() {
+        XCTAssertFalse(HeartRateCentral().hasManager, "no Bluetooth prompt before it is asked for")
+        XCTAssertFalse(HeartRateCentral.shared.hasManager)
+    }
+
+    func testARunWithNothingToLookForNeverCreatesTheManager() async {
+        store(.automatic, devices: [])
+        let run = ActiveRun(history: FakeHistory(), defaults: defaults)
+        XCTAssertTrue(run.start(.run))
+        await run.awaitHeartRateSource()
+        run.cancel()
+        XCTAssertFalse(HeartRateCentral.shared.hasManager)
+    }
+
+    /// Two radios would be two `CBCentralManager`s under one restore identifier
+    /// (CoreBluetooth wants it unique), and Settings' sheet opens beside a run.
+    /// Only `HeartRateCentral.shared` may make one.
+    func testNothingElseMakesARadio() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let files = (FileManager.default.enumerator(at: root.appendingPathComponent("Sources"),
+                                                    includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL } ?? []).filter { $0.pathExtension == "swift" }
+        XCTAssertGreaterThan(files.count, 20)
+        var makers: [String] = []
+        for file in files {
+            let code = try String(contentsOf: file, encoding: .utf8)
+                .replacingOccurrences(of: "//[^\n]*", with: "", options: .regularExpression)
+            if code.contains("HeartRateCentral()") || code.contains("CBCentralManager(") {
+                makers.append(file.lastPathComponent)
+            }
+        }
+        XCTAssertEqual(makers.sorted(), ["HeartRateCentral.swift"],
+                       "only HeartRateCentral's own `shared` and `central()` make a radio")
+    }
+
+    func testAScanAndARunsConnectionShareOneRadioWithoutDisturbingEachOther() {
+        // The radio-free part of the scan/connect interplay: a run's target is
+        // the reconnect rule's alone, and nothing a scan does reaches it.
+        var reconnect = HeartRateReconnect()
+        reconnect.begin(polar.id, among: [polar, wahoo])
+        XCTAssertEqual(reconnect.target, polar.id)
+        // A scan lists whatever advertises; it never begins, ends or retargets.
+        _ = HeartRateScan.merged([], id: wahoo.id, name: "Wahoo Tickr", rssi: -60)
+        XCTAssertEqual(reconnect.target, polar.id)
+        XCTAssertEqual(reconnect.onDisconnect(of: polar.id), polar.id)
+        XCTAssertNil(reconnect.onDisconnect(of: wahoo.id), "a device found while scanning is not the run's")
     }
 
     // MARK: - No retain cycle

@@ -101,7 +101,8 @@ struct OutdoorActivityReviewView: View {
 
     private func fillHeartRateFromHealth() async {
         let setting = HeartRateStorage.setting(from: heartRateSettingRaw)
-        if await RunHeartRateFinish.fill(activity, setting: setting, history: HealthKitManager.shared) {
+        if await RunHeartRateFinish.fill(activity, setting: setting, history: HealthKitManager.shared,
+                                         isStillWanted: { !removed }) {
             try? context.save()
         }
     }

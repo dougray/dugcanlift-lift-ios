@@ -20,6 +20,17 @@ import Observation
 @Observable
 final class HeartRateCentral: NSObject {
 
+    /// The app's one radio. CoreBluetooth wants a restore identifier to belong
+    /// to one `CBCentralManager`, so a run (`ActiveRun`) and Settings' add-a-
+    /// device sheet both use this instance and never make their own; a scan
+    /// opened during a run shares the run's manager and leaves its connection
+    /// alone. Creating it creates no manager (`hasManager`), so nothing asks
+    /// for Bluetooth until a person adds a device or a run looks for one.
+    static let shared = HeartRateCentral()
+
+    /// Whether the `CBCentralManager` exists yet. False until first use.
+    var hasManager: Bool { manager != nil }
+
     nonisolated(unsafe) static let service = CBUUID(string: "180D")
     nonisolated(unsafe) static let measurement = CBUUID(string: "2A37")
     nonisolated static let restoreIdentifier = "lift.heartRate"

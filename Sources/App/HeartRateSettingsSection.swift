@@ -13,7 +13,8 @@ struct HeartRateSettingsSection: View {
     @AppStorage(HeartRateStorage.settingKey) private var settingRaw = HeartRateStorage.defaultSetting
     @AppStorage(HeartRateStorage.devicesKey) private var devicesRaw = HeartRateStorage.defaultDevices
 
-    @State private var central = HeartRateCentral()
+    /// The app's one radio, shared with a run in progress.
+    private var central: HeartRateCentral { .shared }
     @State private var isAdding = false
 
     private var setting: HeartRateSetting { HeartRateStorage.setting(from: settingRaw) }

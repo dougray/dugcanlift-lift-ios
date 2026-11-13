@@ -42,7 +42,7 @@ final class ActiveRun {
     var isFinishing: Bool { finishing != nil }
 
     private let history: HeartRateHistory
-    private let central: HeartRateConnecting
+    let central: HeartRateConnecting
     private let defaults: UserDefaults
     private let save: @MainActor (ModelContext) throws -> Void
     private var heartRateSetting: HeartRateSetting = .automatic
@@ -53,7 +53,7 @@ final class ActiveRun {
          defaults: UserDefaults = .standard,
          save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }) {
         self.history = history
-        self.central = central ?? HeartRateCentral()
+        self.central = central ?? HeartRateCentral.shared
         self.defaults = defaults
         self.save = save
     }
@@ -98,8 +98,10 @@ final class ActiveRun {
             case .watch, .off:
                 break
             }
-            // Over, or replaced, while it looked: connect to nothing.
-            guard !Task.isCancelled, recording === run else { return }
+            // Over, replaced, or being finished while it looked: connect to
+            // nothing. A strap picked now would be released by `end()` a moment
+            // later, after Finish has already decided from Health.
+            guard !Task.isCancelled, recording === run, finishing !== run else { return }
             // The watch path is not wired yet, so it is never available here.
             let source = HeartRateSourcePicker.pick(setting, addedInRange: inRange, watchAvailable: false)
             let session = RunHeartRateSession(begin: source)

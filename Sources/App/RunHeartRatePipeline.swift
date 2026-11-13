@@ -87,13 +87,21 @@ enum RunHeartRateFinish {
 
     /// Fills a saved run's heart rate from Health when `shouldRequery` says to.
     /// True when it changed the run; the caller saves.
+    ///
+    /// Health answers after a wait, and the run can be deleted in the meantime
+    /// (the review's Delete, or the list's): nothing is written to a model that
+    /// is gone, whose task was cancelled, or whose screen no longer wants it.
+    @MainActor
     @discardableResult
     static func fill(_ activity: OutdoorActivity, setting: HeartRateSetting,
-                     history: HeartRateHistory, now: Date = .now) async -> Bool {
+                     history: HeartRateHistory, now: Date = .now,
+                     isStillWanted: @MainActor () -> Bool = { true }) async -> Bool {
         guard let endedAt = activity.endedAt,
               shouldRequery(endedAt: endedAt, hasFigures: activity.averageBpm != nil || activity.maxBpm != nil,
                             setting: setting, now: now),
               let record = await fromHealth(history, from: activity.startedAt, to: endedAt) else { return false }
+        guard !Task.isCancelled, isStillWanted(), !activity.isDeleted, activity.modelContext != nil
+        else { return false }
         apply(record, to: activity)
         return true
     }

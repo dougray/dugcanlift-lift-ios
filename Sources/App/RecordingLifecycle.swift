@@ -11,7 +11,8 @@ import Observation
 /// `@State`. The screen stopped tracking on the disappear and started a new
 /// recording on the appear, and the run so far was gone. So a disappear stops
 /// nothing, a second appear starts nothing, and the run ends on Cancel, on
-/// Finish, or when the presentation itself is dismissed.
+/// Finish. Closing the screen (`left`) is not an end either: the run lives in
+/// `ActiveRun`, not in the screen.
 ///
 /// A value type with no view in it, for the reason `OutdoorRemoval` is one: a
 /// rule in a view's `@State` cannot be tested, and this one decides whether
@@ -26,8 +27,13 @@ struct RecordingLifecycle: Equatable {
         case cancel
         /// The run was saved.
         case finish
-        /// The presentation really went away (the cover's `onDismiss`).
+        /// The presentation really went away. The cover no longer sends this --
+        /// closing the screen is `left` -- but it stays the backstop for a
+        /// presenter that wants the run to end with its screen.
         case dismissed
+        /// The person closed the screen ("Back to LIFT"). The run goes on,
+        /// shown by the Train card, and ends only on Cancel or Finish.
+        case left
     }
 
     enum Action: Equatable { case start, stop, none }
@@ -48,7 +54,7 @@ struct RecordingLifecycle: Equatable {
             // Gone before it began: nothing to stop, and nothing may start.
             phase = .ended
             return .none
-        case (_, .disappear), (.recording, .appear), (.ended, _):
+        case (_, .disappear), (_, .left), (.recording, .appear), (.ended, _):
             return .none
         }
     }

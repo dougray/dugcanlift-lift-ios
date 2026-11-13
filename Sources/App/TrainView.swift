@@ -1033,14 +1033,10 @@ private struct SetRow: View {
 private struct OutdoorDaySection: View {
     let date: Date
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
-    /// The run being recorded, held here rather than inside the recording
-    /// screen so that screen being rebuilt mid-run (a light/dark switch does
-    /// it) is handed the same recording -- see `OutdoorRecording`.
-    @State private var recording: OutdoorRecording?
-    /// The same recording, kept past the moment the cover's item goes nil, so
-    /// `onDismiss` has something to tell.
-    @State private var presentedRecording: OutdoorRecording?
-    @State private var justFinishedActivity: OutdoorActivity?
+    /// The run being recorded lives in `ActiveRun`, not here or in the screen:
+    /// the screen can be closed, rebuilt (a light/dark switch does it) or left
+    /// by switching tabs and the run goes on -- see `OutdoorRecording`.
+    @Environment(ActiveRun.self) private var activeRun
 
     @Query private var activities: [OutdoorActivity]
 
@@ -1058,16 +1054,20 @@ private struct OutdoorDaySection: View {
 
     var body: some View {
         LiftCard(title: "Outdoor") {
+            // One run at a time: the card below says which one is recording.
             HStack(spacing: 16) {
-                Button { record(.run) } label: {
+                Button { activeRun.start(.run) } label: {
                     Label("Run", systemImage: "figure.run")
                 }
-                Button { record(.walk) } label: {
+                .disabled(activeRun.recording != nil)
+                Button { activeRun.start(.walk) } label: {
                     Label("Walk", systemImage: "figure.walk")
                 }
-                Button { record(.hike) } label: {
+                .disabled(activeRun.recording != nil)
+                Button { activeRun.start(.hike) } label: {
                     Label("Hike", systemImage: "figure.hiking")
                 }
+                .disabled(activeRun.recording != nil)
                 Spacer()
                 NavigationLink("See all") {
                     OutdoorActivityListView()
@@ -1094,40 +1094,23 @@ private struct OutdoorDaySection: View {
                 }
             }
         }
-        // A full-screen cover has no swipe to dismiss, so Cancel and Finish
-        // are the only ways out and each stops the run itself. `onDismiss` is
-        // the backstop for any other way the cover goes, so location can never
-        // outlive the screen; after Cancel or Finish it does nothing.
-        .fullScreenCover(item: $recording, onDismiss: {
-            // A run started during the old cover's dismiss animation is
-            // already the presented one; this late dismissal is not about it.
-            // `record` ended the old one when it replaced it.
-            guard recording == nil else { return }
-            presentedRecording?.handle(.dismissed)
-            presentedRecording = nil
-        }) { recording in
+        // A full-screen cover has no swipe to dismiss, so Cancel, Finish and
+        // Back to LIFT are the only ways out. Closing the screen ends nothing:
+        // the run is `ActiveRun`'s and the Train card shows it. Cancel and
+        // Finish end it there.
+        .fullScreenCover(item: Binding(
+            get: { activeRun.isScreenShown ? activeRun.recording : nil },
+            set: { if $0 == nil { activeRun.isScreenShown = false } }
+        )) { recording in
             NavigationStack {
-                OutdoorActivityRecordingView(recording: recording) { activity in
-                    self.recording = nil
-                    justFinishedActivity = activity
-                }
+                OutdoorActivityRecordingView(recording: recording)
             }
         }
-        .fullScreenCover(item: $justFinishedActivity) { activity in
+        .fullScreenCover(item: Bindable(activeRun).justFinished) { activity in
             NavigationStack {
                 OutdoorActivityReviewView(activity: activity)
             }
         }
-    }
-
-    private func record(_ type: OutdoorActivityType) {
-        // Normally already ended by Cancel or Finish; if a tap lands while the
-        // last cover is still animating away, end it here, because its own
-        // `onDismiss` will find the new run presented and leave it alone.
-        presentedRecording?.handle(.dismissed)
-        let new = OutdoorRecording(activityType: type)
-        presentedRecording = new
-        recording = new
     }
 }
 
@@ -1136,7 +1119,10 @@ private struct OutdoorDaySection: View {
 /// day's, so it is still there on a rest day.
 private struct OutdoorHighlights: View {
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
+    @Environment(\.modelContext) private var context
+    @Environment(ActiveRun.self) private var activeRun
     @Query(sort: \OutdoorActivity.startedAt, order: .reverse) private var activities: [OutdoorActivity]
+    @State private var finishFailed = false
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
@@ -1144,7 +1130,9 @@ private struct OutdoorHighlights: View {
         let last = OutdoorRecords.lastRoute(in: activities)
         let bests = OutdoorRecords.bests(in: activities)
 
-        if let last {
+        if let recording = activeRun.recording {
+            liveCard(recording)
+        } else if let last {
             LiftCard(title: "Last route") {
                 NavigationLink {
                     OutdoorActivityReviewView(activity: last)
@@ -1202,6 +1190,68 @@ private struct OutdoorHighlights: View {
                     }
                 }
             }
+        }
+    }
+
+    /// The run in progress, in the place of Last route. It reads the same
+    /// `LiveRunStats` as the full screen; the map redraws as points arrive, the
+    /// numbers once a second.
+    private func liveCard(_ recording: OutdoorRecording) -> some View {
+        LiftCard(title: "Recording · \(recording.activityType.displayName)") {
+            VStack(alignment: .leading, spacing: 10) {
+                RouteMap(points: recording.tracker.points.map {
+                    OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
+                })
+                .frame(height: 180)
+
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let stats = LiveRunStats.compute(points: recording.tracker.points,
+                                                     startedAt: recording.startedAt,
+                                                     now: timeline.date)
+                    HStack(spacing: 0) {
+                        stat("Time", stats.elapsedText)
+                        stat("Distance", stats.distanceText(unit: unit))
+                        stat("Pace", stats.paceText(unit: unit))
+                    }
+                }
+
+                liveExtras
+
+                HStack(spacing: 12) {
+                    Button { activeRun.open() } label: {
+                        Text("Open").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Theme.accent)
+
+                    // Saves, so not red.
+                    Button { finish() } label: {
+                        Text("Finish").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accent)
+                }
+                .scaledFont(size: 15, weight: .semibold)
+            }
+        }
+        .alert("Couldn't save this \(recording.activityType.displayName.lowercased())", isPresented: $finishFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Still recording, and the route so far is kept. Try Finish again.")
+        }
+    }
+
+    /// Room for what a later change adds to a live run (heart rate among it).
+    private var liveExtras: some View {
+        VStack(alignment: .leading, spacing: 6) {}
+    }
+
+    private func finish() {
+        do {
+            // The review opens from `ActiveRun.justFinished`.
+            _ = try activeRun.finish(in: context)
+        } catch {
+            finishFailed = true
         }
     }
 

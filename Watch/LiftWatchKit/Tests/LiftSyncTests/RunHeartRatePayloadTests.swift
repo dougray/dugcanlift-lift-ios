@@ -101,4 +101,43 @@ final class RunHeartRatePayloadTests: XCTestCase {
     func testAReadingIsSmall() throws {
         XCTAssertLessThan(try RunHeartRatePayload(bpm: 199, at: at).encoded().count, 64)
     }
+
+    // MARK: - The phone's stop
+
+    private static let commandContract = contract.deletingLastPathComponent()
+        .appendingPathComponent("run-heart-rate-command.schema.json")
+
+    func testTheStopCommandsContractExampleDecodes() throws {
+        let data = try Data(contentsOf: Self.commandContract)
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let example = try XCTUnwrap((schema["examples"] as? [[String: Any]])?.first)
+        XCTAssertEqual(RunHeartRateCommand.decode(try JSONSerialization.data(withJSONObject: example)), .stop)
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let command = try XCTUnwrap(properties["command"] as? [String: Any])
+        XCTAssertEqual(Set(try XCTUnwrap(command["enum"] as? [String])),
+                       Set(RunHeartRateCommand.allCases.map(\.rawValue)))
+    }
+
+    func testTheStopCommandRoundTrips() throws {
+        let data = try RunHeartRateCommand.stop.encoded()
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), #"{"command":"stop"}"#)
+        XCTAssertEqual(RunHeartRateCommand.decode(data), .stop)
+    }
+
+    /// A reading is not a stop, and a stop is not a reading: the two share the
+    /// session's one data channel.
+    func testAReadingAndAStopAreNeverMistakenForEachOther() throws {
+        let reading = try RunHeartRatePayload(bpm: 140, at: at).encoded()
+        let stop = try RunHeartRateCommand.stop.encoded()
+        XCTAssertNil(RunHeartRateCommand.decode(reading))
+        XCTAssertNil(RunHeartRatePayload.decode(stop))
+        XCTAssertFalse(RunHeartRateCommand.containsStop([reading, Data("junk".utf8)]))
+        XCTAssertTrue(RunHeartRateCommand.containsStop([reading, stop]))
+    }
+
+    func testAnUnknownCommandOrGarbageIsIgnored() {
+        for text in ["", "{}", #"{"command":"start"}"#, #"{"command":"STOP"}"#, "stop", "[]"] {
+            XCTAssertNil(RunHeartRateCommand.decode(Data(text.utf8)), text)
+        }
+    }
 }

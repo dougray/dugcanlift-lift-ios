@@ -6,33 +6,49 @@ import XCTest
 // Path B: LIFT on the Apple Watch measures a run the phone records. The rules,
 // as values and through `ActiveRun`, without a watch.
 
-/// A watch that is a list: how often it was asked to start and stop, and the
-/// callback it was handed. It can fail to start, or hold its answer back.
+/// A watch that is a list: how often it was asked to start and stop, for
+/// which run, and the callback it was handed. It follows the real link's run
+/// rule (`WatchLinkRuns`), can fail to start, or hold its answers back.
 @MainActor
 final class FakeWatch: WatchHeartRateLinking {
     var onReading: (@MainActor (Int, Date) -> Void)?
     var failsToStart = false
     var holdsStart = false
-    private var startWaiting: CheckedContinuation<Void, Never>?
+    private var startWaiting: [CheckedContinuation<Void, Never>] = []
+    private var runs = WatchLinkRuns()
     private(set) var starts = 0
+    /// Every stop call, stale or not.
     private(set) var stops = 0
+    /// Stops that ended the watch for the run it was measuring.
+    private(set) var effectiveStops = 0
+    private(set) var startedRuns: [UUID] = []
+
+    var current: UUID? { runs.current }
 
     struct NotReachable: Error {}
 
-    func start() async throws {
+    func start(run: UUID) async throws {
         starts += 1
-        if holdsStart { await withCheckedContinuation { startWaiting = $0 } }
-        if failsToStart { throw NotReachable() }
+        startedRuns.append(run)
+        runs.began(run)
+        if holdsStart { await withCheckedContinuation { startWaiting.append($0) } }
+        if failsToStart {
+            _ = runs.stop(run)
+            throw NotReachable()
+        }
     }
 
-    func stop() {
+    func stop(run: UUID) {
         stops += 1
+        guard runs.stop(run) else { return }
+        effectiveStops += 1
         onReading = nil
     }
 
+    /// Lets the oldest held start answer.
     func releaseStart() {
-        startWaiting?.resume()
-        startWaiting = nil
+        guard !startWaiting.isEmpty else { return }
+        startWaiting.removeFirst().resume()
     }
 
     /// The watch sends a reading.
@@ -110,6 +126,31 @@ final class WatchHeartRateLinkTests: XCTestCase {
         XCTAssertNil(WatchLinkStart.source(started: false))
     }
 
+    /// `startWatchApp` saying false with no error is still a watch that never
+    /// launched.
+    func testAFalseWithNoErrorIsAFailedStart() {
+        struct Boom: Error {}
+        XCTAssertNil(WatchLinkStart.failure(success: true, error: nil))
+        XCTAssertNotNil(WatchLinkStart.failure(success: false, error: nil))
+        XCTAssertTrue(WatchLinkStart.failure(success: false, error: Boom()) is Boom)
+        XCTAssertTrue(WatchLinkStart.failure(success: true, error: Boom()) is Boom,
+                      "an error is a failure whatever the flag says")
+    }
+
+    func testAStaleStopNeverStopsTheNextRunsWatch() {
+        let a = UUID(), b = UUID()
+        var runs = WatchLinkRuns()
+        runs.began(a)
+        XCTAssertTrue(runs.stop(a))
+        runs.began(b)
+        XCTAssertFalse(runs.stop(a), "run A's late stop")
+        XCTAssertEqual(runs.current, b)
+        XCTAssertTrue(runs.wantsWatch)
+        XCTAssertTrue(runs.stop(b))
+        XCTAssertFalse(runs.wantsWatch)
+        XCTAssertFalse(runs.stop(b), "twice is once")
+    }
+
     func testAMirroredSessionNobodyAskedForIsEnded() {
         XCTAssertEqual(WatchMirrorDecision.decide(runWantsWatch: true), .adopt)
         XCTAssertEqual(WatchMirrorDecision.decide(runWantsWatch: false), .end)
@@ -143,7 +184,7 @@ final class WatchHeartRateLinkTests: XCTestCase {
         XCTAssertEqual(activity.averageBpm, 150)
         XCTAssertEqual(activity.maxBpm, 160)
         XCTAssertEqual(history.calls.count, 0, "live readings are never second-guessed from Health")
-        XCTAssertEqual(watch.stops, 1, "Finish ends the watch's session")
+        XCTAssertEqual(watch.effectiveStops, 1, "Finish ends the watch's session")
         XCTAssertNil(watch.onReading)
     }
 
@@ -272,7 +313,7 @@ final class WatchHeartRateLinkTests: XCTestCase {
         let callback = try XCTUnwrap(watch.onReading)
 
         run.cancel()
-        XCTAssertEqual(watch.stops, 1)
+        XCTAssertEqual(watch.effectiveStops, 1)
         callback(150, .now)
         XCTAssertTrue(session.readings.isEmpty, "an ended session takes nothing")
     }
@@ -332,5 +373,50 @@ final class WatchHeartRateLinkTests: XCTestCase {
         XCTAssertNil(weakRun, "the callback holds the session weakly, never the run")
         XCTAssertNil(weakSession)
         watch.deliver(150, at: .now)       // and a reading for nobody is harmless
+    }
+
+    /// Run A's watch start answers after A was cancelled and run B began: it is
+    /// let go without stopping B's watch, and B keeps its readings.
+    func testALateStartFromAnEarlierRunDoesNotStopTheNextRunsWatch() async throws {
+        store(.watch)
+        let watch = FakeWatch()
+        watch.holdsStart = true
+        let run = makeRun(watch: watch)
+        XCTAssertTrue(run.start(.run))
+        for _ in 0..<200 where watch.starts == 0 { await Task.yield() }
+        run.cancel()
+
+        watch.holdsStart = false
+        XCTAssertTrue(run.start(.run))
+        await run.awaitHeartRateSource()
+        addTeardownBlock { @MainActor in run.cancel() }
+        XCTAssertEqual(watch.starts, 2)
+        let runB = try XCTUnwrap(watch.startedRuns.last)
+        XCTAssertEqual(run.heartRate?.source, .watch)
+        let effective = watch.effectiveStops
+
+        watch.releaseStart()             // A's start answers now
+        for _ in 0..<50 { await Task.yield() }
+        XCTAssertEqual(watch.effectiveStops, effective, "A's late stop is a no-op")
+        XCTAssertEqual(watch.current, runB)
+        XCTAssertNotNil(watch.onReading, "B's callback stays")
+        let at = Date.now
+        watch.deliver(150, at: at)
+        XCTAssertEqual(run.liveHeartRate(now: at)?.number, "150 bpm")
+    }
+
+    /// A watch that never launched leaves no "Apple Watch" on the card.
+    func testAWatchThatNeverLaunchedShowsNoSource() async throws {
+        store(.watch)
+        let watch = FakeWatch()
+        watch.failsToStart = true
+        let history = FakeHistory([118, 122])
+        let run = makeRun(history: history, watch: watch)
+        XCTAssertTrue(run.start(.run))
+        await run.awaitHeartRateSource()
+        XCTAssertNil(run.liveHeartRate(now: .now))
+        XCTAssertNil(watch.current)
+        let activity = try await run.finish(in: ModelContext(container))
+        XCTAssertEqual(activity.heartRateSource, "Health")
     }
 }

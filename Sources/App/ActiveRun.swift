@@ -49,6 +49,9 @@ final class ActiveRun {
     private let save: @MainActor (ModelContext) throws -> Void
     private var heartRateSetting: HeartRateSetting = .automatic
     @ObservationIgnored private var picking: Task<Void, Never>?
+    /// This run's name to the watch, so a late answer from an earlier run can
+    /// never start or stop the watch for this one.
+    @ObservationIgnored private var watchRun: UUID?
 
     init(history: HeartRateHistory = HealthKitManager.shared,
          central: HeartRateConnecting? = nil,
@@ -102,6 +105,8 @@ final class ActiveRun {
         heartRate = nil
         // Read once, now, like the setting: a watch paired mid-run changes nothing.
         let watchAvailable = setting == .off ? false : watchAvailability.isWatchAppReady
+        let watchRun = UUID()
+        self.watchRun = watchRun
         picking = Task { [weak self] in
             guard let self else { return }
             var inRange: [AddedHeartRateDevice] = []
@@ -121,12 +126,12 @@ final class ActiveRun {
                 // strap or Health in its place -- and Finish is never held up:
                 // Health fills the summary after the run.
                 let started: Bool
-                do { try await watch.start(); started = true } catch { started = false }
+                do { try await watch.start(run: watchRun); started = true } catch { started = false }
                 source = WatchLinkStart.source(started: started)
                 guard !Task.isCancelled, recording === run, finishing !== run else {
                     // Asked, and the run ended or began finishing meanwhile:
                     // let the watch go rather than leave it measuring.
-                    if started { watch.stop() }
+                    if started { watch.stop(run: watchRun) }
                     return
                 }
             }
@@ -242,7 +247,8 @@ final class ActiveRun {
         // Lets the strap or the watch go and ends the session, so a late
         // reading is dropped.
         central.disconnect()
-        watch.stop()
+        if let watchRun { watch.stop(run: watchRun) }
+        watchRun = nil
         _ = heartRate?.end()
         heartRate = nil
         finishing = nil

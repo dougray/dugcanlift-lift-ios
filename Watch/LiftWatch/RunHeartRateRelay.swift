@@ -15,8 +15,10 @@ import LiftSync
 /// `sendToRemoteWorkoutSession(data:)`.
 ///
 /// **It saves nothing.** The phone exports the run, so when the session ends
-/// -- the phone's Finish or Cancel ends the mirrored session, which ends this
-/// one -- the builder's workout is discarded: one workout in Health, the
+/// -- the phone's Finish or Cancel sends `stop` and stops and ends the mirrored
+/// session; any of the three, a phone gone for good (three reconnect tries) or
+/// five minutes unheard (the watchdog) ends this one -- the builder's workout
+/// is discarded: one workout in Health, the
 /// phone's, never two. Nothing is stored here and no reading is kept.
 ///
 /// **GPS stays off.** The phone asks for an outdoor run, but the session here
@@ -50,7 +52,11 @@ final class RunHeartRateRelay: NSObject {
     /// Set while a start waits on HealthKit, so a second request in that
     /// window starts nothing and a `stop()` in it is heard.
     private var pendingStart: UUID?
-    private var retries = 0
+    private var reconnect = RunHeartRateRelayPolicy.Reconnect()
+    /// The last time the phone was known to be there: the start, a mirroring
+    /// that succeeded, or a reading it took. The watchdog reads it.
+    private var lastHeard = Date()
+    private var watchdog: Task<Void, Never>?
 
     private var relaying: Bool { session != nil || pendingStart != nil }
 
@@ -60,7 +66,7 @@ final class RunHeartRateRelay: NSObject {
         else { return }
         let token = UUID()
         pendingStart = token
-        retries = 0
+        reconnect = RunHeartRateRelayPolicy.Reconnect()
         Task { await self.run(requested, token: token) }
     }
 
@@ -97,11 +103,19 @@ final class RunHeartRateRelay: NSObject {
             newBuilder.delegate = self
             session = newSession
             builder = newBuilder
+            lastHeard = Date()
+            startWatchdog(for: newSession)
 
             let startDate = Date()
             newSession.startActivity(with: startDate)
             try await newBuilder.beginCollection(at: startDate)
-            if await !mirror(newSession) { ended(newSession) }
+            let mirrored = await mirror(newSession)
+            guard newSession === session else { return }
+            if RunHeartRateRelayPolicy.afterFirstMirroring(succeeded: mirrored) {
+                lastHeard = Date()
+            } else {
+                end()
+            }
         } catch {
             // Not authorized, no session, or no phone: the phone's run goes on
             // with no live number and Health fills its summary afterwards.
@@ -110,21 +124,12 @@ final class RunHeartRateRelay: NSObject {
         }
     }
 
-    /// Mirrors the session to the phone. False when the phone cannot be
-    /// reached, which ends the relay: a session no one hears is only a drain.
+    /// Mirrors the session to the phone; false when the phone cannot be reached.
     private func mirror(_ mirrored: HKWorkoutSession) async -> Bool {
-        let succeeded: Bool
         do {
             try await mirrored.startMirroringToCompanionDevice()
-            succeeded = true
-        } catch {
-            succeeded = false
-        }
-        switch RunHeartRateRelayPolicy.afterMirroring(succeeded: succeeded) {
-        case .keepRelaying:
-            retries = 0
             return true
-        case .mirrorAgain, .end:
+        } catch {
             return false
         }
     }
@@ -133,12 +138,31 @@ final class RunHeartRateRelay: NSObject {
     /// including with nothing running.
     private func end() {
         pendingStart = nil
+        watchdog?.cancel()
+        watchdog = nil
         guard let session else { return }
         let builder = self.builder
         self.session = nil
         self.builder = nil
         if session.state != .ended { session.end() }
         builder?.discardWorkout()
+    }
+
+    /// The backstop: a relay the phone has not been heard from for
+    /// `unheardLimit` ends, so a phone whose end of the session never reached
+    /// the watch cannot leave a workout running on the wrist.
+    private func startWatchdog(for watched: HKWorkoutSession) {
+        watchdog?.cancel()
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard let self, !Task.isCancelled, watched === self.session else { return }
+                if RunHeartRateRelayPolicy.isUnheardTooLong(lastHeard: self.lastHeard, now: Date()) {
+                    self.end()
+                    return
+                }
+            }
+        }
     }
 
     // MARK: - From HealthKit, on its queues
@@ -149,17 +173,31 @@ final class RunHeartRateRelay: NSObject {
     }
 
     private func disconnected(_ from: HKWorkoutSession) {
-        guard from === session else { return }
-        switch RunHeartRateRelayPolicy.afterDisconnect(retriesSoFar: retries) {
-        case .mirrorAgain:
-            retries += 1
-            Task {
-                if await !self.mirror(from) { self.ended(from) }
-            }
-        case .keepRelaying:
-            break
+        // One reconnect at a time: a second disconnect while one is waiting
+        // or trying is the same drop.
+        guard from === session, !reconnect.reconnecting else { return }
+        follow(reconnect.disconnected(), for: from)
+    }
+
+    /// Waits, tries again, and on a failure asks the policy again -- 2 s, 5 s,
+    /// 10 s, then the end -- the same source reconnecting, never another.
+    private func follow(_ step: RunHeartRateRelayPolicy.Step, for watched: HKWorkoutSession) {
+        switch step {
         case .end:
             end()
+        case .mirrorAgain(let delay):
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(delay))
+                guard let self, watched === self.session else { return }
+                if await self.mirror(watched) {
+                    guard watched === self.session else { return }
+                    self.reconnect.trySucceeded()
+                    self.lastHeard = Date()
+                } else {
+                    guard watched === self.session else { return }
+                    self.follow(self.reconnect.tryFailed(), for: watched)
+                }
+            }
         }
     }
 
@@ -171,8 +209,18 @@ final class RunHeartRateRelay: NSObject {
         guard let payload = RunHeartRatePayload.reading(bpm: bpm, at: at),
               let data = try? payload.encoded() else { return }
         // A reading that does not arrive is the one a reconnect replaces: the
-        // phone hides a number ten seconds old on its own.
-        session.sendToRemoteWorkoutSession(data: data) { _, _ in }
+        // phone hides a number ten seconds old on its own. One that does is
+        // the phone really back, which starts the reconnect count over.
+        session.sendToRemoteWorkoutSession(data: data) { [weak self] delivered, _ in
+            guard delivered else { return }
+            Task { @MainActor in self?.delivered(on: session) }
+        }
+    }
+
+    private func delivered(on sent: HKWorkoutSession) {
+        guard sent === session else { return }
+        reconnect.readingDelivered()
+        lastHeard = Date()
     }
 }
 
@@ -180,10 +228,13 @@ final class RunHeartRateRelay: NSObject {
 
 extension RunHeartRateRelay: HKWorkoutSessionDelegate {
 
+    /// Ended or stopped are both the end: the phone stops the activity before
+    /// it ends the session, and either one reaching the watch ends the relay
+    /// and discards its workout.
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession,
                                     didChangeTo toState: HKWorkoutSessionState,
                                     from fromState: HKWorkoutSessionState, date: Date) {
-        guard toState == .ended else { return }
+        guard toState == .ended || toState == .stopped else { return }
         Task { @MainActor in self.ended(workoutSession) }
     }
 
@@ -196,9 +247,13 @@ extension RunHeartRateRelay: HKWorkoutSessionDelegate {
         Task { @MainActor in self.disconnected(workoutSession) }
     }
 
-    /// The phone sends nothing; anything that arrives is ignored.
+    /// The phone's `stop` (`RunHeartRateCommand`) ends the relay; anything
+    /// else that arrives is ignored.
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession,
-                                    didReceiveDataFromRemoteWorkoutSession data: [Data]) {}
+                                    didReceiveDataFromRemoteWorkoutSession data: [Data]) {
+        guard RunHeartRateCommand.containsStop(data) else { return }
+        Task { @MainActor in self.ended(workoutSession) }
+    }
 }
 
 // MARK: - HKLiveWorkoutBuilderDelegate

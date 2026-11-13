@@ -56,25 +56,58 @@ enum HeartRateWatchRow {
 }
 
 /// The watch, as `ActiveRun` uses it. `WatchHeartRateLink` is the real one.
+///
+/// Every call names its run, so a late answer from a run that is over can
+/// never start or stop the watch for the run after it.
 @MainActor
 protocol WatchHeartRateLinking: AnyObject {
-    /// Asks the watch to start measuring. Throws when it cannot be asked (not
-    /// reachable, not installed); a watch that starts but never sends is not
-    /// an error, only a run with no live number.
-    func start() async throws
-    /// Ends the watch's session. Safe at any time, and more than once.
-    func stop()
+    /// Asks the watch to start measuring for `run`. Throws when it cannot be
+    /// asked or did not launch; a watch that starts but never sends is not an
+    /// error, only a run with no live number.
+    func start(run: UUID) async throws
+    /// Ends the watch's session for `run`. A no-op for any run but the one the
+    /// watch is measuring; safe at any time, and more than once.
+    func stop(run: UUID)
     /// Each reading, on the main actor.
     var onReading: (@MainActor (Int, Date) -> Void)? { get set }
 }
 
+/// Which run the watch is measuring for, if any.
+struct WatchLinkRuns: Equatable {
+    private(set) var current: UUID?
+
+    var wantsWatch: Bool { current != nil }
+
+    mutating func began(_ run: UUID) {
+        current = run
+    }
+
+    /// True when `run` was the one being measured, so the stop acts. A stale
+    /// stop from a run that is over changes nothing.
+    mutating func stop(_ run: UUID) -> Bool {
+        guard current == run else { return false }
+        current = nil
+        return true
+    }
+}
+
 /// What a run does with the watch once it has asked it to start.
 enum WatchLinkStart {
+    struct DidNotLaunch: Error {}
+
     /// The watch is the run's source only when it could be asked. A failure is
     /// no live source at all -- never a strap or Health swapped in -- and Health
     /// fills the summary after the run, as for any run no source spoke for.
     static func source(started: Bool) -> LiveHeartRateSource? {
         started ? .watch : nil
+    }
+
+    /// `startWatchApp`'s answer: started only on success with no error. A
+    /// `false` with no error is still a watch that did not launch, so the run
+    /// does not show "from Apple Watch" for a watch that never heard it.
+    static func failure(success: Bool, error: Error?) -> Error? {
+        if let error { return error }
+        return success ? nil : DidNotLaunch()
     }
 }
 
@@ -95,13 +128,16 @@ enum WatchMirrorDecision: Equatable {
 final class WatchHeartRateLink: NSObject, WatchHeartRateLinking {
     static let shared = WatchHeartRateLink()
 
+    /// How long a closing session waits for its `stop` to be sent before it is
+    /// ended anyway.
+    static let closeGrace: Duration = .seconds(2)
+
     var onReading: (@MainActor (Int, Date) -> Void)?
 
     private let healthStore = HKHealthStore()
     /// The session the watch mirrored here, while a run listens to it.
     private var mirrored: HKWorkoutSession?
-    /// Whether a run wants the watch: true from `start()` to `stop()`.
-    private var wanted = false
+    private var runs = WatchLinkRuns()
     private var installed = false
 
     /// Installs the mirroring handler. Called once, from `LiftApp.init`:
@@ -118,38 +154,65 @@ final class WatchHeartRateLink: NSObject, WatchHeartRateLinking {
         }
     }
 
-    func start() async throws {
+    func start(run: UUID) async throws {
         install()
-        wanted = true
+        runs.began(run)
         let configuration = HKWorkoutConfiguration()
         configuration.activityType = .running
         configuration.locationType = .outdoor
         do {
-            try await healthStore.startWatchApp(toHandle: configuration)
+            // The completion form, so a `false` with no error is a failure
+            // decided here (`WatchLinkStart.failure`), not left to the bridge.
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                healthStore.startWatchApp(with: configuration) { success, error in
+                    if let failure = WatchLinkStart.failure(success: success, error: error) {
+                        continuation.resume(throwing: failure)
+                    } else {
+                        continuation.resume()
+                    }
+                }
+            }
         } catch {
-            wanted = false
+            _ = runs.stop(run)
             throw error
         }
     }
 
-    func stop() {
-        wanted = false
+    func stop(run: UUID) {
+        guard runs.stop(run) else { return }
         onReading = nil
         guard let mirrored else { return }
         self.mirrored = nil
-        // Ending the mirrored session ends the watch's, which discards its
-        // workout: the phone's is the one that goes to Health.
-        mirrored.end()
+        close(mirrored)
+    }
+
+    /// Ends a mirrored session three ways, so the watch ends its relay and
+    /// discards its workout even if one of them never reaches it: a `stop`
+    /// command, `stopActivity`, then `end()`. The phone's workout is the one
+    /// that goes to Health.
+    private func close(_ session: HKWorkoutSession) {
+        session.delegate = nil
+        let closing = Closing(session)
+        if let data = try? RunHeartRateCommand.stop.encoded() {
+            session.sendToRemoteWorkoutSession(data: data) { _, _ in
+                Task { @MainActor in closing.end() }
+            }
+        }
+        session.stopActivity(with: .now)
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.closeGrace)
+            closing.end()
+        }
     }
 
     private func received(_ session: HKWorkoutSession) {
-        switch WatchMirrorDecision.decide(runWantsWatch: wanted) {
+        switch WatchMirrorDecision.decide(runWantsWatch: runs.wantsWatch) {
         case .adopt:
             if let mirrored, mirrored !== session { mirrored.delegate = nil }
             session.delegate = self
             mirrored = session
         case .end:
-            session.end()
+            close(session)
         }
     }
 
@@ -159,11 +222,27 @@ final class WatchHeartRateLink: NSObject, WatchHeartRateLinking {
     }
 
     private func lost(_ session: HKWorkoutSession) {
-        // The watch ended (its own run or lift took the session, or it gave up
-        // on a phone it could not reach). The run keeps the watch as its source
-        // and shows no number; nothing else is swapped in.
+        // The watch ended or failed (its own run or lift took the session, or
+        // it gave up on a phone it could not reach). The run keeps the watch as
+        // its source and shows no number; nothing else is swapped in.
         guard session === mirrored else { return }
         mirrored = nil
+    }
+}
+
+/// Ends a session once, whichever of the `stop` send or the grace period comes
+/// first.
+@MainActor
+private final class Closing {
+    private let session: HKWorkoutSession
+    private var done = false
+
+    init(_ session: HKWorkoutSession) { self.session = session }
+
+    func end() {
+        guard !done else { return }
+        done = true
+        session.end()
     }
 }
 
@@ -180,14 +259,18 @@ extension WatchHeartRateLink: HKWorkoutSessionDelegate {
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession,
                                     didChangeTo toState: HKWorkoutSessionState,
                                     from fromState: HKWorkoutSessionState, date: Date) {
-        guard toState == .ended else { return }
+        guard toState == .ended || toState == .stopped else { return }
         Task { @MainActor [weak self] in self?.lost(workoutSession) }
     }
 
-    nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {}
+    /// A failed session is a lost one, as an ended one is.
+    nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
+        Task { @MainActor [weak self] in self?.lost(workoutSession) }
+    }
 
-    /// The watch tries the phone again a few times (`RunHeartRateRelayPolicy`),
-    /// and a reconnect arrives as a new mirrored session, adopted above.
+    /// The watch tries the phone again after 2, 5 and 10 seconds
+    /// (`RunHeartRateRelayPolicy`), and a reconnect arrives as a mirrored
+    /// session, adopted above.
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession,
                                     didDisconnectFromRemoteDeviceWithError error: Error?) {}
 }

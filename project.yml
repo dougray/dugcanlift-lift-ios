@@ -353,11 +353,12 @@ targets:
         #
         # Heart rate is read during a lift and during a run started on the
         # iPhone (RunHeartRateRelay, path B): the watch measures it, sends it
-        # to the phone live, and saves no workout of its own for that run.
-        # HealthKit mirroring needs no entitlement beyond HealthKit's, and
-        # its runtime is the same workout-processing mode below.
+        # to the phone live, and saves no workout of its own for that run. A
+        # run the watch records itself reads none. HealthKit mirroring needs
+        # no entitlement beyond HealthKit's, and its runtime is the same
+        # workout-processing entry in WKBackgroundModes above.
         NSHealthShareUsageDescription: >-
-          LIFT reads your heart rate during workouts, including runs you
+          LIFT reads your heart rate while you lift, and during runs you
           start on your iPhone, to show it and keep it with the workout. It
           runs a workout session to keep GPS on while your watch records a
           run or hike.

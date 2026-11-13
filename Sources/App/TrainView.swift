@@ -1060,14 +1060,17 @@ private struct OutdoorDaySection: View {
                     Label("Run", systemImage: "figure.run")
                 }
                 .disabled(activeRun.recording != nil)
+                .opacity(activeRun.recording != nil ? 0.4 : 1)
                 Button { activeRun.start(.walk) } label: {
                     Label("Walk", systemImage: "figure.walk")
                 }
                 .disabled(activeRun.recording != nil)
+                .opacity(activeRun.recording != nil ? 0.4 : 1)
                 Button { activeRun.start(.hike) } label: {
                     Label("Hike", systemImage: "figure.hiking")
                 }
                 .disabled(activeRun.recording != nil)
+                .opacity(activeRun.recording != nil ? 0.4 : 1)
                 Spacer()
                 NavigationLink("See all") {
                     OutdoorActivityListView()

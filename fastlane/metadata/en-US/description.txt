@@ -56,6 +56,6 @@ WORKING WITH A COACH
 Send your recent log to a coach as a link, from your own email. A route is only included if you turn that on, and its start and end are trimmed off. A coach can send you a plan of workouts and meals to add.
 
 YOUR DATA
-Save a backup file and restore it on another phone, or in LIFT for Android or the web. Bring in your training history from Strong, Hevy or FitNotes, or export yours as a spreadsheet (CSV).
+Save a backup file and restore it on another phone. Bring in your training history from Strong, Hevy or FitNotes, or export yours as a spreadsheet (CSV).
 
 A widget shows today's calories, protein and workouts on your Home Screen. LIFT follows your phone's light or dark setting, or you can pick one.

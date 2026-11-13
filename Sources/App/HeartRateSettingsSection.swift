@@ -6,9 +6,12 @@ import SwiftUI
 /// choice is stored as JSON in `@AppStorage` (`HeartRateStorage`), and a value
 /// this build cannot read is Automatic.
 struct HeartRateSettingsSection: View {
-    /// Apple Watch is offered only when LIFT's watch app is installed, which a
-    /// later task detects. Until then the row stays out.
-    static let offersWatch = false
+    /// Apple Watch is offered when a watch is paired and LIFT is installed on
+    /// it (`PairedWatchAvailability`, read from the app's one `WCSession`), and
+    /// while it is the chosen setting.
+    private var offersWatch: Bool {
+        HeartRateWatchRow.shows(ready: PairedWatchAvailability().isWatchAppReady, setting: setting)
+    }
 
     @AppStorage(HeartRateStorage.settingKey) private var settingRaw = HeartRateStorage.defaultSetting
     @AppStorage(HeartRateStorage.devicesKey) private var devicesRaw = HeartRateStorage.defaultDevices
@@ -30,7 +33,7 @@ struct HeartRateSettingsSection: View {
                         Button("Remove", role: .destructive) { remove(device) }
                     }
             }
-            if Self.offersWatch {
+            if offersWatch {
                 choice("Apple Watch", is: .watch)
             }
             Button("Add a Bluetooth heart rate device") { isAdding = true }

@@ -350,11 +350,17 @@ targets:
         # HKWorkoutSession itself requires the capability and these strings,
         # and requesting share authorization for the workout type is how the
         # system grants a session permission to run.
+        #
+        # Heart rate is read during a lift and during a run started on the
+        # iPhone (RunHeartRateRelay, path B): the watch measures it, sends it
+        # to the phone live, and saves no workout of its own for that run.
+        # HealthKit mirroring needs no entitlement beyond HealthKit's, and
+        # its runtime is the same workout-processing mode below.
         NSHealthShareUsageDescription: >-
-          LIFT uses HealthKit to run a workout session, which keeps GPS
-          active while recording a run or hike, and reads your heart rate
-          while you lift so the app can show it and record it with the
-          workout.
+          LIFT reads your heart rate during workouts, including runs you
+          start on your iPhone, to show it and keep it with the workout. It
+          runs a workout session to keep GPS on while your watch records a
+          run or hike.
         NSHealthUpdateUsageDescription: >-
           LIFT saves the runs and hikes you record, and the workouts you
           lift, to the Health app.

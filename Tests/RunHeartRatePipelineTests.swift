@@ -134,8 +134,10 @@ final class RunHeartRatePipelineTests: XCTestCase {
 
     private func makeRun(history: FakeHistory? = nil,
                          central: FakeCentral? = nil,
+                         watch: FakeWatch? = nil,
                          save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }) -> ActiveRun {
         ActiveRun(history: history ?? FakeHistory(), central: central ?? FakeCentral(),
+                  watch: watch ?? FakeWatch(), watchAvailability: FakeWatchAvailability(watch != nil),
                   defaults: defaults, save: save)
     }
 
@@ -739,7 +741,8 @@ final class RunHeartRatePipelineTests: XCTestCase {
 
     func testARunWithNothingToLookForNeverCreatesTheManager() async {
         store(.automatic, devices: [])
-        let run = ActiveRun(history: FakeHistory(), defaults: defaults)
+        let run = ActiveRun(history: FakeHistory(), watch: FakeWatch(),
+                            watchAvailability: FakeWatchAvailability(false), defaults: defaults)
         XCTAssertTrue(run.start(.run))
         await run.awaitHeartRateSource()
         run.cancel()

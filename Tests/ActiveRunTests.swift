@@ -25,6 +25,7 @@ final class ActiveRunTests: XCTestCase {
     /// No Health store and no radio: these tests are about the run's lifecycle.
     private func makeRun() -> ActiveRun {
         ActiveRun(history: FakeHistory(), central: FakeCentral(),
+                  watch: FakeWatch(), watchAvailability: FakeWatchAvailability(false),
                   defaults: UserDefaults(suiteName: "ActiveRunTests") ?? .standard)
     }
 

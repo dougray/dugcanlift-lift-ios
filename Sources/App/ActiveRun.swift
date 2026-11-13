@@ -43,6 +43,8 @@ final class ActiveRun {
 
     private let history: HeartRateHistory
     let central: HeartRateConnecting
+    let watch: WatchHeartRateLinking
+    private let watchAvailability: WatchAvailability
     private let defaults: UserDefaults
     private let save: @MainActor (ModelContext) throws -> Void
     private var heartRateSetting: HeartRateSetting = .automatic
@@ -50,10 +52,14 @@ final class ActiveRun {
 
     init(history: HeartRateHistory = HealthKitManager.shared,
          central: HeartRateConnecting? = nil,
+         watch: WatchHeartRateLinking? = nil,
+         watchAvailability: WatchAvailability? = nil,
          defaults: UserDefaults = .standard,
          save: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }) {
         self.history = history
         self.central = central ?? HeartRateCentral.shared
+        self.watch = watch ?? WatchHeartRateLink.shared
+        self.watchAvailability = watchAvailability ?? PairedWatchAvailability()
         self.defaults = defaults
         self.save = save
     }
@@ -84,11 +90,18 @@ final class ActiveRun {
     /// three second look; and only its answer is connected. A strap that
     /// appears after the look is not used live -- Health fills the summary
     /// after the run -- and nothing re-picks when a reading goes quiet.
+    ///
+    /// LIFT on the Apple Watch is picked only when it is ready (paired, LIFT
+    /// installed: `WatchAvailability`, read once now), and asked to start once.
+    /// If it cannot be asked the run has no live source, and Health fills the
+    /// summary after it.
     private func beginHeartRate(for run: OutdoorRecording) {
         let setting = HeartRateStorage.setting(from: defaults.string(forKey: HeartRateStorage.settingKey) ?? "")
         let added = HeartRateStorage.devices(from: defaults.string(forKey: HeartRateStorage.devicesKey) ?? "")
         heartRateSetting = setting
         heartRate = nil
+        // Read once, now, like the setting: a watch paired mid-run changes nothing.
+        let watchAvailable = setting == .off ? false : watchAvailability.isWatchAppReady
         picking = Task { [weak self] in
             guard let self else { return }
             var inRange: [AddedHeartRateDevice] = []
@@ -102,8 +115,21 @@ final class ActiveRun {
             // nothing. A strap picked now would be released by `end()` a moment
             // later, after Finish has already decided from Health.
             guard !Task.isCancelled, recording === run, finishing !== run else { return }
-            // The watch path is not wired yet, so it is never available here.
-            let source = HeartRateSourcePicker.pick(setting, addedInRange: inRange, watchAvailable: false)
+            var source = HeartRateSourcePicker.pick(setting, addedInRange: inRange, watchAvailable: watchAvailable)
+            if source == .watch {
+                // A watch that cannot be asked is no live source -- never a
+                // strap or Health in its place -- and Finish is never held up:
+                // Health fills the summary after the run.
+                let started: Bool
+                do { try await watch.start(); started = true } catch { started = false }
+                source = WatchLinkStart.source(started: started)
+                guard !Task.isCancelled, recording === run, finishing !== run else {
+                    // Asked, and the run ended or began finishing meanwhile:
+                    // let the watch go rather than leave it measuring.
+                    if started { watch.stop() }
+                    return
+                }
+            }
             let session = RunHeartRateSession(begin: source)
             heartRate = session
             if case .device(let id, _)? = source {
@@ -111,6 +137,13 @@ final class ActiveRun {
                 // the length of the run and must not hold the run's owner. The
                 // radio calls it on the main actor.
                 central.connect(id, allowed: added) { [weak session] bpm, at in
+                    session?.receive(bpm, at: at)
+                }
+            } else if source == .watch {
+                // The same rule as the strap's: weak, the session only, on the
+                // main actor (the link hops there). A watch that goes quiet
+                // hides the number at ten seconds and nothing is swapped in.
+                watch.onReading = { [weak session] bpm, at in
                     session?.receive(bpm, at: at)
                 }
             }
@@ -206,8 +239,10 @@ final class ActiveRun {
     private func end() {
         picking?.cancel()
         picking = nil
-        // Lets the strap go and ends the session, so a late reading is dropped.
+        // Lets the strap or the watch go and ends the session, so a late
+        // reading is dropped.
         central.disconnect()
+        watch.stop()
         _ = heartRate?.end()
         heartRate = nil
         finishing = nil

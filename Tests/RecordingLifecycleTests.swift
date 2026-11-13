@@ -111,6 +111,51 @@ final class RecordingLifecycleTests: XCTestCase {
     }
 }
 
+extension RecordingLifecycleTests {
+    /// Closing the screen ("Back to LIFT") is not an end.
+    func testLeavingTheScreenKeepsRecording() {
+        var lifecycle = RecordingLifecycle()
+        _ = lifecycle.handle(.appear)
+        XCTAssertEqual(lifecycle.handle(.left), .none)
+        XCTAssertEqual(lifecycle.phase, .recording)
+    }
+
+    func testLeftDoesNothingInAnyPhase() {
+        var idle = RecordingLifecycle()
+        XCTAssertEqual(idle.handle(.left), .none)
+        XCTAssertEqual(idle.phase, .idle)
+        var ended = RecordingLifecycle()
+        _ = ended.handle(.appear)
+        _ = ended.handle(.cancel)
+        XCTAssertEqual(ended.handle(.left), .none)
+        XCTAssertEqual(ended.phase, .ended)
+    }
+
+    /// Back to LIFT, then a light/dark switch while away, then the screen
+    /// opened again: one start in total.
+    func testAppearanceSwitchWhileLeftKeepsTheRun() {
+        var lifecycle = RecordingLifecycle()
+        var starts = 0
+        for event in [RecordingLifecycle.Event.appear, .left, .disappear, .appear] {
+            if lifecycle.handle(event) == .start { starts += 1 }
+        }
+        XCTAssertEqual(starts, 1)
+        XCTAssertEqual(lifecycle.phase, .recording)
+    }
+
+    func testOnlyCancelOrFinishStops() {
+        for end in [RecordingLifecycle.Event.cancel, .finish] {
+            var lifecycle = RecordingLifecycle()
+            var stops = 0
+            for event in [RecordingLifecycle.Event.appear, .left, .disappear, .appear, .left, end] {
+                if lifecycle.handle(event) == .stop { stops += 1 }
+            }
+            XCTAssertEqual(stops, 1)
+            XCTAssertEqual(lifecycle.phase, .ended)
+        }
+    }
+}
+
 /// The recording object itself, with a real `LocationTracker`: the light/dark
 /// rebuild's disappear-then-appear must leave the same run going, with the
 /// same start time.

@@ -28,6 +28,9 @@ struct LiftApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var incomingPlan: IdentifiablePlan?
     @State private var refusal: PlanLinkIntake.Refusal?
+    /// The run in progress, which belongs to the app rather than to the screen
+    /// that records it (`ActiveRun`).
+    @State private var activeRun = ActiveRun()
     /// Recipes Safari handed over, the rules for when each may open, and the
     /// App Group files kept in step with them (`RecipeIntake`). Its
     /// held "reports" are plan outcomes: a plan sheet or a refusal alert that
@@ -58,6 +61,7 @@ struct LiftApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(activeRun)
                 .environment(\.appIsPresenting,
                              recipes.reviewing != nil || incomingPlan != nil || refusal != nil)
                 // `dugcanliftlift://plan#1z...`, LIFT's own scheme, which

@@ -1,4 +1,5 @@
 import Foundation
+import LiftCore
 
 /// The numbers a run in progress shows: time, distance and pace.
 ///
@@ -23,5 +24,19 @@ struct LiveRunStats: Equatable {
             ? elapsed / distance
             : nil
         return LiveRunStats(elapsed: elapsed, distanceMeters: distance, paceSecondsPerMeter: pace)
+    }
+
+    // MARK: - Text, shared by the card and the full screen
+
+    /// "0:00", "28:40", "1:02:10".
+    var elapsedText: String { OutdoorRecords.durationText(elapsed) }
+
+    func distanceText(unit: DistanceUnit) -> String {
+        OutdoorRecords.distanceText(distanceMeters, unit: unit)
+    }
+
+    /// "8:42 /mi", or "\u{2014}" while there is no pace to show.
+    func paceText(unit: DistanceUnit) -> String {
+        paceSecondsPerMeter.map { OutdoorRecords.paceText($0, unit: unit) } ?? "\u{2014}"
     }
 }

@@ -1,5 +1,4 @@
 import Foundation
-import LiftCore
 import Observation
 import SwiftData
 
@@ -33,7 +32,13 @@ final class ActiveRun {
     @discardableResult
     func start(_ type: OutdoorActivityType) -> Bool {
         guard recording == nil else { return false }
-        recording = OutdoorRecording(activityType: type)
+        let new = OutdoorRecording(activityType: type)
+        recording = new
+        // Tracking begins here, not when the screen appears: if SwiftUI never
+        // shows the presentation (a tap during the last cover's dismissal, or
+        // another presentation up), a run must not sit "recording" with a
+        // tracker that is not running. The screen's own appear is then a no-op.
+        new.handle(.appear)
         isScreenShown = true
         return true
     }
@@ -41,7 +46,17 @@ final class ActiveRun {
     /// Brings the full screen back.
     func open() {
         guard recording != nil else { return }
-        isScreenShown = true
+        if isScreenShown {
+            // Open is only reachable while the screen is not up, so a screen
+            // already "shown" is a presentation SwiftUI dropped. Down and up
+            // again, a turn apart, is a fresh presentation.
+            isScreenShown = false
+            Task { @MainActor in
+                if self.recording != nil { self.isScreenShown = true }
+            }
+        } else {
+            isScreenShown = true
+        }
     }
 
     /// The person closed the screen. The run continues.
@@ -83,24 +98,5 @@ final class ActiveRun {
     private func end() {
         recording = nil
         isScreenShown = false
-    }
-}
-
-// The words for those numbers live in the app target: `DistanceUnit` and
-// `OutdoorRecords` are not in the widget, which also compiles Shared.
-extension LiveRunStats {
-    /// "00:12:07".
-    var elapsedText: String {
-        let total = Int(elapsed)
-        return String(format: "%02d:%02d:%02d", total / 3600, (total / 60) % 60, total % 60)
-    }
-
-    func distanceText(unit: DistanceUnit) -> String {
-        OutdoorRecords.distanceText(distanceMeters, unit: unit)
-    }
-
-    /// "8:42 /mi", or "--" before there is a pace to show.
-    func paceText(unit: DistanceUnit) -> String {
-        paceSecondsPerMeter.map { OutdoorRecords.paceText($0, unit: unit) } ?? "--"
     }
 }

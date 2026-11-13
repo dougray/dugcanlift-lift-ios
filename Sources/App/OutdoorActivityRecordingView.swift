@@ -111,7 +111,7 @@ struct OutdoorActivityRecordingView: View {
         // Reported, not acted on: a disappear followed at once by an appear is
         // SwiftUI rebuilding this screen (a light/dark switch does it), not the
         // person leaving it. `RecordingLifecycle` starts the run on the first
-        // appear only and stops it only on Cancel or Finish.
+        // appear only (`ActiveRun.start` already did) and stops it only on Cancel or Finish.
         .onAppear { recording.handle(.appear) }
         .onDisappear { recording.handle(.disappear) }
         .onReceive(tick) { now = $0 }
@@ -141,6 +141,9 @@ struct OutdoorActivityRecordingView: View {
         // recording, so nothing walked after it is lost either.
         do {
             _ = try activeRun.finish(in: context)
+        } catch ActiveRun.FinishError.notRecording {
+            // A second tap of Finish landing after the first one saved: the run
+            // is already saved and this screen is on its way out.
         } catch {
             // Nothing is presented on a failed save: leave the user on this
             // screen, tell them, and let them try Finish again, rather than

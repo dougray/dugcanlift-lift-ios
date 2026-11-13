@@ -5,8 +5,21 @@ import XCTest
 @MainActor
 final class ActiveRunTests: XCTestCase {
 
+    /// Held by the test: a `ModelContext` does not keep its container alive.
+    private var container: ModelContainer!
+
+    override func setUp() {
+        super.setUp()
+        container = LiftStore.makeContainer(inMemory: true)
+    }
+
+    override func tearDown() {
+        container = nil
+        super.tearDown()
+    }
+
     private func makeContext() -> ModelContext {
-        ModelContext(LiftStore.makeContainer(inMemory: true))
+        ModelContext(container)
     }
 
     func testAnotherRunCannotStartWhileOneRecords() {
@@ -69,5 +82,44 @@ final class ActiveRunTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<OutdoorActivity>()), 0)
         XCTAssertTrue(run.start(.run), "a new run can start once the last ended")
         run.cancel()
+    }
+
+    /// A presentation SwiftUI never showed must not strand the run: the
+    /// tracker is already going, and Finish on the card still ends it.
+    func testARunWhoseScreenNeverAppearedIsNotStranded() throws {
+        let context = makeContext()
+        let run = ActiveRun()
+        XCTAssertTrue(run.start(.run))
+        let recording = try XCTUnwrap(run.recording)
+        // No `.appear` is ever sent, as when the cover is dropped.
+        XCTAssertTrue(recording.tracker.isTracking)
+        XCTAssertEqual(recording.phase, .recording)
+
+        _ = try run.finish(in: context)
+        XCTAssertNil(run.recording)
+        XCTAssertFalse(recording.tracker.isTracking)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<OutdoorActivity>()), 1)
+    }
+
+    /// Open on a screen that claims to be shown (a dropped presentation)
+    /// presents it again, a turn later.
+    func testOpenRepresentsADroppedScreen() async throws {
+        let run = ActiveRun()
+        XCTAssertTrue(run.start(.walk))
+        addTeardownBlock { @MainActor in run.cancel() }
+        XCTAssertTrue(run.isScreenShown)
+
+        run.open()
+        XCTAssertFalse(run.isScreenShown, "taken down first so it can be put up again")
+        await Task.yield()
+        await Task.yield()
+        XCTAssertTrue(run.isScreenShown)
+        XCTAssertNotNil(run.recording)
+    }
+
+    func testOpenWithNothingRecordingDoesNothing() {
+        let run = ActiveRun()
+        run.open()
+        XCTAssertFalse(run.isScreenShown)
     }
 }

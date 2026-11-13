@@ -1,3 +1,4 @@
+import LiftCore
 import XCTest
 @testable import Lift
 
@@ -36,13 +37,31 @@ final class LiveRunStatsTests: XCTestCase {
         let points = [point(lat: 0, at: start), point(lat: degrees, at: start.addingTimeInterval(30))]
         let stats = LiveRunStats.compute(points: points, startedAt: start, now: start.addingTimeInterval(60))
         XCTAssertNil(stats.paceSecondsPerMeter)
-        XCTAssertEqual(stats.paceText(unit: .miles), "--")
+        XCTAssertEqual(stats.paceText(unit: .miles), "\u{2014}")
     }
 
     func testTheTextBothScreensShare() {
         let stats = LiveRunStats(elapsed: 3_725, distanceMeters: 1609.344, paceSecondsPerMeter: 0.3)
-        XCTAssertEqual(stats.elapsedText, "01:02:05")
+        XCTAssertEqual(stats.elapsedText, "1:02:05")
         XCTAssertEqual(stats.distanceText(unit: .miles), "1.00 mi")
         XCTAssertEqual(stats.paceText(unit: .miles), "8:03 /mi")
+    }
+
+    /// A run with no fix yet: time starts at 0:00 and pace is a dash, never
+    /// NaN, infinity or a negative number.
+    func testTheEmptyRunReadsZeroAndADash() {
+        let stats = LiveRunStats.compute(points: [], startedAt: start, now: start)
+        XCTAssertEqual(stats.elapsedText, "0:00")
+        XCTAssertEqual(stats.distanceText(unit: .miles), "0.00 mi")
+        XCTAssertEqual(stats.paceText(unit: .miles), "\u{2014}")
+        XCTAssertEqual(stats.paceText(unit: .kilometers), "\u{2014}")
+        let early = LiveRunStats.compute(points: [], startedAt: start, now: start.addingTimeInterval(-3))
+        XCTAssertEqual(early.elapsedText, "0:00")
+    }
+
+    /// The canvas the route is drawn on says this while it has under two
+    /// points; the card and the screen both draw through it.
+    func testTheRouteSaysItIsWaitingForGPS() {
+        XCTAssertEqual(RouteCanvas.waitingText, "Waiting for GPS\u{2026}")
     }
 }

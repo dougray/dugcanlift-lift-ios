@@ -1253,6 +1253,8 @@ private struct OutdoorHighlights: View {
         do {
             // The review opens from `ActiveRun.justFinished`.
             _ = try activeRun.finish(in: context)
+        } catch ActiveRun.FinishError.notRecording {
+            // A second tap after the first saved.
         } catch {
             finishFailed = true
         }

@@ -6,7 +6,7 @@ import LiftSync
 /// Path B: heart rate for a run the **phone** records, measured here and sent
 /// to the phone live.
 ///
-/// The phone calls `HKHealthStore.startWatchApp(toHandle:)`, which launches or
+/// The phone calls `HKHealthStore.startWatchApp(with:completion:)`, which launches or
 /// wakes this app and calls `LiftWatchAppDelegate.handle(_:)` with the
 /// configuration; that calls `start`. The relay runs an `HKWorkoutSession`
 /// with an `HKLiveWorkoutBuilder` that collects heart rate and nothing else,

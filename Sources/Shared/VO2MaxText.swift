@@ -18,7 +18,10 @@ enum VO2MaxText {
     /// in the app).
     static func line(value: Double, date: Date,
                      locale: Locale = .current, calendar: Calendar = .current) -> String? {
-        guard value.isFinite, value > 0, let number = number(value) else { return nil }
+        // The rounded figure must be positive too: 0.04 is written "0", and a
+        // line reading "VO2 max 0" is a zero, not an estimate.
+        guard value.isFinite, value > 0, let number = number(value),
+              let shown = Double(number), shown > 0 else { return nil }
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.calendar = calendar

@@ -56,9 +56,12 @@ final class PermissionPinTests: XCTestCase {
                 // NSLocationAlwaysAndWhenInUseUsageDescription.
                 "NSLocationWhenInUseUsageDescription",
                 // Heart rate from a Bluetooth strap or watch the person adds
-                // in Settings, during a run. NEEDS a "Heart rate" paragraph in
-                // app-privacy.md (iPhone) before this ships: the page has only
-                // Android's Bluetooth text today.
+                // in Settings, during a run. The iPhone privacy page
+                // (dugcanlift-site/app-privacy.md) NEEDS to change in THREE
+                // places before release: iPhone Health reads (heart rate and
+                // VO2 max), Bluetooth, and Apple Watch heart rate during runs
+                // started on the iPhone. It has only Android's Bluetooth text
+                // today.
                 "NSBluetoothAlwaysUsageDescription",
             ],
             // `location` is "A recording you start keeps going with the phone

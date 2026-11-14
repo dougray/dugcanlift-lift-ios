@@ -75,6 +75,43 @@ enum HealthAuthorization {
     }
 }
 
+/// Which Apple Health block Settings shows, decided from facts rather than
+/// read off the view, so the order of the checks is testable.
+///
+/// "Connected" means LIFT may write workouts. It used to be checked before
+/// HealthKit's request status, which hid the Connect button from everyone who
+/// had already allowed workouts -- including after an update added heart rate
+/// and VO2 max to what LIFT reads. Nothing else asks for a type added later
+/// (an automatic ask happens once, ever), and iOS lists only requested types
+/// under Settings > Health > LIFT, so a connected person whose status is still
+/// `shouldRequest` is shown the button as well.
+enum HealthSettingsLayout: Equatable {
+    /// No Health on this device.
+    case unavailable
+    /// Workouts are allowed and HealthKit has nothing left to ask.
+    case connected
+    /// Workouts are allowed, but some type LIFT reads was never put to the
+    /// person: the connected block, and the Connect button.
+    case connectedWithConnect
+    /// Asked already for everything and not allowed workouts: the sheet will
+    /// not come back, so Settings.
+    case openSettings
+    /// Never asked, or HealthKit could not say.
+    case connect
+
+    static func of(isAvailable: Bool, isWorkoutWritingAuthorized: Bool,
+                   status: HealthAuthorization.SystemStatus) -> HealthSettingsLayout {
+        guard isAvailable else { return .unavailable }
+        if isWorkoutWritingAuthorized {
+            return status == .shouldRequest ? .connectedWithConnect : .connected
+        }
+        return status == .unnecessary ? .openSettings : .connect
+    }
+
+    var showsConnected: Bool { self == .connected || self == .connectedWithConnect }
+    var showsConnectButton: Bool { self == .connect || self == .connectedWithConnect }
+}
+
 #if canImport(UIKit)
 import UIKit
 

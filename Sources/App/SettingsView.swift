@@ -116,10 +116,14 @@ struct SettingsView: View {
                 BackupSection()
 
                 Section("Apple Health") {
-                    if !health.isAvailable {
+                    let layout = HealthSettingsLayout.of(
+                        isAvailable: health.isAvailable,
+                        isWorkoutWritingAuthorized: health.isWorkoutWritingAuthorized,
+                        status: health.requestStatus)
+                    if layout == .unavailable {
                         Text("Not available on this device")
                             .foregroundStyle(.secondary)
-                    } else if health.isWorkoutWritingAuthorized {
+                    } else if layout.showsConnected {
                         Label("Connected", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
 
@@ -133,7 +137,14 @@ struct SettingsView: View {
                         if let latestWeight {
                             LabeledContent("Latest weight", value: latestWeight)
                         }
-                    } else if health.requestStatus == .unnecessary {
+
+                        if layout.showsConnectButton {
+                            // Connected before heart rate and VO2 max were
+                            // read: HealthKit still has those to ask, and
+                            // nothing else will.
+                            connectButton
+                        }
+                    } else if layout == .openSettings {
                         // Already asked, and HealthKit will not show the sheet
                         // again: a "Connect" button here would do nothing.
                         Button("Open Settings", systemImage: "gear") {
@@ -143,13 +154,7 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Button("Connect Apple Health", systemImage: "heart.fill") {
-                            authorize()
-                        }
-                        .disabled(isRequesting)
-                        Text("Lift writes your workouts, runs, walks and hikes to Health, and reads your weight, steps, heart rate and VO2 max.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        connectButton
                     }
 
                     if let error = health.lastSyncError {
@@ -207,6 +212,17 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    @ViewBuilder
+    private var connectButton: some View {
+        Button("Connect Apple Health", systemImage: "heart.fill") {
+            authorize()
+        }
+        .disabled(isRequesting)
+        Text("Lift writes your workouts, runs, walks and hikes to Health, and reads your weight, steps, heart rate and VO2 max.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     private func authorize() {

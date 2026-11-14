@@ -62,6 +62,12 @@ final class VO2MaxTextTests: XCTestCase {
         XCTAssertNil(line(.infinity))
     }
 
+    func testAValueThatRoundsToZeroIsNoLine() {
+        // 0.04 is written "0"; "VO2 max 0" would be a zero, not an estimate.
+        XCTAssertNil(line(0.04))
+        XCTAssertEqual(line(0.05), "VO2 max 0.1 · Nov 8")
+    }
+
     // MARK: - The date follows the reader's locale
 
     func testTheDateIsAbbreviatedMonthThenDayInUS() {

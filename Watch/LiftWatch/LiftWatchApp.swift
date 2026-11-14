@@ -3,7 +3,7 @@ import SwiftUI
 import WatchKit
 
 /// Receives the workout configuration the phone sends with
-/// `HKHealthStore.startWatchApp(toHandle:)` when it starts a run whose heart
+/// `HKHealthStore.startWatchApp(with:completion:)` when it starts a run whose heart
 /// rate comes from this watch (path B), and hands it to the relay.
 final class LiftWatchAppDelegate: NSObject, WKApplicationDelegate {
     func handle(_ workoutConfiguration: HKWorkoutConfiguration) {

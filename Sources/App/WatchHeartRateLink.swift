@@ -6,7 +6,7 @@ import LiftSync
 // Path B, the phone's side: heart rate from LIFT on the Apple Watch, live,
 // during a run the phone records.
 //
-// The phone asks the watch to start (`HKHealthStore.startWatchApp(toHandle:)`);
+// The phone asks the watch to start (`HKHealthStore.startWatchApp(with:completion:)`);
 // the watch runs a workout session that measures heart rate, mirrors it here,
 // and sends each reading as a `RunHeartRatePayload`. The phone keeps the run
 // and exports it; the watch saves nothing. Tracked and shown, never targeted.

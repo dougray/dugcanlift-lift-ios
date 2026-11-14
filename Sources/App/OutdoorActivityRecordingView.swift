@@ -62,13 +62,23 @@ struct OutdoorActivityRecordingView: View {
 
                     statsRow
 
+                    if let line = activeRun.liveHeartRate(now: now) {
+                        VStack(spacing: 2) {
+                            Text(line.number).font(.title3.monospacedDigit())
+                            Text(line.source).font(.caption).foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+
                     // Saves, so not red: the destructive role belongs to
-                    // the Cancel that throws a route away.
+                    // the Cancel that throws a route away. Off while Finish
+                    // waits on Health.
                     Button("Finish \(activityType.displayName)") {
                         finish()
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accent)
+                    .disabled(activeRun.isFinishing)
                 }
                 .padding()
             }
@@ -139,16 +149,18 @@ struct OutdoorActivityRecordingView: View {
     private func finish() {
         // Tracking stops only once the save has worked: a failed save keeps
         // recording, so nothing walked after it is lost either.
-        do {
-            _ = try activeRun.finish(in: context)
-        } catch ActiveRun.FinishError.notRecording {
-            // A second tap of Finish landing after the first one saved: the run
-            // is already saved and this screen is on its way out.
-        } catch {
-            // Nothing is presented on a failed save: leave the user on this
-            // screen, tell them, and let them try Finish again, rather than
-            // silently losing the run.
-            saveFailed = true
+        Task { @MainActor in
+            do {
+                _ = try await activeRun.finish(in: context)
+            } catch ActiveRun.FinishError.notRecording {
+                // A second tap of Finish landing after the first one saved, or
+                // a Cancel that came while Health was asked: nothing to say.
+            } catch {
+                // Nothing is presented on a failed save: leave the user on this
+                // screen, tell them, and let them try Finish again, rather than
+                // silently losing the run.
+                saveFailed = true
+            }
         }
     }
 

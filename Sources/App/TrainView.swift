@@ -1126,11 +1126,17 @@ private struct OutdoorHighlights: View {
     @Environment(ActiveRun.self) private var activeRun
     @Query(sort: \OutdoorActivity.startedAt, order: .reverse) private var activities: [OutdoorActivity]
     @State private var finishFailed = false
+    /// VO2 max lines, asked once per appearance of each card and held here:
+    /// the live card redraws every second and must not ask Health each time.
+    /// The last route's is the newest estimate on or before that run's end.
+    @State private var liveVO2: String?
+    @State private var lastVO2: String?
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
     var body: some View {
         let last = OutdoorRecords.lastRoute(in: activities)
+        let lastEnd = last.flatMap { VO2MaxLookup.endDate(of: $0) }
         let bests = OutdoorRecords.bests(in: activities)
 
         if let recording = activeRun.recording {
@@ -1163,9 +1169,22 @@ private struct OutdoorHighlights: View {
                                  ? last.averagePaceSecondsPerMeter.map { OutdoorRecords.paceText($0, unit: unit) } ?? "—"
                                  : "—")
                         }
+
+                        if let heartRate = RunHeartRateWords.line(for: last) {
+                            heartRateLines(heartRate)
+                        }
+                        if let lastVO2 { vo2Line(lastVO2) }
                     }
                 }
                 .buttonStyle(.plain)
+            }
+            // Keyed by the run's end, a plain date: nothing reads the model
+            // after the wait, so a run deleted meanwhile is never touched.
+            .task(id: lastEnd) {
+                lastVO2 = nil
+                guard let lastEnd else { return }
+                let line = await VO2MaxLookup.line(onOrBefore: lastEnd, history: HealthKitManager.shared)
+                if !Task.isCancelled { lastVO2 = line }
             }
         }
 
@@ -1216,9 +1235,11 @@ private struct OutdoorHighlights: View {
                         stat("Distance", stats.distanceText(unit: unit))
                         stat("Pace", stats.paceText(unit: unit))
                     }
+                    // Inside the once-a-second timeline and handed its date, so
+                    // the number goes at ten seconds of silence without any
+                    // other state changing.
+                    liveExtras(now: timeline.date)
                 }
-
-                liveExtras
 
                 HStack(spacing: 12) {
                     Button { activeRun.open() } label: {
@@ -1227,15 +1248,23 @@ private struct OutdoorHighlights: View {
                     .buttonStyle(.bordered)
                     .tint(Theme.accent)
 
-                    // Saves, so not red.
+                    // Saves, so not red. Off while Finish waits on Health.
                     Button { finish() } label: {
                         Text("Finish").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accent)
+                    .disabled(activeRun.isFinishing)
                 }
                 .scaledFont(size: 15, weight: .semibold)
             }
+        }
+        // The newest estimate, asked once while this card is up. A strap or
+        // watch is not needed; no estimate is no line.
+        .task(id: recording.startedAt) {
+            liveVO2 = nil
+            let line = await VO2MaxLookup.line(onOrBefore: .now, history: HealthKitManager.shared)
+            if !Task.isCancelled { liveVO2 = line }
         }
         .alert("Couldn't save this \(recording.activityType.displayName.lowercased())", isPresented: $finishFailed) {
             Button("OK", role: .cancel) {}
@@ -1244,20 +1273,61 @@ private struct OutdoorHighlights: View {
         }
     }
 
-    /// Room for what a later change adds to a live run (heart rate among it).
-    private var liveExtras: some View {
-        VStack(alignment: .leading, spacing: 6) {}
+    /// Heart rate under the live numbers: `142 bpm` and, small, where it came
+    /// from. Nothing at all when this run has no source. No zones, no color.
+    @ViewBuilder
+    private func liveExtras(now: Date) -> some View {
+        if let line = activeRun.liveHeartRate(now: now) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line.number)
+                    .scaledFont(size: 16, weight: .semibold).monospacedDigit()
+                    .foregroundStyle(Theme.textPrimary)
+                Text(line.source)
+                    .scaledFont(size: 12)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
+        // Held in state, not asked here: this runs every second.
+        if let liveVO2 { vo2Line(liveVO2) }
+    }
+
+    /// `VO2 max 46.2 · Nov 8`. Plain words: no zone, no color.
+    private func vo2Line(_ text: String) -> some View {
+        Text(text)
+            .scaledFont(size: 12)
+            .foregroundStyle(Theme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func finish() {
-        do {
-            // The review opens from `ActiveRun.justFinished`.
-            _ = try activeRun.finish(in: context)
-        } catch ActiveRun.FinishError.notRecording {
-            // A second tap after the first saved.
-        } catch {
-            finishFailed = true
+        // The review opens from `ActiveRun.justFinished`.
+        Task { @MainActor in
+            do {
+                _ = try await activeRun.finish(in: context)
+            } catch ActiveRun.FinishError.notRecording {
+                // A second tap after the first saved, or a Cancel that won.
+            } catch {
+                finishFailed = true
+            }
         }
+    }
+
+    /// `Avg 141 · Max 168 bpm` and, small, where it came from.
+    private func heartRateLines(_ line: (summary: String, source: String?)) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(line.summary)
+                .scaledFont(size: 16, weight: .semibold).monospacedDigit()
+                .foregroundStyle(Theme.textPrimary)
+            if let source = line.source {
+                Text(source)
+                    .scaledFont(size: 12)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     private func stat(_ label: String, _ value: String) -> some View {

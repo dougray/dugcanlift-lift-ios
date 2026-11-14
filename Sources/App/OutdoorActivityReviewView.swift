@@ -11,6 +11,7 @@ struct OutdoorActivityReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
+    @AppStorage(HeartRateStorage.settingKey) private var heartRateSettingRaw = HeartRateStorage.defaultSetting
     @State private var exportError: String?
     @State private var isExporting = true
     @State private var confirmingDelete = false
@@ -20,6 +21,9 @@ struct OutdoorActivityReviewView: View {
     /// exists -- the guard Coach's `ClientDetailView` puts on the same
     /// situation, for the same reason.
     @State private var removed = false
+    /// `VO2 max 46.2 · Nov 8`: the newest estimate on or before this run's end,
+    /// asked once when the screen appears. Never today's, for an old run.
+    @State private var vo2Line: String?
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
@@ -46,6 +50,18 @@ struct OutdoorActivityReviewView: View {
                     LabeledContent("Duration", value: formatted(duration))
                 }
                 LabeledContent("Elevation gain", value: elevationText)
+            }
+
+            if let heartRate = RunHeartRateWords.line(for: activity) {
+                Section {
+                    LabeledContent("Heart rate", value: heartRate.summary)
+                } footer: {
+                    if let source = heartRate.source { Text(source) }
+                }
+            }
+
+            if let vo2Line {
+                Section { Text(vo2Line) }
             }
         }
         .readableListMargins()
@@ -78,12 +94,33 @@ struct OutdoorActivityReviewView: View {
                 exportError = error.localizedDescription
             }
         }
+        // A watch syncs to Health some time after a run: opened within a week
+        // of its end, a run with no heart rate asks Health again.
+        .task { await fillHeartRateFromHealth() }
+        .task { await loadVO2Max() }
         .alert("Couldn't save to Health", isPresented: .constant(exportError != nil), presenting: exportError) { _ in
             Button("OK") { exportError = nil }
         } message: { Text($0) }
         .deletesOutdoorActivity(activity, summary: summary, isPresented: $confirmingDelete) {
             removed = true
             dismiss()
+        }
+    }
+
+    /// Reads the run's end before the wait and nothing from the run after it:
+    /// a run deleted meanwhile is never touched, and a failure or no estimate
+    /// is no line. Shown even when Finish's Health export failed.
+    private func loadVO2Max() async {
+        guard let end = VO2MaxLookup.endDate(of: activity) else { return }
+        let line = await VO2MaxLookup.line(onOrBefore: end, history: HealthKitManager.shared)
+        if !Task.isCancelled, !removed { vo2Line = line }
+    }
+
+    private func fillHeartRateFromHealth() async {
+        let setting = HeartRateStorage.setting(from: heartRateSettingRaw)
+        if await RunHeartRateFinish.fill(activity, setting: setting, history: HealthKitManager.shared,
+                                         isStillWanted: { !removed }) {
+            try? context.save()
         }
     }
 

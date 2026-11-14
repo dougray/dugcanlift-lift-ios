@@ -53,4 +53,52 @@ final class HealthAuthorizationTests: XCTestCase {
         XCTAssertEqual(H.decide(trigger: .userAction, askedFlag: false, status: .unknown), .request)
         XCTAssertEqual(H.decide(trigger: .userAction, askedFlag: true, status: .unknown), .openSettings)
     }
+
+    // MARK: Settings' Apple Health block
+
+    private typealias Layout = HealthSettingsLayout
+
+    func testConnectedWithSomethingLeftToAskShowsConnectBesideConnected() {
+        // Allowed workouts before heart rate and VO2 max were read: HealthKit
+        // says shouldRequest, and the button is the only way to be asked.
+        let layout = Layout.of(isAvailable: true, isWorkoutWritingAuthorized: true, status: .shouldRequest)
+        XCTAssertEqual(layout, .connectedWithConnect)
+        XCTAssertTrue(layout.showsConnected)
+        XCTAssertTrue(layout.showsConnectButton)
+        // And that tap asks: the decision for a tap on shouldRequest.
+        XCTAssertEqual(H.decide(trigger: .userAction, askedFlag: true, status: .shouldRequest), .request)
+    }
+
+    func testConnectedWithNothingLeftToAskShowsNoButton() {
+        for status in [H.SystemStatus.unnecessary, .unknown] {
+            let layout = Layout.of(isAvailable: true, isWorkoutWritingAuthorized: true, status: status)
+            XCTAssertEqual(layout, .connected)
+            XCTAssertTrue(layout.showsConnected)
+            XCTAssertFalse(layout.showsConnectButton)
+        }
+    }
+
+    func testNotConnectedIsUnchanged() {
+        XCTAssertEqual(Layout.of(isAvailable: true, isWorkoutWritingAuthorized: false, status: .unnecessary),
+                       .openSettings)
+        XCTAssertEqual(Layout.of(isAvailable: true, isWorkoutWritingAuthorized: false, status: .shouldRequest),
+                       .connect)
+        XCTAssertEqual(Layout.of(isAvailable: true, isWorkoutWritingAuthorized: false, status: .unknown),
+                       .connect)
+        XCTAssertFalse(Layout.openSettings.showsConnectButton)
+        XCTAssertFalse(Layout.openSettings.showsConnected)
+        XCTAssertTrue(Layout.connect.showsConnectButton)
+        XCTAssertFalse(Layout.connect.showsConnected)
+    }
+
+    func testNoHealthShowsNothingToConnect() {
+        for connected in [true, false] {
+            for status in [H.SystemStatus.shouldRequest, .unnecessary, .unknown] {
+                XCTAssertEqual(Layout.of(isAvailable: false, isWorkoutWritingAuthorized: connected, status: status),
+                               .unavailable)
+            }
+        }
+        XCTAssertFalse(Layout.unavailable.showsConnectButton)
+        XCTAssertFalse(Layout.unavailable.showsConnected)
+    }
 }

@@ -28,7 +28,7 @@ Fast-food chains and gas-station snacks, ranked by how well each fits what is le
 - Nutrition comes from each chain's own published chart
 - Put a meal together from several items, see whether it fits before you order, and log it in one go
 - Avoid an allergen to hide the items whose chart says they contain it. An item the chart says nothing about stays on the list, marked "not stated". The charts don't cover cross-contact, so ask the restaurant
-- LIFT never uses your location
+- Road Food never uses your location
 
 TRAIN
 - Log sessions of exercises and sets, or run a live session
@@ -41,7 +41,7 @@ TRAIN
 - Keep routines in a folder and LIFT runs them as a rotation, showing which one is up next
 - For your own routines, LIFT suggests the next weight and says why: a step up when you made every rep, the same again when you didn't
 - Tell LIFT which equipment you have, and exercise search leaves out what you can't use
-- Record runs, walks and hikes with GPS, including while your phone is locked, and see your route and personal bests
+- Record runs, walks and hikes with GPS (only while you record), including while your phone is locked, and see your route and personal bests
 
 PROGRESS
 - Your year: every day of the last year as a square, darker the more sets you did

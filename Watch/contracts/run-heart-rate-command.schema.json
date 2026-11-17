@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LIFT Run Heart Rate Command",
+  "description": "Phone -> watch, on the mirrored HKWorkoutSession of path B (sendToRemoteWorkoutSession(data:)), the reverse of run-heart-rate.schema.json. The phone sends \"stop\" at a run's Finish or Cancel, before it stops and ends the mirrored session, so the watch ends its relay and discards its workout even if ending the mirrored session never reaches it. Each Data is this object as UTF-8 JSON. A command the watch does not know is ignored. See LiftSync's RunHeartRateCommand.",
+  "type": "object",
+  "required": ["command"],
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "type": "string",
+      "enum": ["stop"]
+    }
+  },
+  "examples": [
+    { "command": "stop" }
+  ]
+}

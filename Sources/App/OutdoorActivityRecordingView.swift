@@ -9,7 +9,9 @@ import LiftMap
 /// this screen calls `finish()` and hands off to the review screen.
 ///
 /// Presentation is owned entirely by the caller: this view reports a
-/// finished activity via `onFinish` and otherwise dismisses itself (Cancel).
+/// finished activity through `ActiveRun.justFinished`. Cancel ends the run
+/// through `ActiveRun`, and Back to LIFT only closes this screen: the run goes
+/// on, shown on the Train card.
 /// It never presents the review screen itself — see `OutdoorDaySection` in
 /// TrainView.swift, which presents review as a sibling `.fullScreenCover`, not
 /// nested inside this one, so finishing a run can never leave a stale
@@ -22,10 +24,9 @@ import LiftMap
 /// (`RecordingLifecycle` decides what that means).
 struct OutdoorActivityRecordingView: View {
     let recording: OutdoorRecording
-    let onFinish: (OutdoorActivity) -> Void
 
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
+    @Environment(ActiveRun.self) private var activeRun
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
 
     @State private var now = Date.now
@@ -36,10 +37,11 @@ struct OutdoorActivityRecordingView: View {
 
     private var activityType: OutdoorActivityType { recording.activityType }
     private var tracker: LocationTracker { recording.tracker }
-    private var startedAt: Date { recording.startedAt }
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
-    private var elapsed: TimeInterval { now.timeIntervalSince(startedAt) }
-    private var distanceMeters: Double { OutdoorActivityMath.totalDistanceMeters(tracker.points) }
+    /// The same numbers the Train card shows.
+    private var stats: LiveRunStats {
+        LiveRunStats.compute(points: tracker.points, startedAt: recording.startedAt, now: now)
+    }
 
     var body: some View {
         Group {
@@ -60,19 +62,34 @@ struct OutdoorActivityRecordingView: View {
 
                     statsRow
 
+                    if let line = activeRun.liveHeartRate(now: now) {
+                        VStack(spacing: 2) {
+                            Text(line.number).font(.title3.monospacedDigit())
+                            Text(line.source).font(.caption).foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+
                     // Saves, so not red: the destructive role belongs to
-                    // the Cancel that throws a route away.
+                    // the Cancel that throws a route away. Off while Finish
+                    // waits on Health.
                     Button("Finish \(activityType.displayName)") {
                         finish()
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accent)
+                    .disabled(activeRun.isFinishing)
                 }
                 .padding()
             }
         }
         .navigationTitle(activityType.displayName)
         .toolbar {
+            // The run goes on without this screen: it shows on the Train card,
+            // and ends only on Cancel or Finish.
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Back to LIFT") { activeRun.close() }
+            }
             ToolbarItem(placement: .cancellationAction) {
                 // "Cancel" in this slot reads as "close the screen", but it
                 // throws the whole route away. Once there is a route to
@@ -104,19 +121,20 @@ struct OutdoorActivityRecordingView: View {
         // Reported, not acted on: a disappear followed at once by an appear is
         // SwiftUI rebuilding this screen (a light/dark switch does it), not the
         // person leaving it. `RecordingLifecycle` starts the run on the first
-        // appear only and stops it only on Cancel, Finish or a real dismissal.
+        // appear only (`ActiveRun.start` already did) and stops it only on Cancel or Finish.
         .onAppear { recording.handle(.appear) }
         .onDisappear { recording.handle(.disappear) }
         .onReceive(tick) { now = $0 }
     }
 
     private var statsRow: some View {
-        HStack {
-            statColumn("Time", formattedElapsed)
+        let stats = stats
+        return HStack {
+            statColumn("Time", stats.elapsedText)
             Spacer()
-            statColumn("Distance", String(format: "%.2f %@", unit.fromMeters(distanceMeters), unit.abbreviation))
+            statColumn("Distance", stats.distanceText(unit: unit))
             Spacer()
-            statColumn("Pace", pace)
+            statColumn("Pace", stats.paceText(unit: unit))
         }
     }
 
@@ -128,45 +146,25 @@ struct OutdoorActivityRecordingView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var formattedElapsed: String {
-        let total = Int(elapsed)
-        return String(format: "%02d:%02d:%02d", total / 3600, (total / 60) % 60, total % 60)
-    }
-
-    private var pace: String {
-        guard distanceMeters > 0 else { return "--" }
-        let secondsPerUnit = elapsed / unit.fromMeters(distanceMeters)
-        guard secondsPerUnit.isFinite, secondsPerUnit > 0 else { return "--" }
-        let minutes = Int(secondsPerUnit) / 60
-        let seconds = Int(secondsPerUnit) % 60
-        return String(format: "%d:%02d /%@", minutes, seconds, unit.abbreviation)
-    }
-
     private func finish() {
         // Tracking stops only once the save has worked: a failed save keeps
         // recording, so nothing walked after it is lost either.
-        let activity = OutdoorActivity(activityType: activityType, startedAt: startedAt)
-        activity.endedAt = .now
-        activity.routePoints = tracker.points
-        activity.distanceMeters = OutdoorActivityMath.totalDistanceMeters(tracker.points)
-        activity.elevationGainMeters = OutdoorActivityMath.elevationGainMeters(tracker.points)
-        context.insert(activity)
-        do {
-            try context.save()
-            recording.handle(.finish)
-            onFinish(activity)
-        } catch {
-            // Do not call onFinish or dismiss on a failed save: leave the
-            // user on this screen, tell them, and let them try Finish again,
-            // rather than silently losing the run. The unsaved insert is
-            // backed out so a retry doesn't save two copies.
-            context.delete(activity)
-            saveFailed = true
+        Task { @MainActor in
+            do {
+                _ = try await activeRun.finish(in: context)
+            } catch ActiveRun.FinishError.notRecording {
+                // A second tap of Finish landing after the first one saved, or
+                // a Cancel that came while Health was asked: nothing to say.
+            } catch {
+                // Nothing is presented on a failed save: leave the user on this
+                // screen, tell them, and let them try Finish again, rather than
+                // silently losing the run.
+                saveFailed = true
+            }
         }
     }
 
     private func discard() {
-        recording.handle(.cancel)
-        dismiss()
+        activeRun.cancel()
     }
 }

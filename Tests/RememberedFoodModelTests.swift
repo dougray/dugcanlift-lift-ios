@@ -51,4 +51,79 @@ final class RememberedFoodModelTests: XCTestCase {
         XCTAssertNil(back.per100g.fiberG)
         XCTAssertNil(back.per100g.sodiumMg)
     }
+
+}
+
+/// V10 -> V11: three new optional columns on `OutdoorActivity` -- a run's
+/// average and max heart rate, and where they came from. Written through
+/// `LiftPreRunHeartRateShapes`, which is what V4-V10 declared, so this is the
+/// shape a V10 build wrote.
+final class RunHeartRateSchemaTests: XCTestCase {
+    private var storeURL: URL!
+
+    override func setUp() {
+        storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v10to11-\(UUID().uuidString).store")
+    }
+    override func tearDown() {
+        for suffix in ["", "-shm", "-wal"] {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: storeURL.path + suffix))
+        }
+    }
+
+    func testAV10StoreOpensAsV11WithItsRunIntactAndNoHeartRate() throws {
+        let id: UUID
+        let healthKitID = UUID()
+        let start = Date(timeIntervalSince1970: 1_789_500_000)
+        let points = [
+            RoutePoint(latitude: 47.6, longitude: -122.3, altitudeMeters: 20, recordedAt: start,
+                       horizontalAccuracyMeters: 5, verticalAccuracyMeters: 4),
+            RoutePoint(latitude: 47.61, longitude: -122.31, altitudeMeters: 25,
+                       recordedAt: start.addingTimeInterval(30),
+                       horizontalAccuracyMeters: 8, verticalAccuracyMeters: 6)
+        ]
+        do {
+            let v10 = try ModelContainer(for: Schema(versionedSchema: LiftSchemaV10.self),
+                                         configurations: [ModelConfiguration(url: storeURL)])
+            let context = ModelContext(v10)
+            let run = LiftPreRunHeartRateShapes.OutdoorActivity(activityType: .run, startedAt: start)
+            run.endedAt = start.addingTimeInterval(1800)
+            run.distanceMeters = 5012.5
+            run.elevationGainMeters = 41.5
+            run.activeCalories = 350
+            run.routePointsData = try JSONEncoder().encode(points)
+            run.healthKitUUID = healthKitID
+            context.insert(run)
+            id = run.id
+            try context.save()
+        }
+
+        let v11 = try ModelContainer(for: Schema(versionedSchema: LiftSchemaV11.self),
+                                     migrationPlan: LiftMigrationPlan.self,
+                                     configurations: [ModelConfiguration(url: storeURL)])
+        let context = ModelContext(v11)
+        let run = try XCTUnwrap(context.fetch(FetchDescriptor<OutdoorActivity>()).first)
+        XCTAssertEqual(run.id, id)
+        XCTAssertEqual(run.activityType, .run)
+        XCTAssertEqual(run.startedAt, start)
+        XCTAssertEqual(run.endedAt, start.addingTimeInterval(1800))
+        XCTAssertEqual(run.distanceMeters, 5012.5)
+        XCTAssertEqual(run.elevationGainMeters, 41.5)
+        XCTAssertEqual(run.activeCalories, 350)
+        XCTAssertEqual(run.routePoints, points)
+        XCTAssertEqual(run.healthKitUUID, healthKitID)
+        XCTAssertNil(run.averageBpm, "a run recorded before heart rate had none, not zero")
+        XCTAssertNil(run.maxBpm)
+        XCTAssertNil(run.heartRateSource)
+
+        // And the new columns take a value in the migrated store.
+        run.averageBpm = 141
+        run.maxBpm = 168
+        run.heartRateSource = "Polar H10"
+        try context.save()
+        let back = try XCTUnwrap(context.fetch(FetchDescriptor<OutdoorActivity>()).first)
+        XCTAssertEqual(back.averageBpm, 141)
+        XCTAssertEqual(back.maxBpm, 168)
+        XCTAssertEqual(back.heartRateSource, "Polar H10")
+    }
 }

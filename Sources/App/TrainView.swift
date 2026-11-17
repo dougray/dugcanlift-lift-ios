@@ -1033,14 +1033,10 @@ private struct SetRow: View {
 private struct OutdoorDaySection: View {
     let date: Date
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
-    /// The run being recorded, held here rather than inside the recording
-    /// screen so that screen being rebuilt mid-run (a light/dark switch does
-    /// it) is handed the same recording -- see `OutdoorRecording`.
-    @State private var recording: OutdoorRecording?
-    /// The same recording, kept past the moment the cover's item goes nil, so
-    /// `onDismiss` has something to tell.
-    @State private var presentedRecording: OutdoorRecording?
-    @State private var justFinishedActivity: OutdoorActivity?
+    /// The run being recorded lives in `ActiveRun`, not here or in the screen:
+    /// the screen can be closed, rebuilt (a light/dark switch does it) or left
+    /// by switching tabs and the run goes on -- see `OutdoorRecording`.
+    @Environment(ActiveRun.self) private var activeRun
 
     @Query private var activities: [OutdoorActivity]
 
@@ -1058,16 +1054,23 @@ private struct OutdoorDaySection: View {
 
     var body: some View {
         LiftCard(title: "Outdoor") {
+            // One run at a time: the card below says which one is recording.
             HStack(spacing: 16) {
-                Button { record(.run) } label: {
+                Button { activeRun.start(.run) } label: {
                     Label("Run", systemImage: "figure.run")
                 }
-                Button { record(.walk) } label: {
+                .disabled(activeRun.recording != nil)
+                .opacity(activeRun.recording != nil ? 0.4 : 1)
+                Button { activeRun.start(.walk) } label: {
                     Label("Walk", systemImage: "figure.walk")
                 }
-                Button { record(.hike) } label: {
+                .disabled(activeRun.recording != nil)
+                .opacity(activeRun.recording != nil ? 0.4 : 1)
+                Button { activeRun.start(.hike) } label: {
                     Label("Hike", systemImage: "figure.hiking")
                 }
+                .disabled(activeRun.recording != nil)
+                .opacity(activeRun.recording != nil ? 0.4 : 1)
                 Spacer()
                 NavigationLink("See all") {
                     OutdoorActivityListView()
@@ -1094,40 +1097,23 @@ private struct OutdoorDaySection: View {
                 }
             }
         }
-        // A full-screen cover has no swipe to dismiss, so Cancel and Finish
-        // are the only ways out and each stops the run itself. `onDismiss` is
-        // the backstop for any other way the cover goes, so location can never
-        // outlive the screen; after Cancel or Finish it does nothing.
-        .fullScreenCover(item: $recording, onDismiss: {
-            // A run started during the old cover's dismiss animation is
-            // already the presented one; this late dismissal is not about it.
-            // `record` ended the old one when it replaced it.
-            guard recording == nil else { return }
-            presentedRecording?.handle(.dismissed)
-            presentedRecording = nil
-        }) { recording in
+        // A full-screen cover has no swipe to dismiss, so Cancel, Finish and
+        // Back to LIFT are the only ways out. Closing the screen ends nothing:
+        // the run is `ActiveRun`'s and the Train card shows it. Cancel and
+        // Finish end it there.
+        .fullScreenCover(item: Binding(
+            get: { activeRun.isScreenShown ? activeRun.recording : nil },
+            set: { if $0 == nil { activeRun.isScreenShown = false } }
+        )) { recording in
             NavigationStack {
-                OutdoorActivityRecordingView(recording: recording) { activity in
-                    self.recording = nil
-                    justFinishedActivity = activity
-                }
+                OutdoorActivityRecordingView(recording: recording)
             }
         }
-        .fullScreenCover(item: $justFinishedActivity) { activity in
+        .fullScreenCover(item: Bindable(activeRun).justFinished) { activity in
             NavigationStack {
                 OutdoorActivityReviewView(activity: activity)
             }
         }
-    }
-
-    private func record(_ type: OutdoorActivityType) {
-        // Normally already ended by Cancel or Finish; if a tap lands while the
-        // last cover is still animating away, end it here, because its own
-        // `onDismiss` will find the new run presented and leave it alone.
-        presentedRecording?.handle(.dismissed)
-        let new = OutdoorRecording(activityType: type)
-        presentedRecording = new
-        recording = new
     }
 }
 
@@ -1136,15 +1122,26 @@ private struct OutdoorDaySection: View {
 /// day's, so it is still there on a rest day.
 private struct OutdoorHighlights: View {
     @AppStorage("distanceUnit") private var unitRaw = DistanceUnit.miles.rawValue
+    @Environment(\.modelContext) private var context
+    @Environment(ActiveRun.self) private var activeRun
     @Query(sort: \OutdoorActivity.startedAt, order: .reverse) private var activities: [OutdoorActivity]
+    @State private var finishFailed = false
+    /// VO2 max lines, asked once per appearance of each card and held here:
+    /// the live card redraws every second and must not ask Health each time.
+    /// The last route's is the newest estimate on or before that run's end.
+    @State private var liveVO2: String?
+    @State private var lastVO2: String?
 
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitRaw) ?? .miles }
 
     var body: some View {
         let last = OutdoorRecords.lastRoute(in: activities)
+        let lastEnd = last.flatMap { VO2MaxLookup.endDate(of: $0) }
         let bests = OutdoorRecords.bests(in: activities)
 
-        if let last {
+        if let recording = activeRun.recording {
+            liveCard(recording)
+        } else if let last {
             LiftCard(title: "Last route") {
                 NavigationLink {
                     OutdoorActivityReviewView(activity: last)
@@ -1172,9 +1169,22 @@ private struct OutdoorHighlights: View {
                                  ? last.averagePaceSecondsPerMeter.map { OutdoorRecords.paceText($0, unit: unit) } ?? "—"
                                  : "—")
                         }
+
+                        if let heartRate = RunHeartRateWords.line(for: last) {
+                            heartRateLines(heartRate)
+                        }
+                        if let lastVO2 { vo2Line(lastVO2) }
                     }
                 }
                 .buttonStyle(.plain)
+            }
+            // Keyed by the run's end, a plain date: nothing reads the model
+            // after the wait, so a run deleted meanwhile is never touched.
+            .task(id: lastEnd) {
+                lastVO2 = nil
+                guard let lastEnd else { return }
+                let line = await VO2MaxLookup.line(onOrBefore: lastEnd, history: HealthKitManager.shared)
+                if !Task.isCancelled { lastVO2 = line }
             }
         }
 
@@ -1203,6 +1213,121 @@ private struct OutdoorHighlights: View {
                 }
             }
         }
+    }
+
+    /// The run in progress, in the place of Last route. It reads the same
+    /// `LiveRunStats` as the full screen; the map redraws as points arrive, the
+    /// numbers once a second.
+    private func liveCard(_ recording: OutdoorRecording) -> some View {
+        LiftCard(title: "Recording · \(recording.activityType.displayName)") {
+            VStack(alignment: .leading, spacing: 10) {
+                RouteMap(points: recording.tracker.points.map {
+                    OutdoorShareCoordinate(latitude: $0.latitude, longitude: $0.longitude)
+                })
+                .frame(height: 180)
+
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let stats = LiveRunStats.compute(points: recording.tracker.points,
+                                                     startedAt: recording.startedAt,
+                                                     now: timeline.date)
+                    HStack(spacing: 0) {
+                        stat("Time", stats.elapsedText)
+                        stat("Distance", stats.distanceText(unit: unit))
+                        stat("Pace", stats.paceText(unit: unit))
+                    }
+                    // Inside the once-a-second timeline and handed its date, so
+                    // the number goes at ten seconds of silence without any
+                    // other state changing.
+                    liveExtras(now: timeline.date)
+                }
+
+                HStack(spacing: 12) {
+                    Button { activeRun.open() } label: {
+                        Text("Open").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Theme.accent)
+
+                    // Saves, so not red. Off while Finish waits on Health.
+                    Button { finish() } label: {
+                        Text("Finish").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accent)
+                    .disabled(activeRun.isFinishing)
+                }
+                .scaledFont(size: 15, weight: .semibold)
+            }
+        }
+        // The newest estimate, asked once while this card is up. A strap or
+        // watch is not needed; no estimate is no line.
+        .task(id: recording.startedAt) {
+            liveVO2 = nil
+            let line = await VO2MaxLookup.line(onOrBefore: .now, history: HealthKitManager.shared)
+            if !Task.isCancelled { liveVO2 = line }
+        }
+        .alert("Couldn't save this \(recording.activityType.displayName.lowercased())", isPresented: $finishFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Still recording, and the route so far is kept. Try Finish again.")
+        }
+    }
+
+    /// Heart rate under the live numbers: `142 bpm` and, small, where it came
+    /// from. Nothing at all when this run has no source. No zones, no color.
+    @ViewBuilder
+    private func liveExtras(now: Date) -> some View {
+        if let line = activeRun.liveHeartRate(now: now) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line.number)
+                    .scaledFont(size: 16, weight: .semibold).monospacedDigit()
+                    .foregroundStyle(Theme.textPrimary)
+                Text(line.source)
+                    .scaledFont(size: 12)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
+        // Held in state, not asked here: this runs every second.
+        if let liveVO2 { vo2Line(liveVO2) }
+    }
+
+    /// `VO2 max 46.2 · Nov 8`. Plain words: no zone, no color.
+    private func vo2Line(_ text: String) -> some View {
+        Text(text)
+            .scaledFont(size: 12)
+            .foregroundStyle(Theme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func finish() {
+        // The review opens from `ActiveRun.justFinished`.
+        Task { @MainActor in
+            do {
+                _ = try await activeRun.finish(in: context)
+            } catch ActiveRun.FinishError.notRecording {
+                // A second tap after the first saved, or a Cancel that won.
+            } catch {
+                finishFailed = true
+            }
+        }
+    }
+
+    /// `Avg 141 · Max 168 bpm` and, small, where it came from.
+    private func heartRateLines(_ line: (summary: String, source: String?)) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(line.summary)
+                .scaledFont(size: 16, weight: .semibold).monospacedDigit()
+                .foregroundStyle(Theme.textPrimary)
+            if let source = line.source {
+                Text(source)
+                    .scaledFont(size: 12)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     private func stat(_ label: String, _ value: String) -> some View {

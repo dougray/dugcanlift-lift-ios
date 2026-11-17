@@ -28,6 +28,9 @@ struct LiftApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var incomingPlan: IdentifiablePlan?
     @State private var refusal: PlanLinkIntake.Refusal?
+    /// The run in progress, which belongs to the app rather than to the screen
+    /// that records it (`ActiveRun`).
+    @State private var activeRun = ActiveRun()
     /// Recipes Safari handed over, the rules for when each may open, and the
     /// App Group files kept in step with them (`RecipeIntake`). Its
     /// held "reports" are plan outcomes: a plan sheet or a refusal alert that
@@ -46,6 +49,9 @@ struct LiftApp: App {
         // request, so viewing a map cannot reach a server even if it tried.
         MapNetworkGuard.install()
         WatchSyncReceiver.activate(context: LiftStore.shared.mainContext)
+        // HealthKit's mirroring handler, set at launch as HealthKit asks: a
+        // watch measuring a run's heart rate (path B) is heard through it.
+        WatchHeartRateLink.shared.install()
         // Built now so it is the notification delegate before anything is
         // delivered, and picks up a Live Activity left from a previous run.
         _ = RestTimer.shared
@@ -58,6 +64,7 @@ struct LiftApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(activeRun)
                 .environment(\.appIsPresenting,
                              recipes.reviewing != nil || incomingPlan != nil || refusal != nil)
                 // `dugcanliftlift://plan#1z...`, LIFT's own scheme, which

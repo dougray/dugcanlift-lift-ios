@@ -80,6 +80,9 @@ final class OutdoorActivityRecorder: NSObject, ObservableObject {
     /// Starts a new recording. No-op if one is already in progress.
     func start(type: OutdoorActivityType) {
         guard activity == nil else { return }
+        // A run the watch records itself takes the one workout session from
+        // heart rate it was relaying to a run on the phone.
+        RunHeartRateRelay.stop()
 
         // A previous recording's session can still be alive here even
         // though `activity` is already `nil`: `finish()` deliberately keeps

@@ -59,6 +59,15 @@ final class OutdoorActivity {
 
     var healthKitUUID: UUID?
 
+    /// What the run's heart rate came to, kept as three figures and nothing
+    /// more -- the readings themselves are never stored. All three are nil for
+    /// a run recorded before heart rate existed and for one with no source:
+    /// nil is "no figure", never zero. `heartRateSource` is the name of the
+    /// strap or watch the figures came from.
+    var averageBpm: Int?
+    var maxBpm: Int?
+    var heartRateSource: String?
+
     init(activityType: OutdoorActivityType, startedAt: Date = .now) {
         self.id = UUID()
         self.activityTypeRaw = activityType.rawValue

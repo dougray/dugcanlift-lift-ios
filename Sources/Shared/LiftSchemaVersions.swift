@@ -590,6 +590,49 @@ enum LiftPreCoachNameShapes {
     }
 }
 
+// MARK: - Frozen pre-V11 shape of OutdoorActivity
+//
+// V11 adds `averageBpm`, `maxBpm` and `heartRateSource` -- a run's heart rate --
+// to the live `OutdoorActivity`. That class is referenced by `.self` from V4
+// through V10, so the moment the columns land their declared shape drifts to
+// match V11's and SwiftData can no longer tell V10 from V11: `Duplicate
+// version checksums detected`, and no store opens at all. This is what V4-V10
+// actually shipped.
+//
+// Nothing is frozen alongside it: `OutdoorActivity` has no relationship, and
+// its route is a `Data` blob rather than a model. Never add the heart rate
+// columns here.
+enum LiftPreRunHeartRateShapes {
+
+    @Model
+    final class OutdoorActivity {
+        var id: UUID = UUID()
+
+        private var activityTypeRaw: String = OutdoorActivityType.run.rawValue
+        var activityType: OutdoorActivityType {
+            get { OutdoorActivityType(rawValue: activityTypeRaw) ?? .run }
+            set { activityTypeRaw = newValue.rawValue }
+        }
+
+        var startedAt: Date = Date.now
+        var endedAt: Date?
+
+        var distanceMeters: Double = 0
+        var elevationGainMeters: Double = 0
+        var activeCalories: Double?
+
+        var routePointsData: Data = Data()
+
+        var healthKitUUID: UUID?
+
+        init(activityType: OutdoorActivityType, startedAt: Date = .now) {
+            self.id = UUID()
+            self.activityTypeRaw = activityType.rawValue
+            self.startedAt = startedAt
+        }
+    }
+}
+
 // MARK: - V1 — everything before COOK
 
 enum LiftSchemaV1: VersionedSchema {
@@ -679,7 +722,7 @@ enum LiftSchemaV4: VersionedSchema {
             ImportedPlan.self,
             LiftPreCoachNameShapes.ScheduledSession.self,
             // Route recording.
-            OutdoorActivity.self
+            LiftPreRunHeartRateShapes.OutdoorActivity.self
         ]
     }
 }
@@ -708,7 +751,7 @@ enum LiftSchemaV5: VersionedSchema {
             ImportedPlan.self,
             LiftPreCoachNameShapes.ScheduledSession.self,
             // V4, unchanged.
-            OutdoorActivity.self
+            LiftPreRunHeartRateShapes.OutdoorActivity.self
         ]
     }
 }
@@ -739,7 +782,7 @@ enum LiftSchemaV6: VersionedSchema {
             RoutinePrescribedSet.self,
             ImportedPlan.self,
             LiftPreCoachNameShapes.ScheduledSession.self,
-            OutdoorActivity.self
+            LiftPreRunHeartRateShapes.OutdoorActivity.self
         ]
     }
 }
@@ -770,7 +813,7 @@ enum LiftSchemaV7: VersionedSchema {
             RoutinePrescribedSet.self,
             ImportedPlan.self,
             LiftPreCoachNameShapes.ScheduledSession.self,
-            OutdoorActivity.self
+            LiftPreRunHeartRateShapes.OutdoorActivity.self
         ]
     }
 }
@@ -800,7 +843,7 @@ enum LiftSchemaV8: VersionedSchema {
             RoutinePrescribedSet.self,
             ImportedPlan.self,
             LiftPreCoachNameShapes.ScheduledSession.self,
-            OutdoorActivity.self
+            LiftPreRunHeartRateShapes.OutdoorActivity.self
         ]
     }
 }
@@ -827,7 +870,7 @@ enum LiftSchemaV9: VersionedSchema {
             ImportedPlan.self,
             // The one that changed — the live class, with `coachName`.
             ScheduledSession.self,
-            OutdoorActivity.self
+            LiftPreRunHeartRateShapes.OutdoorActivity.self
         ]
     }
 }
@@ -845,6 +888,21 @@ enum LiftSchemaV10: VersionedSchema {
     }
 }
 
+// MARK: - V11 — a run keeps its heart rate
+
+/// V11 adds `averageBpm`, `maxBpm` and `heartRateSource` to `OutdoorActivity`.
+/// V4-V10 are pointed at `LiftPreRunHeartRateShapes` (V10 through V9's list),
+/// so only this version names the live class.
+enum LiftSchemaV11: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(11, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        LiftSchemaV10.models.map { model -> any PersistentModel.Type in
+            model == LiftPreRunHeartRateShapes.OutdoorActivity.self ? OutdoorActivity.self : model
+        }
+    }
+}
+
 // MARK: - Plan
 
 enum LiftMigrationPlan: SchemaMigrationPlan {
@@ -852,11 +910,11 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [LiftSchemaV1.self, LiftSchemaV2.self, LiftSchemaV3.self, LiftSchemaV4.self,
          LiftSchemaV5.self, LiftSchemaV6.self, LiftSchemaV7.self,
-         LiftSchemaV8.self, LiftSchemaV9.self, LiftSchemaV10.self]
+         LiftSchemaV8.self, LiftSchemaV9.self, LiftSchemaV10.self, LiftSchemaV11.self]
     }
 
     static var stages: [MigrationStage] {
-        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10]
+        [v1ToV2, v2ToV3, v3ToV4, v4ToV5, v5ToV6, v6ToV7, v7ToV8, v8ToV9, v9ToV10, v10ToV11]
     }
 
     /// Four new model types and no change to any existing one, so SwiftData can
@@ -955,5 +1013,21 @@ enum LiftMigrationPlan: SchemaMigrationPlan {
     static let v9ToV10 = MigrationStage.lightweight(
         fromVersion: LiftSchemaV9.self,
         toVersion: LiftSchemaV10.self
+    )
+
+    /// Three new optional columns on OutdoorActivity, `averageBpm`, `maxBpm`
+    /// and `heartRateSource`. No new model types, no renames, no type changes,
+    /// no optional-to-non-optional changes -- lightweight per this file's own
+    /// rule above.
+    ///
+    /// **Nothing is backfilled, and there is nothing to backfill from.** A run
+    /// recorded before this kept no heart rate, so every existing row reads
+    /// nil, which is "no figure", never zero.
+    ///
+    /// V4-V10 are pointed at `LiftPreRunHeartRateShapes` so their checksums
+    /// still describe the stores those builds wrote.
+    static let v10ToV11 = MigrationStage.lightweight(
+        fromVersion: LiftSchemaV10.self,
+        toVersion: LiftSchemaV11.self
     )
 }

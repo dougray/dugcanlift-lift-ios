@@ -73,6 +73,9 @@ final class LiftingSessionRecorder: NSObject, ObservableObject {
     /// background runtime, not the workout.
     func start() {
         guard session == nil, pendingStart == nil, HKHealthStore.isHealthDataAvailable() else { return }
+        // A lift takes the one workout session from heart rate the watch was
+        // relaying to a run on the phone.
+        RunHeartRateRelay.stop()
         currentBpm = nil
         averageBpm = nil
         maxBpm = nil

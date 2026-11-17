@@ -49,6 +49,9 @@ struct LiftApp: App {
         // request, so viewing a map cannot reach a server even if it tried.
         MapNetworkGuard.install()
         WatchSyncReceiver.activate(context: LiftStore.shared.mainContext)
+        // HealthKit's mirroring handler, set at launch as HealthKit asks: a
+        // watch measuring a run's heart rate (path B) is heard through it.
+        WatchHeartRateLink.shared.install()
         // Built now so it is the notification delegate before anything is
         // delivered, and picks up a Live Activity left from a previous run.
         _ = RestTimer.shared

@@ -331,7 +331,7 @@ enum BackupStore {
             guard let endedAt = activity.endedAt else { return nil }
             let key = activity.id.uuidString
             activity.activeCalories.map { iosOutdoor[key] = ["activeCalories": $0] }
-            return [
+            var record: [String: Any] = [
                 "id": key,
                 "activityType": activity.activityType.rawValue.uppercased(),
                 "startedAtEpochMs": epochMs(activity.startedAt),
@@ -350,6 +350,12 @@ enum BackupStore {
                     ]
                 }
             ]
+            // A run's heart rate, LIFT's own spelling from sets and sessions;
+            // each key is left out when there is no figure, never written as 0.
+            activity.averageBpm.map { record["averageBpm"] = $0 }
+            activity.maxBpm.map { record["maxBpm"] = $0 }
+            activity.heartRateSource.map { record["heartRateSource"] = $0 }
+            return record
         }
 
         // ---- remembered foods ----
@@ -862,6 +868,10 @@ enum BackupStore {
                 ?? OutdoorActivityMath.elevationGainMeters(points.filter { $0.verticalAccuracyMeters >= 0 })
             let extras = iosExtras[raw["id"] as? String ?? ""] as? [String: Any] ?? [:]
             activity.activeCalories = finite(extras["activeCalories"])
+            // Whole bpm or nothing: 141.5, a string or a boolean is no figure.
+            activity.averageBpm = wholeBpm(raw["averageBpm"])
+            activity.maxBpm = wholeBpm(raw["maxBpm"])
+            activity.heartRateSource = (raw["heartRateSource"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             context.insert(activity)
             known.insert(id)
             added += 1

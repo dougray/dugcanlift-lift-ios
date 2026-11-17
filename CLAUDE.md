@@ -645,6 +645,21 @@ there is not. One confirmation, two ways in
 button, which used to be an unconfirmed "Discard" that deleted a year-old run
 as readily as a recording from ten seconds ago.
 
+**A run keeps its heart rate as three figures** -- `OutdoorActivity.averageBpm`
+and `maxBpm` (whole bpm) and `heartRateSource` (the strap or watch's name), all
+optional, schema V11 (`v10ToV11`, lightweight). **`LiftPreRunHeartRateShapes`
+freezes what V4-V10 shipped**: `OutdoorActivity` is one live class named by
+every version since V4, so without the freeze the columns land in all of them
+at once and SwiftData refuses to open any store (`Duplicate version checksums
+detected`). `testAV10StoreOpensAsV11WithItsRunIntactAndNoHeartRate` writes an
+on-disk V10 store and opens it under V11. Nothing is backfilled: a run recorded
+before reads nil, which is "no figure", never zero. No per-second readings are
+stored. In a backup the keys are `averageBpm`, `maxBpm` and `heartRateSource` on
+each `outdoor[]` entry -- the names sets and sessions already use -- each
+omitted when nil; a restore reads a non-integer, a string or a boolean as nil.
+The Coach share link is unchanged: nothing about a run's heart rate goes to a
+coach.
+
 **Reload widget timelines after writes.** SwiftData does not notify the
 extension. Call `WidgetCenter.shared.reloadAllTimelines()` after any mutation
 that changes widget content.

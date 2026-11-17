@@ -185,12 +185,13 @@ targets:
         # HealthKit — both strings are required or the app is rejected. Each
         # must say exactly what HealthKitManager requests: App Review rejects
         # a purpose string that claims more (or less) than the code does.
-        # Reads: body weight (Settings > Apple Health) and step count (Home,
-        # Send to Coach). Writes: strength workouts, and runs, walks and hikes
+        # Reads: body weight (Settings > Apple Health), step count (Home,
+        # Send to Coach), heart rate (a run's summary, when no strap spoke) and
+        # VO2 max (beside a run). Writes: strength workouts, and runs, walks and hikes
         # with their route and distance.
         NSHealthShareUsageDescription: >-
-          Lift reads your body weight and step count from Health to show your
-          latest weight and your daily steps.
+          LIFT reads your weight, steps, heart rate and VO2 max from Apple
+          Health to show them beside your training.
         NSHealthUpdateUsageDescription: >-
           Lift saves your strength workouts, and your runs, walks and hikes
           with their route and distance, to Health.
@@ -214,6 +215,13 @@ targets:
           Lift uses your location to record the route of a run, walk or hike
           you start, including while your screen is locked until you finish it.
 
+        # Bluetooth heart rate during a run (HeartRateCentral): `bluetooth-central`
+        # keeps a strap's readings and its reconnecting going while the phone is
+        # locked, the way `location` keeps the route. Only a device the person
+        # added is ever connected to.
+        NSBluetoothAlwaysUsageDescription: >-
+          LIFT reads heart rate from a Bluetooth strap or watch you add, during a run.
+
         # Location updates so a recording carries on while the phone is locked
         # (LocationTracker). No `processing` mode: nothing registers a
         # BGTaskScheduler task -- Health syncs when a session ends, on connect
@@ -222,6 +230,7 @@ targets:
         # alongside a real BGTaskScheduler.register call.
         UIBackgroundModes:
           - location
+          - bluetooth-central
 
   # ------------------------------------------------------------- widgets
   LiftWidgets:
@@ -341,11 +350,18 @@ targets:
         # HKWorkoutSession itself requires the capability and these strings,
         # and requesting share authorization for the workout type is how the
         # system grants a session permission to run.
+        #
+        # Heart rate is read during a lift and during a run started on the
+        # iPhone (RunHeartRateRelay, path B): the watch measures it, sends it
+        # to the phone live, and saves no workout of its own for that run. A
+        # run the watch records itself reads none. HealthKit mirroring needs
+        # no entitlement beyond HealthKit's, and its runtime is the same
+        # workout-processing entry in WKBackgroundModes above.
         NSHealthShareUsageDescription: >-
-          LIFT uses HealthKit to run a workout session, which keeps GPS
-          active while recording a run or hike, and reads your heart rate
-          while you lift so the app can show it and record it with the
-          workout.
+          LIFT reads your heart rate while you lift, and during runs you
+          start on your iPhone, to show it and keep it with the workout. It
+          runs a workout session to keep GPS on while your watch records a
+          run or hike.
         NSHealthUpdateUsageDescription: >-
           LIFT saves the runs and hikes you record, and the workouts you
           lift, to the Health app.

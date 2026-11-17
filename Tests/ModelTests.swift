@@ -193,12 +193,13 @@ final class SchemaMigrationTests: XCTestCase {
         XCTAssertEqual(food.first?.nutrition.calories, 300)
 
         // And the new model (OutdoorActivity) must be usable in the migrated
-        // store. OutdoorActivity never changed shape, so it's still the live
-        // (unfrozen) type in both V4 and V5.
-        let activity = OutdoorActivity(activityType: .run, startedAt: .now)
+        // store. V4 declares OutdoorActivity through its frozen pre-V11 shape
+        // (`LiftPreRunHeartRateShapes`), so that is the type a V4 container
+        // takes; the live class belongs to V11 and is not in V4's schema.
+        let activity = LiftPreRunHeartRateShapes.OutdoorActivity(activityType: .run, startedAt: .now)
         context.insert(activity)
         try context.save()
-        XCTAssertEqual(try context.fetch(FetchDescriptor<OutdoorActivity>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<LiftPreRunHeartRateShapes.OutdoorActivity>()).count, 1)
     }
 
     func testV4StoreOpensAsV5WithDataIntact() throws {
@@ -534,7 +535,7 @@ final class SchemaMigrationTests: XCTestCase {
     func testCurrentSchemaIsTheNewestVersion() {
         XCTAssertEqual(
             LiftStore.schema.entities.count,
-            LiftSchemaV10.models.count,
+            LiftSchemaV11.models.count,
             "LiftStore.schema must track the newest VersionedSchema"
         )
     }

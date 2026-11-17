@@ -28,18 +28,18 @@ Fast-food chains and gas-station snacks, ranked by how well each fits what is le
 - Nutrition comes from each chain's own published chart
 - Put a meal together from several items, see whether it fits before you order, and log it in one go
 - Avoid an allergen to hide the items whose chart says they contain it. An item the chart says nothing about stays on the list, marked "not stated". The charts don't cover cross-contact, so ask the restaurant
-- LIFT never uses your location
+- Road Food never uses your location
 
 TRAIN
 - Log sessions of exercises and sets, or run a live session
 - A training focus decides which set fields you see
 - In a live session, tick a set done to start your rest timer. It counts down on the lock screen and in the Dynamic Island, and tells you when rest is over
-- Supersets, circuits, drop sets and rest-pause sets. Rest follows the round: none between the exercises of a superset, and none before a drop set
+- Supersets, circuits, drop sets and rest-pause sets, with rest that follows the round
 - Plate math: what goes on each side of the bar, from the plates you own
 - The screen stays on while you train
 - Save workouts as routines, or start from ready-made ones
 - Keep routines in a folder and LIFT runs them as a rotation, showing which one is up next
-- For your own routines, LIFT suggests the next weight and says why: a step up when you made every rep, the same again when you didn't
+- LIFT suggests the next weight for your own routines, and says why
 - Tell LIFT which equipment you have, and exercise search leaves out what you can't use
 - Record runs, walks and hikes with GPS, including while your phone is locked, and see your route and personal bests
 
@@ -53,7 +53,7 @@ APPLE HEALTH
 LIFT can save your strength workouts, and your runs, walks and hikes with their route, to Apple Health. It reads your body weight and step count.
 
 WORKING WITH A COACH
-Send your recent log to a coach as a link, from your own email. A route is only included if you turn that on, and its start and end are trimmed off. A coach can send you a plan of workouts and meals to add.
+Send your recent log to a coach as a link, from your own email. A route is only included if you turn that on, and its start and end are trimmed off. Location is used only to record your run, walk or hike. The developer and servers never receive it; only you, and a coach you send it to, can see it. A coach can send you a plan of workouts and meals to add.
 
 YOUR DATA
 Save a backup file and restore it on another phone. Bring in your training history from Strong, Hevy or FitNotes, or export yours as a spreadsheet (CSV).
